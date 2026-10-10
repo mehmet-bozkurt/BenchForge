@@ -17,6 +17,12 @@ class SyncBenchmarkArchiveCommand extends Command
 
         $result = $syncBenchmarkArchive->handle();
 
+        if ($result['locked']) {
+            $this->components->warn('Başka bir arşiv senkronu sürüyor; bu çalıştırma atlandı.');
+
+            return self::FAILURE;
+        }
+
         $this->table(
             ['Yeni', 'Güncellenen', 'Değişmeyen', 'Başarısız'],
             [[

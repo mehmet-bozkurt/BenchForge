@@ -568,8 +568,11 @@ PROMPT;
         ]);
 
         if ($status === 'completed' && $execution->synced_at === null) {
-            $this->syncBenchmarkArchive->handle();
-            $execution->update(['synced_at' => now()]);
+            $syncResult = $this->syncBenchmarkArchive->handle($execution->run_id);
+
+            if (! $syncResult['locked'] && $syncResult['failed'] === 0) {
+                $execution->update(['synced_at' => now()]);
+            }
         }
 
         return $execution->refresh();

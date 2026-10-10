@@ -63,3 +63,38 @@ test('it refuses preview paths that escape the model export directory', function
         File::deleteDirectory($runsRoot);
     }
 });
+
+test('sandboxed previews may load their own fonts and RSC payloads without credentials', function () {
+    $runsRoot = storage_path('framework/testing/preview-cors-'.Str::uuid());
+    config()->set('benchforge.runs_path', $runsRoot);
+
+    try {
+        $run = BenchmarkRun::factory()->create(['slug' => 'cors-run']);
+        $modelRun = ModelRun::factory()->for($run)->create(['slug' => 'cors-model']);
+        $previewPath = $runsRoot.'/'.$run->slug.'/_gallery/'.$modelRun->slug;
+        File::ensureDirectoryExists($previewPath.'/_next/static/media');
+        File::put($previewPath.'/index.html', '<h1>Preview</h1>');
+        File::put($previewPath.'/index.txt', 'rsc');
+        File::put($previewPath.'/_next/static/media/font.woff2', 'font');
+        $previewRoot = route('runs.previews.show', [$run, $modelRun], absolute: false);
+
+        $this->get($previewRoot.'/_next/static/media/font.woff2', ['Origin' => 'null'])
+            ->assertOk()
+            ->assertHeader('Access-Control-Allow-Origin', '*')
+            ->assertHeaderMissing('Access-Control-Allow-Credentials');
+
+        $this->call('OPTIONS', $previewRoot.'/index.txt', server: [
+            'HTTP_ORIGIN' => 'null',
+            'HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'GET',
+            'HTTP_ACCESS_CONTROL_REQUEST_HEADERS' => 'rsc,next-router-state-tree',
+        ])
+            ->assertNoContent()
+            ->assertHeader('Access-Control-Allow-Origin', '*')
+            ->assertHeader('Access-Control-Allow-Headers', 'rsc,next-router-state-tree');
+
+        $this->get(route('dashboard'), ['Origin' => 'null'])
+            ->assertHeaderMissing('Access-Control-Allow-Origin');
+    } finally {
+        File::deleteDirectory($runsRoot);
+    }
+});

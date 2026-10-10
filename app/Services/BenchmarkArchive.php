@@ -53,6 +53,20 @@ class BenchmarkArchive
     /**
      * @return array<string, mixed>|null
      */
+    public function find(string $slug): ?array
+    {
+        $directory = rtrim((string) config('benchforge.runs_path'), DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$slug;
+
+        if (! $this->isSafeSegment($slug) || ! File::isDirectory($directory) || is_link($directory)) {
+            return null;
+        }
+
+        return $this->readRun($directory);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
     private function readRun(string $directory): ?array
     {
         $summaryPath = $directory.'/_summary.tsv';

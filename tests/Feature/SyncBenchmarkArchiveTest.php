@@ -4,7 +4,9 @@ use App\Models\Artifact;
 use App\Models\BenchmarkRun;
 use App\Models\ModelRun;
 use App\Models\StageResult;
+use App\Services\SyncBenchmarkArchive;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -116,6 +118,62 @@ it('indexes incomplete run folders so their storage can be managed', function ()
             'slug' => 'model-a',
             'status' => 'unknown',
         ]);
+    } finally {
+        File::deleteDirectory($runsPath);
+    }
+});
+
+it('carries the model working condition from the run metadata into history', function () {
+    $runsPath = storage_path('framework/testing/sync-condition-'.Str::uuid());
+    File::ensureDirectoryExists($runsPath.'/isolated-run');
+    File::ensureDirectoryExists($runsPath.'/legacy-run');
+    File::put($runsPath.'/isolated-run/_meta.txt', "test=isolated-run\nenvironment_profile=isolated-v1\ntemplate_instructions_sha256=abc123\n");
+    File::put($runsPath.'/legacy-run/_meta.txt', "test=legacy-run\n");
+
+    foreach (['isolated-run', 'legacy-run'] as $slug) {
+        File::put($runsPath.'/'.$slug.'/_summary.tsv', "klasor|model|opencode|lint|build|export|routes|runtime|sure_sn\nmodel-one|opencode-go/model-one|0|0|0|0|0|0|60\n");
+    }
+
+    config()->set('benchforge.runs_path', $runsPath);
+
+    try {
+        $this->artisan('benchforge:sync')->assertSuccessful();
+
+        expect(BenchmarkRun::where('slug', 'isolated-run')->sole()->environmentProfile())->toBe('isolated-v1')
+            ->and(BenchmarkRun::where('slug', 'isolated-run')->sole()->metadata['template_instructions_sha256'])->toBe('abc123')
+            ->and(BenchmarkRun::where('slug', 'legacy-run')->sole()->environmentProfile())->toBe('legacy');
+    } finally {
+        File::deleteDirectory($runsPath);
+    }
+});
+
+it('syncs only the requested run and skips while another sync holds the lock', function () {
+    $runsPath = storage_path('framework/testing/sync-lock-'.Str::uuid());
+
+    foreach (['finished-run', 'other-run'] as $slug) {
+        File::ensureDirectoryExists($runsPath.'/'.$slug);
+        File::put($runsPath.'/'.$slug.'/_summary.tsv', "klasor|model|opencode|lint|build|export|routes|runtime|sure_sn\nmodel-one|opencode-go/model-one|0|0|0|0|0|0|60\n");
+    }
+
+    config()->set('benchforge.runs_path', $runsPath);
+
+    try {
+        $lock = Cache::lock('benchforge:archive-sync', 60);
+        $lock->get();
+
+        $skipped = app(SyncBenchmarkArchive::class)->handle('finished-run');
+
+        expect($skipped['locked'])->toBeTrue()
+            ->and(BenchmarkRun::count())->toBe(0);
+
+        $lock->release();
+
+        $synced = app(SyncBenchmarkArchive::class)->handle('finished-run');
+
+        expect($synced['locked'])->toBeFalse()
+            ->and($synced['created'])->toBe(1)
+            ->and(BenchmarkRun::pluck('slug')->all())->toBe(['finished-run'])
+            ->and(BenchmarkRun::sole()->storage_scanned_at)->not->toBeNull();
     } finally {
         File::deleteDirectory($runsPath);
     }

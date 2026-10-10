@@ -6,6 +6,7 @@ use App\Models\BenchmarkRun;
 use App\Models\ModelRun;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -18,9 +19,12 @@ class SyncBenchmarkArchive
     ) {}
 
     /**
-     * @return array{created: int, updated: int, unchanged: int, failed: int, errors: list<string>}
+     * Only one sync runs at a time: a status poll that finds another sync in progress skips instead of
+     * queueing behind it on SQLite's single writer. Disk scans happen outside the database transaction.
+     *
+     * @return array{created: int, updated: int, unchanged: int, failed: int, errors: list<string>, locked: bool}
      */
-    public function handle(): array
+    public function handle(?string $slug = null): array
     {
         $result = [
             'created' => 0,
@@ -28,30 +32,60 @@ class SyncBenchmarkArchive
             'unchanged' => 0,
             'failed' => 0,
             'errors' => [],
+            'locked' => false,
         ];
 
-        foreach ($this->benchmarkArchive->all() as $archiveRun) {
-            try {
-                $state = DB::transaction(fn (): string => $this->syncRun($archiveRun));
-                $benchmarkRun = BenchmarkRun::query()->where('slug', $archiveRun['slug'])->first();
+        $lock = Cache::lock('benchforge:archive-sync', 900);
 
-                if ($benchmarkRun !== null) {
-                    try {
-                        $this->openCodeUsageTracker->syncForRun($benchmarkRun);
-                    } catch (Throwable $exception) {
-                        report($exception);
-                    }
-                }
+        if (! $lock->get()) {
+            return [...$result, 'locked' => true];
+        }
 
-                $result[$state]++;
-            } catch (Throwable $exception) {
-                report($exception);
-                $result['failed']++;
-                $result['errors'][] = $archiveRun['slug'].': '.$exception->getMessage();
+        try {
+            @set_time_limit(900);
+
+            $archiveRuns = $slug === null
+                ? $this->benchmarkArchive->all()
+                : array_filter([$this->benchmarkArchive->find($slug)]);
+
+            foreach ($archiveRuns as $archiveRun) {
+                $this->syncArchiveRun($archiveRun, $result);
             }
+        } finally {
+            $lock->release();
         }
 
         return $result;
+    }
+
+    /**
+     * @param  array<string, mixed>  $archiveRun
+     * @param  array{created: int, updated: int, unchanged: int, failed: int, errors: list<string>, locked: bool}  $result
+     */
+    private function syncArchiveRun(array $archiveRun, array &$result): void
+    {
+        try {
+            $state = DB::transaction(fn (): string => $this->syncRun($archiveRun));
+            $benchmarkRun = BenchmarkRun::query()->where('slug', $archiveRun['slug'])->first();
+
+            if ($benchmarkRun !== null && ($state !== 'unchanged' || $benchmarkRun->storage_scanned_at === null)) {
+                $this->benchmarkRunStorage->refresh($benchmarkRun);
+            }
+
+            if ($benchmarkRun !== null) {
+                try {
+                    $this->openCodeUsageTracker->syncForRun($benchmarkRun);
+                } catch (Throwable $exception) {
+                    report($exception);
+                }
+            }
+
+            $result[$state]++;
+        } catch (Throwable $exception) {
+            report($exception);
+            $result['failed']++;
+            $result['errors'][] = $archiveRun['slug'].': '.$exception->getMessage();
+        }
     }
 
     /**
@@ -63,10 +97,6 @@ class SyncBenchmarkArchive
 
         if ($benchmarkRun?->source_fingerprint === $archiveRun['fingerprint']) {
             $benchmarkRun->update(['synced_at' => now()]);
-
-            if ($benchmarkRun->storage_scanned_at === null) {
-                $this->benchmarkRunStorage->refresh($benchmarkRun);
-            }
 
             return 'unchanged';
         }
@@ -94,7 +124,6 @@ class SyncBenchmarkArchive
 
         $modelRuns = $this->syncModels($benchmarkRun, $archiveRun['models']);
         $this->syncArtifacts($benchmarkRun, $archiveRun, $modelRuns);
-        $this->benchmarkRunStorage->refresh($benchmarkRun);
 
         return $state;
     }

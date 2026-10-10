@@ -12,6 +12,7 @@ use App\Services\BenchmarkPreflight;
 use App\Services\BenchmarkRunner;
 use App\Services\ModelRunContinuationRunner;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -468,3 +469,37 @@ test('it records the final status of a runner that has exited after', function (
         File::deleteDirectory($root);
     }
 })->with('finished runner states');
+
+test('a completed run is not marked as synced while another archive sync is running', function () {
+    $root = storage_path('framework/testing/benchmark-root-'.Str::uuid());
+    $runId = 'sync-lock-run';
+
+    File::ensureDirectoryExists($root.'/runs/'.$runId);
+    File::ensureDirectoryExists($root.'/runner');
+    File::put($root.'/runs/'.$runId.'/_summary.tsv', "klasor|model|opencode|lint|build|sure_sn\nmodel-one|opencode-go/model-one|0|0|0|60\n");
+    config()->set('benchforge.root_path', $root);
+    config()->set('benchforge.runs_path', $root.'/runs');
+    config()->set('benchforge.runner_path', $root.'/runner');
+    $execution = BenchmarkExecution::factory()->create([
+        'run_id' => $runId,
+        'status' => 'completed',
+        'log_path' => $root.'/runner/missing.log',
+        'synced_at' => null,
+    ]);
+
+    try {
+        $lock = Cache::lock('benchforge:archive-sync', 60);
+        $lock->get();
+        app(BenchmarkRunner::class)->snapshot();
+
+        expect($execution->refresh()->synced_at)->toBeNull();
+
+        $lock->release();
+        app(BenchmarkRunner::class)->snapshot();
+
+        expect($execution->refresh()->synced_at)->not->toBeNull()
+            ->and(BenchmarkRun::where('slug', $runId)->exists())->toBeTrue();
+    } finally {
+        File::deleteDirectory($root);
+    }
+});
