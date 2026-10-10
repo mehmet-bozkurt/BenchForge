@@ -10,7 +10,7 @@ use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 uses(LazilyRefreshDatabase::class);
 
 test('it ranks reviewed models using technical and manual scores', function () {
-    $run = BenchmarkRun::factory()->create(['name' => 'Marketplace V1']);
+    $run = BenchmarkRun::factory()->isolated()->create(['name' => 'Marketplace V1']);
     $reviewed = ModelRun::factory()->for($run)->create([
         'slug' => 'reviewed-model',
         'model' => 'opencode-go/reviewed-model',
@@ -42,12 +42,12 @@ test('it ranks reviewed models using technical and manual scores', function () {
         ->assertSeeInOrder(['reviewed-model', 'unreviewed-model'])
         ->assertSee('77,0')
         ->assertSee('Değerlendirme bekliyor')
-        ->assertSee(route('models.show', 'opencode-go~reviewed-model'), escape: false);
+        ->assertSee(route('models.show', ['opencode-go~reviewed-model', 'condition' => 'isolated-v1']), escape: false);
 });
 
 test('it groups runs by model identity instead of workspace folder', function () {
-    $firstRun = BenchmarkRun::factory()->create();
-    $secondRun = BenchmarkRun::factory()->create();
+    $firstRun = BenchmarkRun::factory()->isolated()->create();
+    $secondRun = BenchmarkRun::factory()->isolated()->create();
     ModelRun::factory()->for($firstRun)->create([
         'slug' => 'deepseek-v4.1-flash',
         'model' => 'opencode-go/deepseek-v4.1-flash',
@@ -72,8 +72,8 @@ test('it groups runs by model identity instead of workspace folder', function ()
 });
 
 test('it averages technical scores per run and gives no credit when the model step failed', function () {
-    $legacyRun = BenchmarkRun::factory()->create();
-    $extendedRun = BenchmarkRun::factory()->create();
+    $legacyRun = BenchmarkRun::factory()->isolated()->create();
+    $extendedRun = BenchmarkRun::factory()->isolated()->create();
     $model = 'opencode-go/minimax-m3';
 
     $legacy = ModelRun::factory()->for($legacyRun)->create(['slug' => 'minimax-m3', 'model' => $model]);
@@ -90,7 +90,7 @@ test('it averages technical scores per run and gives no credit when the model st
         StageResult::factory()->for($extended)->create(['stage' => $stage, 'status' => 'skip']);
     }
 
-    ModelRun::factory()->for(BenchmarkRun::factory())->create([
+    ModelRun::factory()->for(BenchmarkRun::factory()->isolated())->create([
         'slug' => 'minimax-m3',
         'model' => $model,
         'duration_seconds' => 0,
@@ -110,7 +110,7 @@ test('it averages technical scores per run and gives no credit when the model st
 });
 
 test('it shows a model scorecard with run history and safely escaped notes', function () {
-    $run = BenchmarkRun::factory()->create([
+    $run = BenchmarkRun::factory()->isolated()->create([
         'slug' => 'scorecard-run',
         'name' => 'Scorecard Run',
         'started_at' => now(),
@@ -140,6 +140,40 @@ test('it shows a model scorecard with run history and safely escaped notes', fun
         ->assertSee('&lt;script&gt;alert', escape: false)
         ->assertDontSee('<script>alert', escape: false)
         ->assertSee(route('runs.show', $run), escape: false);
+});
+
+test('it never mixes runs from different working conditions', function () {
+    $legacyRun = BenchmarkRun::factory()->create(['name' => 'Legacy Suite']);
+    $isolatedRun = BenchmarkRun::factory()->isolated()->create(['name' => 'Isolated Suite']);
+    ModelRun::factory()->for($legacyRun)->create(['slug' => 'legacy-only', 'model' => 'opencode-go/legacy-only']);
+    ModelRun::factory()->for($isolatedRun)->create(['slug' => 'isolated-only', 'model' => 'opencode-go/isolated-only']);
+
+    expect($legacyRun->environmentProfile())->toBe('legacy')
+        ->and($isolatedRun->environmentProfile())->toBe('isolated-v1');
+
+    $this->get(route('models.index'))
+        ->assertOk()
+        ->assertSee('isolated-only')
+        ->assertDontSee('legacy-only');
+    $this->get(route('models.index', ['condition' => 'legacy']))
+        ->assertOk()
+        ->assertSee('legacy-only')
+        ->assertDontSee('isolated-only');
+    $this->get(route('models.index', ['condition' => 'unknown']))
+        ->assertOk()
+        ->assertSee('isolated-only')
+        ->assertDontSee('legacy-only');
+
+    $this->get(route('models.show', 'opencode-go~legacy-only'))->assertNotFound();
+    $this->get(route('models.show', ['opencode-go~legacy-only', 'condition' => 'legacy']))
+        ->assertOk()
+        ->assertSee('Eski koşul');
+});
+
+test('it explains an empty leaderboard for a condition without runs', function () {
+    $this->get(route('models.index'))
+        ->assertOk()
+        ->assertSee('Bu koşulda henüz model sonucu yok');
 });
 
 test('it returns not found for an unknown model', function () {

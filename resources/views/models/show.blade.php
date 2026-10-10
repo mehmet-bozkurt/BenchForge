@@ -14,7 +14,7 @@
 
 <div class="content-frame">
     <nav class="mb-6 flex items-center gap-2 text-xs font-semibold text-[var(--muted)]" aria-label="Sayfa yolu">
-        <a class="hover:text-[var(--forest)]" href="{{ route('models.index') }}">Modeller</a>
+        <a class="hover:text-[var(--forest)]" href="{{ route('models.index', ['condition' => $environmentProfile]) }}">Modeller · {{ $environmentProfiles[$environmentProfile] }}</a>
         <span aria-hidden="true">/</span>
         <span class="text-[var(--ink)]" aria-current="page">{{ $model['display_name'] }}</span>
     </nav>
@@ -25,7 +25,7 @@
                 <p class="text-[10px] font-extrabold tracking-[0.14em] text-[#67e8f9] uppercase">Model karnesi</p>
                 <h1 class="mt-4 text-3xl font-black tracking-[-0.05em] sm:text-[42px]">{{ $model['display_name'] }}</h1>
                 <code class="mt-2 block text-xs text-[#8f9ab6]">{{ $model['provider_model'] }}</code>
-                <p class="mt-5 max-w-2xl text-sm leading-6 text-[#b7c0d5]">{{ $model['run_count'] }} benchmark koşusundaki teknik ve manuel sonuçların birleştirilmiş görünümü.</p>
+                <p class="mt-5 max-w-2xl text-sm leading-6 text-[#b7c0d5]">{{ $environmentProfiles[$environmentProfile] }} altındaki {{ $model['run_count'] }} benchmark koşusunun teknik ve manuel sonuçlarının birleştirilmiş görünümü.</p>
             </div>
             <div class="min-w-44 rounded-2xl border border-white/10 bg-white/5 p-5 text-center backdrop-blur-sm">
                 <span class="block text-[9px] font-extrabold tracking-[0.12em] text-[#8f9ab6] uppercase">Birleşik puan</span>

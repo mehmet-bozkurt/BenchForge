@@ -1,3 +1,6 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 const INHERITED_KEYS = Object.freeze([
   "PATH", "HOME", "TMPDIR", "TMP", "TEMP", "LANG", "LANGUAGE",
   "LC_ALL", "LC_CTYPE", "LC_NUMERIC", "LC_TIME", "LC_COLLATE", "LC_MONETARY",
@@ -31,6 +34,32 @@ export function modelEnvironment(additions = {}, source = process.env) {
     OPENCODE_DISABLE_EXTERNAL_SKILLS: "1",
     OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: "1",
   };
+}
+
+// "legacy" = the model sees the host user's OpenCode configuration (runs before isolated-v1).
+// "isolated-v1" = an empty per-model HOME/config/state; shared data (auth, sessions, usage DB) and caches stay.
+export const ENVIRONMENT_PROFILES = Object.freeze(["legacy", "isolated-v1"]);
+
+export function isolatedModelEnvironment(additions = {}, privateHome, source = process.env) {
+  if (typeof privateHome !== "string" || !privateHome.startsWith("/")) {
+    throw new Error("An isolated model environment needs an absolute private home directory.");
+  }
+
+  const hostHome = source.HOME || homedir();
+
+  return modelEnvironment({
+    ...additions,
+    HOME: privateHome,
+    XDG_CONFIG_HOME: join(privateHome, ".config"),
+    XDG_STATE_HOME: join(privateHome, ".local", "state"),
+    XDG_DATA_HOME: source.XDG_DATA_HOME || join(hostHome, ".local", "share"),
+    XDG_CACHE_HOME: source.XDG_CACHE_HOME || join(hostHome, ".cache"),
+    npm_config_cache: join(hostHome, ".npm"),
+    OPENCODE_DISABLE_AUTOUPDATE: "1",
+    OPENCODE_DISABLE_CLAUDE_CODE: "1",
+    OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: "1",
+    OPENCODE_DISABLE_SHARE: "1",
+  }, source);
 }
 
 export function runnerControls(source = process.env) {

@@ -38,4 +38,14 @@ class BenchmarkRunFactory extends Factory
             'synced_at' => now(),
         ];
     }
+
+    /**
+     * A run recorded under the isolated model working condition.
+     */
+    public function isolated(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'metadata' => [...($attributes['metadata'] ?? []), 'environment_profile' => 'isolated-v1'],
+        ]);
+    }
 }

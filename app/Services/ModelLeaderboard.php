@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\BenchmarkRun;
 use App\Models\ModelRun;
 use App\Models\StageResult;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,12 +30,17 @@ class ModelLeaderboard
 
     public function __construct(private readonly BenchmarkPreview $benchmarkPreview) {}
 
-    /** @return Collection<int, array<string, mixed>> */
-    public function all(): Collection
+    /**
+     * Runs from different working conditions are never mixed into one row.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function all(string $environmentProfile = BenchmarkRun::CURRENT_ENVIRONMENT_PROFILE): Collection
     {
         return ModelRun::query()
             ->with(['benchmarkRun', 'stageResults', 'evaluation', 'modelRunAttempts'])
             ->get()
+            ->filter(fn (ModelRun $run): bool => $run->benchmarkRun->environmentProfile() === $environmentProfile)
             ->groupBy(fn (ModelRun $run): string => $this->identity($run))
             ->map(fn (Collection $runs, string $identity): array => $this->summarize($identity, $runs))
             ->sort(function (array $left, array $right): int {
@@ -69,14 +75,14 @@ class ModelLeaderboard
      *
      * @return array<string, mixed>|null
      */
-    public function find(string $key): ?array
+    public function find(string $key, string $environmentProfile = BenchmarkRun::CURRENT_ENVIRONMENT_PROFILE): ?array
     {
         if ($key === '' || $key === '.' || $key === '..' || basename($key) !== $key) {
             return null;
         }
 
         $identity = str_replace(self::KEY_SEPARATOR, '/', $key);
-        $runs = $this->runsFor($identity);
+        $runs = $this->runsFor($identity, $environmentProfile);
 
         if ($runs->isEmpty()) {
             $legacyRun = ModelRun::query()->where('slug', $key)->first();
@@ -86,7 +92,7 @@ class ModelLeaderboard
             }
 
             $identity = $this->identity($legacyRun);
-            $runs = $this->runsFor($identity);
+            $runs = $this->runsFor($identity, $environmentProfile);
         }
 
         return $runs->isEmpty() ? null : $this->summarize($identity, $runs);
@@ -126,14 +132,16 @@ class ModelLeaderboard
     }
 
     /** @return Collection<int, ModelRun> */
-    private function runsFor(string $identity): Collection
+    private function runsFor(string $identity, string $environmentProfile): Collection
     {
         return ModelRun::query()
             ->where(fn (Builder $query): Builder => $query
                 ->where('model', $identity)
                 ->orWhere(fn (Builder $query): Builder => $query->where('model', '')->where('slug', $identity)))
             ->with(['benchmarkRun', 'stageResults', 'evaluation', 'modelRunAttempts'])
-            ->get();
+            ->get()
+            ->filter(fn (ModelRun $run): bool => $run->benchmarkRun->environmentProfile() === $environmentProfile)
+            ->values();
     }
 
     /**

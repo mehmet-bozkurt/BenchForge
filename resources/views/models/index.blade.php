@@ -16,8 +16,17 @@
             <p class="eyebrow">Model performansı</p>
             <h1 class="mt-2 text-3xl font-black tracking-[-0.05em] text-[var(--ink)] sm:text-[38px]">Liderlik Tablosu</h1>
             <p class="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-                Tüm benchmark koşularındaki teknik güvenilirliği, hızı ve manuel kalite değerlendirmelerini birlikte görün.
+                Aynı çalışma koşulundaki benchmark koşularının teknik güvenilirliğini, hızını ve manuel kalite değerlendirmelerini birlikte görün. Farklı koşullar tek tabloda karıştırılmaz.
             </p>
+            <nav class="mt-4 inline-flex overflow-hidden rounded-lg border border-[var(--line)] bg-white text-[11px] font-extrabold" aria-label="Çalışma koşulu">
+                @foreach ($environmentProfiles as $profile => $profileLabel)
+                    <a
+                        class="px-3 py-2 transition {{ $profile === $environmentProfile ? 'bg-[var(--forest)] text-white' : 'text-[var(--muted)] hover:text-[var(--forest)]' }} {{ $loop->first ? '' : 'border-l border-[var(--line)]' }}"
+                        href="{{ route('models.index', ['condition' => $profile]) }}"
+                        @if ($profile === $environmentProfile) aria-current="page" @endif
+                    >{{ $profileLabel }}</a>
+                @endforeach
+            </nav>
         </div>
         <div class="sync-pill">
             <span class="h-2 w-2 rounded-full bg-[var(--forest)]" aria-hidden="true"></span>
@@ -61,8 +70,8 @@
 
         @if ($models->isEmpty())
             <div class="px-6 py-20 text-center">
-                <h3 class="text-lg font-black">Henüz model sonucu yok</h3>
-                <p class="mt-2 text-sm text-[var(--muted)]">İlk benchmark tamamlandığında model karneleri burada oluşacak.</p>
+                <h3 class="text-lg font-black">Bu koşulda henüz model sonucu yok</h3>
+                <p class="mt-2 text-sm text-[var(--muted)]">{{ $environmentProfiles[$environmentProfile] }} ile ilk benchmark tamamlandığında model karneleri burada oluşacak. Önceki koşulların sonuçları üstteki seçiciden ayrı görülebilir.</p>
             </div>
         @else
             <div class="overflow-x-auto">
@@ -91,7 +100,7 @@
                                     @endif
                                 </td>
                                 <th class="px-4 py-5" scope="row">
-                                    <a class="text-sm font-black text-[var(--ink)] transition-colors hover:text-[var(--forest)]" href="{{ route('models.show', $model['slug']) }}">{{ $model['display_name'] }}</a>
+                                    <a class="text-sm font-black text-[var(--ink)] transition-colors hover:text-[var(--forest)]" href="{{ route('models.show', [$model['slug'], 'condition' => $environmentProfile]) }}">{{ $model['display_name'] }}</a>
                                     <code class="mt-1 block text-[10px] font-medium text-[var(--muted)]">{{ $model['provider_model'] }}</code>
                                     @if ($model['mixed_stage_sets'])
                                         <span class="mt-1.5 inline-flex rounded-full bg-[var(--amber-soft)] px-2 py-0.5 text-[9px] font-extrabold text-[var(--amber)]" title="Bu modelin koşuları farklı doğrulama aşamalarıyla ölçüldü; teknik oranlar birebir karşılaştırılabilir değildir.">Farklı aşama setleri</span>
@@ -119,7 +128,7 @@
                                 </td>
                                 <td class="px-4 py-5 text-center text-sm font-black">{{ $model['run_count'] }}</td>
                                 <td class="px-4 py-5 text-right font-mono text-[11px] font-bold whitespace-nowrap">{{ $formatDuration($model['average_duration_seconds']) }}</td>
-                                <td class="px-6 py-5 text-right"><a class="text-xs font-black text-[var(--forest)]" href="{{ route('models.show', $model['slug']) }}" aria-label="{{ $model['display_name'] }} karnesini aç">Karne →</a></td>
+                                <td class="px-6 py-5 text-right"><a class="text-xs font-black text-[var(--forest)]" href="{{ route('models.show', [$model['slug'], 'condition' => $environmentProfile]) }}" aria-label="{{ $model['display_name'] }} karnesini aç">Karne →</a></td>
                             </tr>
                         @endforeach
                     </tbody>

@@ -3,7 +3,7 @@ import { closeSync, constants, openSync, writeSync } from "node:fs";
 import { lstat, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { modelEnvironment } from "./process-environment.mjs";
+import { ENVIRONMENT_PROFILES, isolatedModelEnvironment, modelEnvironment } from "./process-environment.mjs";
 
 const MAX_LINE_BYTES = 1024 * 1024;
 const MAX_ENTRIES = 50;
@@ -333,6 +333,8 @@ export async function runMonitoredModel(args) {
   const timeoutOption = options.get("--timeout-seconds");
   const timeoutSeconds = timeoutOption === undefined ? null : Number(timeoutOption);
   if (timeoutSeconds !== null && (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 86400)) return 64;
+  const environmentProfile = options.get("--environment-profile") ?? "legacy";
+  if (!ENVIRONMENT_PROFILES.includes(environmentProfile)) return 64;
 
   if (configOption) environmentAdditions.OPENCODE_CONFIG = await realpath(configOption);
   if (runtimeOption) {
@@ -415,9 +417,16 @@ export async function runMonitoredModel(args) {
     eventFd = openSync(eventPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     await verifyOutputParent(runPath, dirname(stderrPath));
     stderrFd = openSync(stderrPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    let environment = modelEnvironment(environmentAdditions);
+    if (environmentProfile === "isolated-v1") {
+      // One private home per model, outside its workspace, shared by its first run and its recovery attempts.
+      const privateHome = join(runPath, "_opencode-home", basename(workspace));
+      await verifyOutputParent(runPath, privateHome, true);
+      environment = isolatedModelEnvironment(environmentAdditions, privateHome);
+    }
     child = spawn(args[delimiter + 1], args.slice(delimiter + 2), {
       cwd: workspace,
-      env: modelEnvironment(environmentAdditions),
+      env: environment,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });

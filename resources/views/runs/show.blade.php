@@ -99,7 +99,7 @@
     <header class="detail-hero rounded-[28px] border border-[var(--line)] bg-white p-6 sm:p-8">
         <div class="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
             <div class="max-w-3xl">
-                <p class="eyebrow">Benchmark koşusu</p>
+                <p class="eyebrow">Benchmark koşusu · {{ \App\Models\BenchmarkRun::ENVIRONMENT_PROFILES[$run->environmentProfile()] }}</p>
                 <h1 class="mt-3 text-3xl font-black tracking-[-0.05em] text-[var(--ink)] sm:text-[44px]">{{ $run->name }}</h1>
                 <p class="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
                     @if ($run->failed_count > 0)

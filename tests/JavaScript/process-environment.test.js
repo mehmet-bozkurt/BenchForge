@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { copyFile, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { inheritedEnvironment, modelEnvironment, runnerControls } from '../../bin/process-environment.mjs';
+import { inheritedEnvironment, isolatedModelEnvironment, modelEnvironment, runnerControls } from '../../bin/process-environment.mjs';
 
 const execute = promisify(execFile);
 const testDirectory = dirname(fileURLToPath(import.meta.url));
@@ -60,6 +60,29 @@ test('inherits only exact operational keys and drops future secrets and executio
     assert.equal(model.OPENCODE_PERMISSION, undefined);
     assert.equal(model.APP_KEY, undefined);
     assert.equal(modelEnvironment({}, source).OPENCODE_CONFIG_CONTENT, undefined);
+});
+
+test('isolates the model from host OpenCode configuration while keeping shared auth data and caches', () => {
+    const source = { ...fakeSecrets, PATH: '/fixture/bin', HOME: '/fixture/home', XDG_CONFIG_HOME: '/fixture/home/custom-config' };
+    const model = isolatedModelEnvironment({ OPENCODE_CONFIG: '/fixture/run/config.json' }, '/fixture/run/_opencode-home/model-one', source);
+
+    assert.equal(model.HOME, '/fixture/run/_opencode-home/model-one');
+    assert.equal(model.XDG_CONFIG_HOME, '/fixture/run/_opencode-home/model-one/.config');
+    assert.equal(model.XDG_STATE_HOME, '/fixture/run/_opencode-home/model-one/.local/state');
+    assert.equal(model.XDG_DATA_HOME, '/fixture/home/.local/share');
+    assert.equal(model.XDG_CACHE_HOME, '/fixture/home/.cache');
+    assert.equal(model.npm_config_cache, '/fixture/home/.npm');
+    assert.equal(model.OPENCODE_CONFIG, '/fixture/run/config.json');
+    for (const flag of ['OPENCODE_DISABLE_PROJECT_CONFIG', 'OPENCODE_PURE', 'OPENCODE_DISABLE_AUTOUPDATE', 'OPENCODE_DISABLE_CLAUDE_CODE', 'OPENCODE_DISABLE_CLAUDE_CODE_PROMPT', 'OPENCODE_DISABLE_SHARE']) {
+        assert.equal(model[flag], '1', flag);
+    }
+    assert.equal(model.OPENCODE_DISABLE_MODELS_FETCH, undefined);
+    assertNoInheritedSecrets(Object.keys(model));
+
+    const explicitData = isolatedModelEnvironment({}, '/fixture/private', { HOME: '/fixture/home', XDG_DATA_HOME: '/fixture/auth-data', XDG_CACHE_HOME: '/fixture/cache' });
+    assert.equal(explicitData.XDG_DATA_HOME, '/fixture/auth-data');
+    assert.equal(explicitData.XDG_CACHE_HOME, '/fixture/cache');
+    assert.throws(() => isolatedModelEnvironment({}, 'relative/home', source), /absolute private home/u);
 });
 
 test('retains only validated continuation controls rather than arbitrary BenchForge variables', () => {
@@ -193,6 +216,50 @@ test('monitor ignores inherited OpenCode overrides and uses only explicit model 
         assert.equal(observed.configPath, configPath);
         assert.equal(observed.basePath, '/fixture-model');
         assert.equal(observed.pure, '1');
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test('monitor gives an isolated model a private home outside its workspace and keeps legacy runs unchanged', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'benchforge-monitor-profile-')));
+    const workspace = join(root, 'fixture-model');
+    const probe = 'console.log(JSON.stringify({ home: process.env.HOME, config: process.env.XDG_CONFIG_HOME, data: process.env.XDG_DATA_HOME, autoupdate: process.env.OPENCODE_DISABLE_AUTOUPDATE }))';
+    const monitorArguments = (name, extra) => [
+        join(binDirectory, 'model-boundary-monitor.mjs'),
+        '--workspace', workspace,
+        '--event-log', join(root, '_logs', `fixture-model.opencode.events${name}.jsonl`),
+        '--stderr-log', join(root, '_logs', 'fixture-model.opencode.stderr.log'),
+        '--report', join(root, '_boundary', 'fixture-model.json'),
+        ...extra,
+        '--', process.execPath, '-e', probe,
+    ];
+
+    try {
+        await mkdir(workspace);
+        const environment = { ...process.env, ...fakeSecrets, HOME: '/fixture/host-home' };
+        delete environment.XDG_DATA_HOME;
+        const isolated = JSON.parse((await execute(process.execPath, monitorArguments('', ['--environment-profile', 'isolated-v1']), { env: environment })).stdout);
+        const privateHome = join(root, '_opencode-home', 'fixture-model');
+
+        assert.equal(isolated.home, privateHome);
+        assert.equal(isolated.config, join(privateHome, '.config'));
+        assert.equal(isolated.data, '/fixture/host-home/.local/share');
+        assert.equal(isolated.autoupdate, '1');
+        assert.equal((await stat(privateHome)).mode & 0o777, 0o700);
+
+        await rm(join(root, '_logs'), { recursive: true, force: true });
+        await rm(join(root, '_boundary'), { recursive: true, force: true });
+        const legacy = JSON.parse((await execute(process.execPath, monitorArguments('', []), { env: environment })).stdout);
+        assert.equal(legacy.home, '/fixture/host-home');
+        assert.equal(legacy.autoupdate, undefined);
+
+        await rm(join(root, '_logs'), { recursive: true, force: true });
+        await rm(join(root, '_boundary'), { recursive: true, force: true });
+        await assert.rejects(
+            execute(process.execPath, monitorArguments('', ['--environment-profile', 'host']), { env: environment }),
+            (error) => error.code === 64,
+        );
     } finally {
         await rm(root, { recursive: true, force: true });
     }

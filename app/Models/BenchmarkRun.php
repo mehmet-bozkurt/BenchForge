@@ -12,6 +12,17 @@ class BenchmarkRun extends Model
     /** @use HasFactory<BenchmarkRunFactory> */
     use HasFactory;
 
+    /**
+     * The model working condition recorded in the run's `_meta.txt`; runs without it predate isolation.
+     */
+    public const CURRENT_ENVIRONMENT_PROFILE = 'isolated-v1';
+
+    /** @var array<string, string> */
+    public const ENVIRONMENT_PROFILES = [
+        'isolated-v1' => 'Yalıtılmış koşul v1',
+        'legacy' => 'Eski koşul',
+    ];
+
     protected $fillable = [
         'slug',
         'name',
@@ -40,6 +51,13 @@ class BenchmarkRun extends Model
     public function getRouteKeyName(): string
     {
         return 'slug';
+    }
+
+    public function environmentProfile(): string
+    {
+        $profile = $this->metadata['environment_profile'] ?? null;
+
+        return is_string($profile) && array_key_exists($profile, self::ENVIRONMENT_PROFILES) ? $profile : 'legacy';
     }
 
     /**
