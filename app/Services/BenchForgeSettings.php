@@ -23,9 +23,13 @@ class BenchForgeSettings
         'home_path' => 4096,
     ];
 
-    private const REQUIRED_DIRECTORIES = ['prompts', 'config', 'runs', 'sablon', 'tools'];
+    /**
+     * The data root holds user content; the runner scripts and template ship in the repository's engine/.
+     */
+    private const REQUIRED_DIRECTORIES = ['prompts', 'config', 'runs'];
 
-    private const REQUIRED_SCRIPTS = [
+    public const REQUIRED_ENGINE_FILES = [
+        'sablon/package.json',
         'tools/benchmark.zsh',
         'tools/resume-model.zsh',
         'tools/browser-smoke/check.mjs',
@@ -56,11 +60,7 @@ class BenchForgeSettings
             }
 
             $root = rtrim($savedValues['root_path'], DIRECTORY_SEPARATOR);
-            config()->set([
-                'benchforge.runs_path' => $root.'/runs',
-                'benchforge.benchmark_script' => $root.'/tools/benchmark.zsh',
-                'benchforge.resume_script' => $root.'/tools/resume-model.zsh',
-            ]);
+            config()->set('benchforge.runs_path', $root.'/runs');
         }
 
         $commandPath = (string) config('benchforge.command_path');
@@ -216,15 +216,15 @@ class BenchForgeSettings
             $path = $root.'/'.$directory;
 
             if (! is_dir($path) || ! is_readable($path) || realpath($path) !== $path) {
-                throw new RuntimeException('Benchmark kökünde okunabilir ve doğrudan prompts, config, runs, sablon ve tools klasörleri bulunmalıdır.');
+                throw new RuntimeException('Benchmark veri kökünde okunabilir ve doğrudan prompts, config ve runs klasörleri bulunmalıdır.');
             }
         }
 
-        foreach (self::REQUIRED_SCRIPTS as $script) {
-            $path = $root.'/'.$script;
+        $enginePath = rtrim((string) config('benchforge.engine_path'), DIRECTORY_SEPARATOR);
 
-            if (! is_file($path) || ! is_readable($path) || realpath($path) !== $path) {
-                throw new RuntimeException('Benchmark kökünde gerekli koşucu ve doğrulama dosyaları bulunamadı.');
+        foreach (self::REQUIRED_ENGINE_FILES as $file) {
+            if (! is_file($enginePath.'/'.$file) || ! is_readable($enginePath.'/'.$file)) {
+                throw new RuntimeException('Uygulamanın engine klasöründe gerekli koşucu, şablon ve doğrulama dosyaları bulunamadı.');
             }
         }
 

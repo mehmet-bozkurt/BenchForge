@@ -31,6 +31,8 @@ function withBenchForgeSettingsFixture(callable $test): void
         foreach (['benchmark.zsh', 'resume-model.zsh', 'browser-smoke/check.mjs', 'select-opencode-session.mjs', 'extract-opencode-event-session.mjs', 'benchforge-model-policy.mjs'] as $script) {
             File::put($directory.'/'.$root.'/tools/'.$script, 'fixture');
         }
+
+        File::put($directory.'/'.$root.'/sablon/package.json', '{}');
     }
 
     foreach (['bin', 'commands', 'home', 'other-home', 'private'] as $folder) {
@@ -44,6 +46,7 @@ function withBenchForgeSettingsFixture(callable $test): void
 
     config()->set([
         'cache.default' => 'array',
+        'benchforge.engine_path' => $values['root_path'],
         'benchforge.root_path' => $values['root_path'],
         'benchforge.runs_path' => $values['root_path'].'/runs',
         'benchforge.benchmark_script' => $values['root_path'].'/tools/benchmark.zsh',
@@ -133,8 +136,8 @@ test('it applies saved paths together and follows HOME only for a derived usage 
 
         expect(config('benchforge.root_path'))->toBe($fixture['directory'].'/other-benchmark');
         expect(config('benchforge.runs_path'))->toBe($fixture['directory'].'/other-benchmark/runs');
-        expect(config('benchforge.benchmark_script'))->toBe($fixture['directory'].'/other-benchmark/tools/benchmark.zsh');
-        expect(config('benchforge.resume_script'))->toBe($fixture['directory'].'/other-benchmark/tools/resume-model.zsh');
+        expect(config('benchforge.benchmark_script'))->toBe($fixture['values']['root_path'].'/tools/benchmark.zsh');
+        expect(config('benchforge.resume_script'))->toBe($fixture['values']['root_path'].'/tools/resume-model.zsh');
         expect(config('benchforge.opencode_db_path'))->toBe($fixture['directory'].'/other-home/.local/share/opencode/opencode.db');
     });
 });

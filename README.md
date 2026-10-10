@@ -2,7 +2,7 @@
 
 BenchForge, yapay zekâ kodlama modellerini gerçek ürün geliştirmeye benzeyen görevlerde karşılaştıran, yerelde çalışan bir değerlendirme ortamıdır. Aynı görev metni ve aynı başlangıç projesiyle birden fazla model çalıştırılır. Teslimler teknik kontroller, süre, token, maliyet ve insan puanıyla yan yana incelenir.
 
-> **Durum:** Erken aşamada, tek kullanıcılı yerel bir araç. Modelleri çalıştıran zsh araçları henüz bu depoda yayımlanmadı (bkz. [Sınırlamalar](#sınırlamalar)). Arayüz Türkçedir.
+> **Durum:** Erken aşamada, tek kullanıcılı yerel bir araç. Arayüz Türkçedir.
 
 ## Ne yapar?
 
@@ -19,10 +19,24 @@ BenchForge, yapay zekâ kodlama modellerini gerçek ürün geliştirmeye benzeye
 ## Nasıl çalışır?
 
 ```
-Laravel arayüzü ──► Node işçileri (bin/) ──► zsh araçları (benchmark.zsh) ──► OpenCode CLI ──► model
+Laravel arayüzü ──► Node işçileri (bin/) ──► engine/tools/benchmark.zsh ──► OpenCode CLI ──► model
       ▲                                              │
-      └──── SQLite ◄── arşiv senkronu ◄── runs/<koşu>/ (çalışma alanları, günlükler, sonuçlar)
+      └──── SQLite ◄── arşiv senkronu ◄── <veri kökü>/runs/<koşu>/ (çalışma alanları, günlükler, sonuçlar)
 ```
+
+### Klasör yapısı
+
+| Yol | İçerik |
+| --- | --- |
+| `app/`, `resources/`, `routes/` | Laravel arayüzü |
+| `bin/` | Arka plan işçileri ve model sınır izleyicisi (Node.js) |
+| `engine/tools/` | Koşucu ve doğrulama betikleri (zsh, Node.js, Playwright) |
+| `engine/sablon/` | Her modele kopyalanan başlangıç projesi (Next.js) |
+| `engine/config/` | OpenCode ayarı ve örnek model grubu |
+| `engine/prompts/` | Örnek görev metni |
+| `engine/runs/` | Varsayılan koşu klasörü (Git dışında) |
+
+**Veri kökü:** Koşular, görev metinleri ve model grupları "veri kökü"nde durur. Varsayılan veri kökü `engine/` klasörüdür. Kendi görev metinlerinizi ve büyük koşu verilerinizi depodan ayrı tutmak için `.env` içindeki `BENCHFORGE_ROOT` ile başka bir klasör gösterebilirsiniz; o klasörde `prompts/`, `config/` ve `runs/` bulunmalıdır. Betikler ve şablon her durumda depodaki `engine/` klasöründen kullanılır.
 
 1. Arayüz koşuyu başlatır; işçi süreçleri arka planda, kendi süreç grubunda çalışır.
 2. Her model için başlangıç şablonu ayrı bir çalışma klasörüne kopyalanır.
@@ -63,8 +77,13 @@ Ardından:
    ```bash
    opencode auth login
    ```
-2. **Benchmark araçlarının yolunu ayarlayın.** `.env` içinde `BENCHFORGE_ROOT` değişkenini veya uygulamadaki **Sistem ve Kurulum** ekranını kullanın. Bu kök; `tools/`, `config/`, `prompts/`, `sablon/` ve `runs/` klasörlerini içermelidir.
-3. **Uygulamayı açın.** [Laravel Herd](https://herd.laravel.com) ile `http://benchforge.test` adresinden veya geliştirme sunucusuyla:
+2. **Tarayıcı testi için Chromium'u kurun** (bir kez):
+   ```bash
+   npx --prefix engine/tools/browser-smoke playwright install chromium
+   ```
+3. **İsteğe bağlı: veri kökünü ayırın.** Varsayılan olarak koşular `engine/runs/` altına yazılır. Başka bir klasör için `.env` içinde `BENCHFORGE_ROOT` değişkenini veya uygulamadaki **Sistem ve Kurulum** ekranını kullanın.
+4. **İlk koşu:** Yeni Benchmark ekranında `prompts/example.txt` görevini ve `config/example.conf` model grubunu seçebilirsiniz. Model kimliğini kendi OpenCode bağlantınıza göre düzenleyin.
+5. **Uygulamayı açın.** [Laravel Herd](https://herd.laravel.com) ile `http://benchforge.test` adresinden veya geliştirme sunucusuyla:
    ```bash
    composer run dev
    ```
@@ -85,8 +104,6 @@ php artisan test --compact
 npm run test:js
 ```
 
-JavaScript entegrasyon testleri benchmark araçlarının bu deponun iki üst klasörünün yanında (`../../frontend-model-benchmark`) olmasını bekler.
-
 ## Güvenlik notları
 
 - **Yalnız yerel kullanım içindir.** Uygulamada kullanıcı girişi yoktur; ağa açmayın.
@@ -96,7 +113,6 @@ JavaScript entegrasyon testleri benchmark araçlarının bu deponun iki üst kla
 
 ## Sınırlamalar
 
-- **Benchmark araçları bu depoda değil.** `benchmark.zsh`, `resume-model.zsh`, model politikası ve başlangıç şablonu ayrı bir klasörde duruyor ve henüz yayımlanmadı. Bu yüzden depo şu an tek başına benchmark çalıştıramaz.
 - **Tek örnek:** Her model bir görevde bir kez çalışır; sonuçların istatistiksel güveni sınırlıdır.
 - **Liderlik evrensel bir sıralama değildir.** Görevler ve aşama setleri koşudan koşuya değişebilir; tablo yalnız aynı çalışma koşulundaki koşuları birleştirir.
 - **İnsan puanlaması kör değildir.** Değerlendirici model adını görür.

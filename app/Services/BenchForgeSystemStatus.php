@@ -52,11 +52,11 @@ class BenchForgeSystemStatus
                 $sameNode ? 'Alt süreçler aynı Node.js çalıştırıcısını kullanacak.' : 'Seçili Node.js ile komut yollarındaki node eşleşmiyor.');
         }
 
-        $playwright = rtrim((string) config('benchforge.root_path'), '/').'/tools/browser-smoke/node_modules/playwright/package.json';
+        $playwright = rtrim((string) config('benchforge.engine_path'), '/').'/tools/browser-smoke/node_modules/playwright/package.json';
         $checks[] = $this->check('playwright', 'Browser runtime bağımlılığı', is_readable($playwright) ? 'warning' : 'fail',
             is_readable($playwright)
                 ? 'Playwright paketi mevcut. Chromium açılışı ve işletim sistemi bağımlılıkları burada test edilmez.'
-                : 'tools/browser-smoke içinde Playwright bağımlılıkları kurulmamış.');
+                : 'engine/tools/browser-smoke içinde Playwright bağımlılıkları kurulmamış.');
         $checks[] = $this->check('isolation', 'Kod çalıştırma sınırı', 'warning',
             'OS/container izolasyonu henüz yok. Üretilen projelerin npm işlemleri bu bilgisayarın kullanıcı yetkileriyle çalışır.');
         $ready = ! collect($checks)->contains(fn (array $check): bool => in_array($check['status'], ['fail', 'unsupported'], true));
@@ -95,15 +95,17 @@ class BenchForgeSystemStatus
         $root = rtrim((string) config('benchforge.root_path'), '/');
         $missing = [];
 
-        foreach (['prompts', 'config', 'runs', 'sablon'] as $directory) {
+        $enginePath = rtrim((string) config('benchforge.engine_path'), '/');
+
+        foreach (['prompts', 'config', 'runs'] as $directory) {
             if (! is_dir($root.'/'.$directory) || ! is_readable($root.'/'.$directory)) {
                 $missing[] = $directory;
             }
         }
 
-        foreach (['tools/benchmark.zsh', 'tools/resume-model.zsh', 'tools/browser-smoke/check.mjs', 'tools/select-opencode-session.mjs', 'tools/extract-opencode-event-session.mjs', 'tools/benchforge-model-policy.mjs'] as $file) {
-            if (! is_file($root.'/'.$file) || ! is_readable($root.'/'.$file)) {
-                $missing[] = $file;
+        foreach (BenchForgeSettings::REQUIRED_ENGINE_FILES as $file) {
+            if (! is_file($enginePath.'/'.$file) || ! is_readable($enginePath.'/'.$file)) {
+                $missing[] = 'engine/'.$file;
             }
         }
 
