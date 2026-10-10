@@ -113,10 +113,13 @@
                 <code class="mt-4 block truncate rounded-lg bg-[var(--surface-subtle)] px-3 py-2 text-[11px] text-[var(--muted)]" title="{{ $run->source_path }}">{{ $run->source_path }}</code>
             </div>
             <div class="flex flex-wrap gap-2">
-                @if ($previewableModelIds->isNotEmpty())
+                @php
+                    $viewableModelCount = $previewableModelIds->merge($recoveredPreviewModelIds)->unique()->count();
+                @endphp
+                @if ($viewableModelCount > 0)
                     <a class="inline-flex min-h-9 items-center gap-2 rounded-lg bg-[var(--forest)] px-4 py-2 text-xs font-extrabold text-white shadow-[0_10px_24px_rgb(79_70_229/0.18)] transition hover:bg-[#4338ca]" href="{{ route('runs.compare', $run) }}">
                         <span aria-hidden="true">◫</span>
-                        {{ $previewableModelIds->count() > 1 ? 'Siteleri karşılaştır' : 'Siteyi görüntüle' }}
+                        {{ $viewableModelCount > 1 ? 'Siteleri karşılaştır' : 'Siteyi görüntüle' }}
                     </a>
                 @endif
                 <span class="status-badge status-{{ $runStatus }}">
@@ -280,6 +283,8 @@
                                         <a class="inline-flex rounded-lg border border-[#d7ccff] bg-[var(--violet-soft)] px-3 py-2 text-[10px] font-extrabold text-[var(--violet)] transition hover:border-[var(--violet)]" href="{{ route('runs.compare', ['benchmarkRun' => $run, 'left' => $modelRun->id]) }}">Önizle →</a>
                                         <a class="inline-flex rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[10px] font-extrabold text-[var(--forest)] transition hover:border-[var(--forest)]" href="{{ route('runs.models.preview', [$run, $modelRun]) }}" target="_blank" rel="noopener noreferrer" aria-label="{{ str($modelRun->model)->after('/') }} çıktısını yeni sekmede aç">↗</a>
                                     </div>
+                                @elseif ($recoveredPreviewModelIds->contains($modelRun->id))
+                                    <a class="inline-flex rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[10px] font-extrabold text-[var(--forest)] transition hover:border-[var(--forest)]" href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'version' => 'recovered']) }}" target="_blank" rel="noopener noreferrer" title="İlk teslimde çıktı yok; kurtarılmış çıktı puanlanmaz">Kurtarılmış ↗</a>
                                 @else
                                     <span class="text-[10px] font-bold text-[var(--muted)]">Çıktı yok</span>
                                 @endif
@@ -412,7 +417,7 @@
                                 </div>
 
                                 <p class="mt-3 text-[11px] leading-5 text-[var(--muted)]">
-                                    İlk teslimin sonucu ve karşılaştırma puanı değişmez. Her yeni deneme ayrı kaydedilir; başarılı bir deneme yalnızca güncel önizlemeyi yeniler.
+                                    İlk teslimin sonucu ve karşılaştırma puanı değişmez. Her yeni deneme ayrı kaydedilir; başarılı bir denemenin çıktısı ayrı “kurtarılmış” görünümde incelenir, puanlanmaz.
                                 </p>
 
                                 @if (! $canContinue && ! $canValidate && $unavailableReason)

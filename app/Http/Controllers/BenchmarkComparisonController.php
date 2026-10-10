@@ -43,6 +43,9 @@ class BenchmarkComparisonController extends Controller
             ->filter(fn (ModelRun $modelRun): bool => $benchmarkPreview->isAvailable($benchmarkRun, $modelRun))
             ->values();
         $previewableModelIds = $previewableModels->pluck('id');
+        $recoveredPreviewModelIds = $models
+            ->filter(fn (ModelRun $modelRun): bool => $benchmarkPreview->isAvailable($benchmarkRun, $modelRun, BenchmarkPreview::RECOVERED))
+            ->pluck('id');
 
         $leftModel = $this->selectedModel($models, $request->integer('left'))
             ?? $previewableModels->first()
@@ -77,6 +80,7 @@ class BenchmarkComparisonController extends Controller
             'models' => $models,
             'previewableModels' => $previewableModels,
             'previewableModelIds' => $previewableModelIds,
+            'recoveredPreviewModelIds' => $recoveredPreviewModelIds,
             'leftModel' => $leftModel,
             'rightModel' => $rightModel,
             'resultComparisons' => $resultComparisons,

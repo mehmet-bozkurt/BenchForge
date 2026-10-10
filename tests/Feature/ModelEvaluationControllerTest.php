@@ -2,6 +2,7 @@
 
 use App\Models\BenchmarkRun;
 use App\Models\ModelRun;
+use App\Models\ModelRunAttempt;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -9,6 +10,8 @@ use Illuminate\Support\Str;
 uses(LazilyRefreshDatabase::class);
 
 test('it creates and updates a manual evaluation for a model result', function () {
+    $runsRoot = storage_path('framework/testing/evaluation-write-'.Str::uuid());
+    config()->set('benchforge.runs_path', $runsRoot);
     $run = BenchmarkRun::factory()->create([
         'slug' => 'nova-manual-review',
         'routes' => ['/', '/cart'],
@@ -17,6 +20,9 @@ test('it creates and updates a manual evaluation for a model result', function (
         'slug' => 'minimax-m3',
         'model' => 'opencode-go/minimax-m3',
     ]);
+    File::ensureDirectoryExists($runsRoot.'/'.$run->slug.'/_gallery/'.$modelRun->slug);
+    File::put($runsRoot.'/'.$run->slug.'/_gallery/'.$modelRun->slug.'/index.html', '<h1>Preview</h1>');
+    $this->beforeApplicationDestroyed(fn () => File::deleteDirectory($runsRoot));
     $payload = [
         'visual_design_score' => 8,
         'user_experience_score' => 7,
@@ -61,6 +67,39 @@ test('it creates and updates a manual evaluation for a model result', function (
         'overall_score' => 9,
         'notes' => 'İkinci inceleme.',
     ]);
+});
+
+test('it refuses to score a model whose first submission has no viewable export', function () {
+    $runsRoot = storage_path('framework/testing/evaluation-recovered-'.Str::uuid());
+    config()->set('benchforge.runs_path', $runsRoot);
+
+    try {
+        $run = BenchmarkRun::factory()->create(['slug' => 'recovered-scoring', 'routes' => ['/']]);
+        $modelRun = ModelRun::factory()->for($run)->create(['slug' => 'kimi-k3', 'status' => 'fail']);
+        ModelRunAttempt::factory()->for($modelRun)->create(['attempt_number' => 1]);
+        File::ensureDirectoryExists($runsRoot.'/'.$run->slug.'/_gallery/kimi-k3');
+        File::put($runsRoot.'/'.$run->slug.'/_gallery/kimi-k3/index.html', '<h1>Recovered</h1>');
+
+        $this
+            ->from(route('runs.models.preview', [$run, $modelRun]))
+            ->put(route('runs.models.evaluation.update', [$run, $modelRun]), [
+                'visual_design_score' => 9,
+                'user_experience_score' => 9,
+                'task_completion_score' => 9,
+                'functionality_score' => 9,
+                'responsive_quality_score' => 9,
+                'content_quality_score' => 9,
+                'consistency_score' => 9,
+                'overall_score' => 9,
+                'issue_severity' => 'none',
+                'return_path' => '/',
+            ])
+            ->assertSessionHasErrors('evaluation');
+
+        $this->assertDatabaseMissing('model_evaluations', ['model_run_id' => $modelRun->id]);
+    } finally {
+        File::deleteDirectory($runsRoot);
+    }
 });
 
 test('it validates scores severity and the return route', function () {

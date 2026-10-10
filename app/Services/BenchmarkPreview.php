@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\BenchmarkRun;
 use App\Models\ModelRun;
+use App\Models\ModelRunAttempt;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 
 class BenchmarkPreview
@@ -42,17 +44,60 @@ class BenchmarkPreview
         'webmanifest',
     ];
 
-    public function isAvailable(BenchmarkRun $benchmarkRun, ModelRun $modelRun): bool
+    /**
+     * The first submission is the only scored output.
+     */
+    public const INITIAL = 'initial';
+
+    /**
+     * The export published by a later recovery attempt; review-only.
+     */
+    public const RECOVERED = 'recovered';
+
+    public function isAvailable(BenchmarkRun $benchmarkRun, ModelRun $modelRun, string $version = self::INITIAL): bool
     {
-        return $this->previewDirectory($benchmarkRun, $modelRun) !== null;
+        return $this->previewDirectory($benchmarkRun, $modelRun, $version) !== null;
+    }
+
+    public function hasAnyPreview(BenchmarkRun $benchmarkRun, ModelRun $modelRun): bool
+    {
+        return $this->isAvailable($benchmarkRun, $modelRun)
+            || $this->isAvailable($benchmarkRun, $modelRun, self::RECOVERED);
+    }
+
+    /**
+     * The earliest recovery attempt that passed every check and therefore replaced the published export.
+     */
+    public function firstPublishingAttempt(ModelRun $modelRun): ?ModelRunAttempt
+    {
+        return $this->publishingAttempts($modelRun)->first();
+    }
+
+    /**
+     * The attempt whose export the recovered preview currently shows.
+     */
+    public function latestPublishingAttempt(ModelRun $modelRun): ?ModelRunAttempt
+    {
+        return $this->publishingAttempts($modelRun)->last();
+    }
+
+    /** @return Collection<int, ModelRunAttempt> */
+    private function publishingAttempts(ModelRun $modelRun): Collection
+    {
+        return $modelRun->modelRunAttempts
+            ->filter(fn (ModelRunAttempt $attempt): bool => $attempt->status === 'completed'
+                && ($attempt->result['overallStatus'] ?? null) === 'pass')
+            ->sortBy('attempt_number')
+            ->values();
     }
 
     public function resolveFile(
         BenchmarkRun $benchmarkRun,
         ModelRun $modelRun,
         ?string $requestedPath = null,
+        string $version = self::INITIAL,
     ): ?string {
-        $previewDirectory = $this->previewDirectory($benchmarkRun, $modelRun);
+        $previewDirectory = $this->previewDirectory($benchmarkRun, $modelRun, $version);
 
         if ($previewDirectory === null) {
             return null;
@@ -116,7 +161,11 @@ class BenchmarkPreview
         );
     }
 
-    private function previewDirectory(BenchmarkRun $benchmarkRun, ModelRun $modelRun): ?string
+    /**
+     * A successful recovery moves the first-submission export into its attempt folder
+     * (`gallery-before` / `out-before`) and publishes its own export in the usual places.
+     */
+    private function previewDirectory(BenchmarkRun $benchmarkRun, ModelRun $modelRun, string $version): ?string
     {
         if (! $this->isSafeSegment($benchmarkRun->slug) || ! $this->isSafeSegment($modelRun->slug)) {
             return null;
@@ -129,10 +178,23 @@ class BenchmarkPreview
         }
 
         $runPath = $runsPath.DIRECTORY_SEPARATOR.$benchmarkRun->slug;
-        $candidates = [
+        $publishedCandidates = [
             $runPath.DIRECTORY_SEPARATOR.'_gallery'.DIRECTORY_SEPARATOR.$modelRun->slug,
             $runPath.DIRECTORY_SEPARATOR.$modelRun->slug.DIRECTORY_SEPARATOR.'out',
         ];
+        $publishingAttempt = $this->firstPublishingAttempt($modelRun);
+
+        $candidates = match (true) {
+            $version === self::RECOVERED => $publishingAttempt === null ? [] : $publishedCandidates,
+            $publishingAttempt !== null => $this->attemptBackups($runPath, $modelRun, $publishingAttempt),
+            default => [
+                ...$publishedCandidates,
+                ...$modelRun->modelRunAttempts
+                    ->filter(fn (ModelRunAttempt $attempt): bool => $attempt->isActive())
+                    ->flatMap(fn (ModelRunAttempt $attempt): array => $this->attemptBackups($runPath, $modelRun, $attempt))
+                    ->all(),
+            ],
+        };
 
         foreach ($candidates as $candidate) {
             $resolvedPath = realpath($candidate);
@@ -147,6 +209,22 @@ class BenchmarkPreview
         }
 
         return null;
+    }
+
+    /** @return list<string> */
+    private function attemptBackups(string $runPath, ModelRun $modelRun, ModelRunAttempt $attempt): array
+    {
+        $attemptPath = implode(DIRECTORY_SEPARATOR, [
+            $runPath,
+            '_attempts',
+            $modelRun->slug,
+            'attempt-'.(int) $attempt->attempt_number,
+        ]);
+
+        return [
+            $attemptPath.DIRECTORY_SEPARATOR.'gallery-before',
+            $attemptPath.DIRECTORY_SEPARATOR.'out-before',
+        ];
     }
 
     private function isSafeSegment(string $segment): bool

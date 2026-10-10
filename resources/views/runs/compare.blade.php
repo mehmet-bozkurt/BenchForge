@@ -119,7 +119,6 @@
                 @php
                     $modelRun = $preview['model'];
                     $hasPreview = $previewableModelIds->contains($modelRun->id);
-                    $latestAttempt = $resultComparisons[$modelRun->id]['attempt'] ?? null;
                 @endphp
                 <article class="preview-panel overflow-hidden rounded-2xl border border-[var(--line)] bg-white">
                     <header class="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3">
@@ -144,16 +143,19 @@
                         </div>
                     </header>
                     @if ($hasPreview)
-                        @if (($latestAttempt?->result['overallStatus'] ?? null) === 'pass')
-                            <p class="border-b border-[var(--line)] bg-[var(--success-soft)] px-4 py-2 text-[10px] font-bold text-[var(--success)]">Güncel çıktı · Deneme {{ $latestAttempt->attempt_number }} doğrulamaları geçti</p>
-                        @endif
+                        <p class="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--surface-subtle)] px-4 py-2 text-[10px] font-bold text-[var(--muted)]">
+                            <span>İlk teslim çıktısı · puanlanan sürüm</span>
+                            @if ($recoveredPreviewModelIds->contains($modelRun->id))
+                                <a class="text-[var(--forest)] hover:underline" href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'path' => $selectedRoute, 'version' => 'recovered']) }}" target="_blank" rel="noopener noreferrer">Kurtarılmış çıktıyı incele (puanlanmaz) ↗</a>
+                            @endif
+                        </p>
                         <div class="preview-stage" data-preview-stage>
                             <div class="preview-canvas" data-preview-canvas data-viewport-width="{{ $selectedViewportWidth }}">
                                 <iframe
                                     class="preview-frame"
                                     data-preview-frame
                                     src="{{ $previewUrl($modelRun, $selectedRoute) }}"
-                                    title="{{ str($modelRun->model)->after('/') }} güncel önizlemesi"
+                                    title="{{ str($modelRun->model)->after('/') }} ilk teslim önizlemesi"
                                     loading="eager"
                                     referrerpolicy="no-referrer"
                                     sandbox="allow-scripts"
@@ -164,7 +166,10 @@
                         <div class="grid min-h-56 place-items-center bg-[var(--surface-subtle)] px-6 py-10 text-center">
                             <div>
                                 <p class="text-sm font-black text-[var(--ink)]">Görüntülenebilir çıktı yok</p>
-                                <p class="mt-2 max-w-sm text-xs leading-5 text-[var(--muted)]">Bu model için geçerli bir static export bulunamadı. Aşağıdaki aşama sonuçları yine karşılaştırılabilir.</p>
+                                <p class="mt-2 max-w-sm text-xs leading-5 text-[var(--muted)]">İlk teslimde geçerli bir static export yok; bu yüzden manuel puan verilemez. Aşağıdaki aşama sonuçları yine karşılaştırılabilir.</p>
+                                @if ($recoveredPreviewModelIds->contains($modelRun->id))
+                                    <a class="mt-3 inline-flex rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[10px] font-extrabold text-[var(--forest)] transition hover:border-[var(--forest)]" href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'path' => $selectedRoute, 'version' => 'recovered']) }}" target="_blank" rel="noopener noreferrer">Kurtarılmış çıktıyı incele (puanlanmaz) ↗</a>
+                                @endif
                             </div>
                         </div>
                     @endif
@@ -176,7 +181,7 @@
             <section class="data-panel mt-6 rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" aria-labelledby="recovery-comparison-title">
                 <p class="eyebrow">Kurtarma karşılaştırması</p>
                 <h2 id="recovery-comparison-title" class="mt-1 text-xl font-black tracking-[-0.035em]">İlk teslim ve son tamamlanan deneme</h2>
-                <p class="mt-2 max-w-3xl text-xs leading-5 text-[var(--muted)]">Aşama sonuçları yan yana gösterilir. İlk teslimin puanı ve ana sonuç kaydı korunur; yukarıdaki görsel alan varsa mevcut static export dosyasını gösterir.</p>
+                <p class="mt-2 max-w-3xl text-xs leading-5 text-[var(--muted)]">Aşama sonuçları yan yana gösterilir. İlk teslimin puanı ve ana sonuç kaydı korunur; yukarıdaki görsel alan her zaman ilk teslim çıktısını gösterir. Kurtarılmış çıktı ayrı sayfada yalnız incelenir, puanlanmaz.</p>
 
                 <div class="mt-5 grid gap-4 2xl:grid-cols-2">
                     @foreach ([['side' => 'Sol', 'model' => $leftModel], ['side' => 'Sağ', 'model' => $rightModel]] as $selection)

@@ -55,7 +55,7 @@
                 <h2 id="ranking-title" class="mt-1 text-xl font-black tracking-[-0.035em]">Modellerin birleşik performansı</h2>
             </div>
             <div class="max-w-xl rounded-xl border border-[#d7ccff] bg-[var(--violet-soft)] px-4 py-3 text-[11px] leading-5 text-[var(--muted)]">
-                <strong class="text-[var(--violet)]">Puan formülü:</strong> %60 teknik aşama başarısı + %40 manuel genel puan. Manuel değerlendirmesi olmayan modeller sıralamaya alınmaz.
+                <strong class="text-[var(--violet)]">Puan formülü:</strong> %60 teknik başarı + %40 manuel ilk teslim puanı. Teknik başarı, her koşunun kendi aşama oranının eşit ağırlıklı ortalamasıdır; model adımı başarısız olan koşu 0 sayılır. Manuel değerlendirmesi olmayan modeller sıralamaya alınmaz. Koşular farklı görev ve aşama setleri içerebildiği için bu tablo evrensel ve tam adil bir sıralama değildir.
             </div>
         </div>
 
@@ -93,6 +93,9 @@
                                 <th class="px-4 py-5" scope="row">
                                     <a class="text-sm font-black text-[var(--ink)] transition-colors hover:text-[var(--forest)]" href="{{ route('models.show', $model['slug']) }}">{{ $model['display_name'] }}</a>
                                     <code class="mt-1 block text-[10px] font-medium text-[var(--muted)]">{{ $model['provider_model'] }}</code>
+                                    @if ($model['mixed_stage_sets'])
+                                        <span class="mt-1.5 inline-flex rounded-full bg-[var(--amber-soft)] px-2 py-0.5 text-[9px] font-extrabold text-[var(--amber)]" title="Bu modelin koşuları farklı doğrulama aşamalarıyla ölçüldü; teknik oranlar birebir karşılaştırılabilir değildir.">Farklı aşama setleri</span>
+                                    @endif
                                 </th>
                                 <td class="px-4 py-5 text-center">
                                     @if ($model['composite_score'] !== null)
@@ -103,7 +106,7 @@
                                 </td>
                                 <td class="px-4 py-5">
                                     <div class="flex items-center justify-between gap-3 text-[10px] font-bold">
-                                        <span>{{ $model['technical']['passed'] }}/{{ $model['technical']['total'] }} aşama</span>
+                                        <span>{{ $model['measured_run_count'] }} koşu ortalaması</span>
                                         <span>%{{ number_format($model['technical']['score'], 1, ',', '.') }}</span>
                                     </div>
                                     <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-subtle)]">

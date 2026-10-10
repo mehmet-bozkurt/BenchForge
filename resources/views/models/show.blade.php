@@ -41,9 +41,9 @@
     </section>
 
     <section class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Karne metrikleri">
-        <article class="metric-card metric-positive"><p class="metric-label">Teknik güvenilirlik</p><p class="metric-value">%{{ number_format($model['technical']['score'], 1, ',', '.') }}</p><p class="metric-detail">{{ $model['technical']['passed'] }}/{{ $model['technical']['total'] }} aşama başarılı</p></article>
+        <article class="metric-card metric-positive"><p class="metric-label">Teknik güvenilirlik</p><p class="metric-value">%{{ number_format($model['technical']['score'], 1, ',', '.') }}</p><p class="metric-detail">{{ $model['measured_run_count'] }} koşunun eşit ağırlıklı ortalaması{{ $model['mixed_stage_sets'] ? ' · farklı aşama setleri' : '' }}</p></article>
         <article class="metric-card metric-neutral"><p class="metric-label">Manuel kalite</p><p class="metric-value">{{ $model['manual']['average'] === null ? '—' : number_format($model['manual']['average'], 1, ',', '.') }}</p><p class="metric-detail">{{ $model['manual']['count'] }}/{{ $model['run_count'] }} koşu incelendi</p></article>
-        <article class="metric-card metric-neutral"><p class="metric-label">Tam başarılı koşu</p><p class="metric-value">%{{ number_format($model['passed_run_rate'], 1, ',', '.') }}</p><p class="metric-detail">{{ $model['passed_run_count'] }}/{{ $model['run_count'] }} teslim tamamen temiz</p></article>
+        <article class="metric-card metric-neutral"><p class="metric-label">Tam başarılı koşu</p><p class="metric-value">%{{ number_format($model['passed_run_rate'], 1, ',', '.') }}</p><p class="metric-detail">{{ $model['passed_run_count'] }}/{{ $model['measured_run_count'] }} teslim tamamen temiz</p></article>
         <article class="metric-card metric-neutral"><p class="metric-label">Ortalama süre</p><p class="metric-value text-[26px]">{{ $formatDuration($model['average_duration_seconds']) }}</p><p class="metric-detail">Model başına üretim ve kontrol süresi</p></article>
     </section>
 
@@ -91,7 +91,7 @@
                         <tr class="border-b border-[var(--line)] last:border-b-0">
                             <th class="px-6 py-4"><a class="text-xs font-black hover:text-[var(--forest)]" href="{{ route('runs.show', $history['benchmark_run']) }}">{{ $history['benchmark_run']->name }}</a><span class="mt-1 block text-[10px] font-normal text-[var(--muted)]">{{ $history['benchmark_run']->started_at?->locale('tr')->translatedFormat('j M Y · H:i') ?? 'Tarih yok' }}</span></th>
                             <td class="px-4 py-4 text-center"><span class="status-badge {{ $history['status'] === 'pass' ? 'status-pass' : 'status-fail' }}">{{ $history['status'] === 'pass' ? 'Başarılı' : 'Sorunlu' }}</span></td>
-                            <td class="px-4 py-4 text-center text-xs font-black">%{{ number_format($history['technical_score'], 1, ',', '.') }}</td>
+                            <td class="px-4 py-4 text-center text-xs font-black">{{ $history['technical_score'] === null ? '—' : '%'.number_format($history['technical_score'], 1, ',', '.') }}</td>
                             <td class="px-4 py-4 text-center text-xs font-black">{{ $history['manual_score'] === null ? '—' : $history['manual_score'].'/10' }}</td>
                             <td class="px-4 py-4 text-right font-mono text-[11px] font-bold">{{ $formatDuration($history['duration_seconds']) }}</td>
                             <td class="px-6 py-4 text-right">

@@ -27,15 +27,22 @@ class BenchmarkStandalonePreviewController extends Controller
         ModelRun $modelRun,
         BenchmarkPreview $benchmarkPreview,
     ): View {
-        abort_unless($benchmarkPreview->isAvailable($benchmarkRun, $modelRun), 404);
+        $modelRun->load(['evaluation', 'modelRunAttempts']);
 
-        $modelRun->load('evaluation');
+        $hasInitialPreview = $benchmarkPreview->isAvailable($benchmarkRun, $modelRun);
+        $hasRecoveredPreview = $benchmarkPreview->isAvailable($benchmarkRun, $modelRun, BenchmarkPreview::RECOVERED);
+
+        abort_unless($hasInitialPreview || $hasRecoveredPreview, 404);
+
+        $showingRecovered = ! $hasInitialPreview
+            || ($hasRecoveredPreview && $request->string('version')->toString() === BenchmarkPreview::RECOVERED);
 
         $benchmarkRun->load([
             'modelRuns' => fn (HasMany $relation): HasMany => $relation->oldest('id'),
+            'modelRuns.modelRunAttempts',
         ]);
         $previewableModels = $benchmarkRun->modelRuns
-            ->filter(fn (ModelRun $candidate): bool => $benchmarkPreview->isAvailable($benchmarkRun, $candidate))
+            ->filter(fn (ModelRun $candidate): bool => $benchmarkPreview->hasAnyPreview($benchmarkRun, $candidate))
             ->values();
         $currentIndex = $previewableModels->search(
             fn (ModelRun $candidate): bool => $candidate->is($modelRun),
@@ -60,8 +67,13 @@ class BenchmarkStandalonePreviewController extends Controller
             $selectedRoute = $availableRoutes->first() ?? '/';
         }
 
-        $previewBaseUrl = route('runs.previews.show', [$benchmarkRun, $modelRun], absolute: false);
+        $previewBaseUrl = route(
+            $showingRecovered ? 'runs.previews.recovered' : 'runs.previews.show',
+            [$benchmarkRun, $modelRun],
+            absolute: false,
+        );
         $relativePath = ltrim($selectedRoute, '/');
+        $canEvaluate = ! $showingRecovered;
 
         return view('runs.preview', [
             'run' => $benchmarkRun,
@@ -75,7 +87,13 @@ class BenchmarkStandalonePreviewController extends Controller
             'modelCount' => $modelCount,
             'evaluation' => $modelRun->evaluation,
             'evaluationCriteria' => self::EVALUATION_CRITERIA,
-            'openEvaluationPanel' => $request->boolean('review') || session()->has('errors') || session()->has('status'),
+            'hasInitialPreview' => $hasInitialPreview,
+            'hasRecoveredPreview' => $hasRecoveredPreview,
+            'showingRecovered' => $showingRecovered,
+            'recoveredAttempt' => $benchmarkPreview->latestPublishingAttempt($modelRun),
+            'canEvaluate' => $canEvaluate,
+            'openEvaluationPanel' => $canEvaluate
+                && ($request->boolean('review') || session()->has('errors') || session()->has('status')),
         ]);
     }
 }

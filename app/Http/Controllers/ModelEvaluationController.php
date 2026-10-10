@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Http\Requests\UpdateModelEvaluationRequest;
 use App\Models\BenchmarkRun;
 use App\Models\ModelRun;
+use App\Services\BenchmarkPreview;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Validation\ValidationException;
 
 class ModelEvaluationController extends Controller
 {
@@ -13,7 +15,14 @@ class ModelEvaluationController extends Controller
         UpdateModelEvaluationRequest $request,
         BenchmarkRun $benchmarkRun,
         ModelRun $modelRun,
+        BenchmarkPreview $benchmarkPreview,
     ): RedirectResponse {
+        if (! $benchmarkPreview->isAvailable($benchmarkRun, $modelRun)) {
+            throw ValidationException::withMessages([
+                'evaluation' => 'Manuel puan yalnız ilk teslim çıktısına verilir; bu modelin ilk teslimine ait görüntülenebilir çıktı yok.',
+            ]);
+        }
+
         $modelRun->evaluation()->updateOrCreate(
             [],
             [

@@ -61,6 +61,9 @@ class BenchmarkRunController extends Controller
             'previewableModelIds' => $benchmarkRun->modelRuns
                 ->filter(fn (ModelRun $modelRun): bool => $benchmarkPreview->isAvailable($benchmarkRun, $modelRun))
                 ->pluck('id'),
+            'recoveredPreviewModelIds' => $benchmarkRun->modelRuns
+                ->filter(fn (ModelRun $modelRun): bool => $benchmarkPreview->isAvailable($benchmarkRun, $modelRun, BenchmarkPreview::RECOVERED))
+                ->pluck('id'),
             'continuationAvailability' => $continuationAvailability,
             'activeAttemptCount' => $activeAttemptCount,
             'maxParallelAttempts' => ModelRunContinuationRunner::MAX_PARALLEL_ATTEMPTS,

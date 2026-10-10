@@ -110,3 +110,12 @@ Route::get('/previews/{benchmarkRun}/{modelRun}/{path?}', BenchmarkPreviewContro
         ShareErrorsFromSession::class,
     ])
     ->name('runs.previews.show');
+Route::get('/recovered-previews/{benchmarkRun}/{modelRun}/{path?}', BenchmarkPreviewController::class)
+    ->scopeBindings()
+    ->where('path', '.*')
+    ->withoutMiddleware([
+        PreventRequestForgery::class,
+        StartSession::class,
+        ShareErrorsFromSession::class,
+    ])
+    ->name('runs.previews.recovered');

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ModelRun;
 use App\Models\StageResult;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -21,16 +22,21 @@ class ModelLeaderboard
         'overall_score' => 'Genel puan',
     ];
 
+    /**
+     * Model ids contain "/", which cannot appear in a route segment.
+     */
+    private const KEY_SEPARATOR = '~';
+
     public function __construct(private readonly BenchmarkPreview $benchmarkPreview) {}
 
     /** @return Collection<int, array<string, mixed>> */
     public function all(): Collection
     {
         return ModelRun::query()
-            ->with(['benchmarkRun', 'stageResults', 'evaluation'])
+            ->with(['benchmarkRun', 'stageResults', 'evaluation', 'modelRunAttempts'])
             ->get()
-            ->groupBy('slug')
-            ->map(fn (Collection $runs, string $slug): array => $this->summarize($slug, $runs))
+            ->groupBy(fn (ModelRun $run): string => $this->identity($run))
+            ->map(fn (Collection $runs, string $identity): array => $this->summarize($identity, $runs))
             ->sort(function (array $left, array $right): int {
                 $reviewComparison = ($right['manual']['count'] > 0) <=> ($left['manual']['count'] > 0);
 
@@ -58,45 +64,112 @@ class ModelLeaderboard
             });
     }
 
-    /** @return array<string, mixed>|null */
-    public function find(string $slug): ?array
+    /**
+     * Find a model by its URL key; a legacy workspace folder slug resolves to the model it ran.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function find(string $key): ?array
     {
-        if ($slug === '' || $slug === '.' || $slug === '..' || basename($slug) !== $slug) {
+        if ($key === '' || $key === '.' || $key === '..' || basename($key) !== $key) {
             return null;
         }
 
-        $runs = ModelRun::query()
-            ->where('slug', $slug)
-            ->with(['benchmarkRun', 'stageResults', 'evaluation'])
-            ->get();
+        $identity = str_replace(self::KEY_SEPARATOR, '/', $key);
+        $runs = $this->runsFor($identity);
 
-        return $runs->isEmpty() ? null : $this->summarize($slug, $runs);
+        if ($runs->isEmpty()) {
+            $legacyRun = ModelRun::query()->where('slug', $key)->first();
+
+            if ($legacyRun === null) {
+                return null;
+            }
+
+            $identity = $this->identity($legacyRun);
+            $runs = $this->runsFor($identity);
+        }
+
+        return $runs->isEmpty() ? null : $this->summarize($identity, $runs);
+    }
+
+    /**
+     * Leaderboard rows are keyed by the provider/model id, not by the workspace folder,
+     * so the same model run under different folder names is summarised once.
+     */
+    public function identity(ModelRun $run): string
+    {
+        return filled($run->model) ? (string) $run->model : (string) $run->slug;
+    }
+
+    public function key(string $identity): string
+    {
+        return str_replace('/', self::KEY_SEPARATOR, $identity);
+    }
+
+    /**
+     * A run's technical score is its own stage pass ratio; a run whose model step failed
+     * produced no submission of its own, so untouched template checks earn nothing.
+     */
+    public function runTechnicalScore(ModelRun $run): ?float
+    {
+        if ($run->stageResults->isEmpty()) {
+            return null;
+        }
+
+        $modelStage = $run->stageResults->firstWhere('stage', 'opencode');
+
+        if ($modelStage !== null && $modelStage->status !== 'pass') {
+            return 0.0;
+        }
+
+        return round(($run->stageResults->where('status', 'pass')->count() / $run->stageResults->count()) * 100, 1);
+    }
+
+    /** @return Collection<int, ModelRun> */
+    private function runsFor(string $identity): Collection
+    {
+        return ModelRun::query()
+            ->where(fn (Builder $query): Builder => $query
+                ->where('model', $identity)
+                ->orWhere(fn (Builder $query): Builder => $query->where('model', '')->where('slug', $identity)))
+            ->with(['benchmarkRun', 'stageResults', 'evaluation', 'modelRunAttempts'])
+            ->get();
     }
 
     /**
      * @param  Collection<int, ModelRun>  $runs
      * @return array<string, mixed>
      */
-    private function summarize(string $slug, Collection $runs): array
+    private function summarize(string $identity, Collection $runs): array
     {
-        $stageResults = $runs->flatMap(fn (ModelRun $run): Collection => $run->stageResults);
+        $measuredRuns = $runs->filter(fn (ModelRun $run): bool => $run->stageResults->isNotEmpty())->values();
+        $stageResults = $measuredRuns->flatMap(fn (ModelRun $run): Collection => $run->stageResults);
         $evaluations = $runs->pluck('evaluation')->filter()->values();
         $passedStages = $stageResults->where('status', 'pass')->count();
-        $technicalScore = $stageResults->isEmpty()
+        $technicalScore = $measuredRuns->isEmpty()
             ? 0.0
-            : round(($passedStages / $stageResults->count()) * 100, 1);
+            : round((float) $measuredRuns->avg(fn (ModelRun $run): float => (float) $this->runTechnicalScore($run)), 1);
         $manualScore = $evaluations->isEmpty()
             ? null
             : round((float) $evaluations->avg('overall_score'), 1);
+        $stageSets = $measuredRuns
+            ->map(fn (ModelRun $run): string => $run->stageResults->pluck('stage')->sort()->implode(','))
+            ->unique()
+            ->values();
 
         return [
-            'slug' => $slug,
-            'display_name' => Str::after((string) $runs->first()->model, '/'),
-            'provider_model' => (string) $runs->first()->model,
+            'slug' => $this->key($identity),
+            'display_name' => Str::after($identity, '/'),
+            'provider_model' => $identity,
+            'workspace_slugs' => $runs->pluck('slug')->unique()->sort()->values(),
             'run_count' => $runs->count(),
-            'passed_run_count' => $runs->where('status', 'pass')->count(),
-            'passed_run_rate' => round(($runs->where('status', 'pass')->count() / $runs->count()) * 100, 1),
-            'average_duration_seconds' => (int) round((float) $runs->avg('duration_seconds')),
+            'measured_run_count' => $measuredRuns->count(),
+            'mixed_stage_sets' => $stageSets->count() > 1,
+            'passed_run_count' => $measuredRuns->where('status', 'pass')->count(),
+            'passed_run_rate' => $measuredRuns->isEmpty()
+                ? 0.0
+                : round(($measuredRuns->where('status', 'pass')->count() / $measuredRuns->count()) * 100, 1),
+            'average_duration_seconds' => (int) round((float) $measuredRuns->avg('duration_seconds')),
             'latest_run_at' => $runs->pluck('benchmarkRun.started_at')->filter()->max(),
             'composite_score' => $manualScore === null
                 ? null
@@ -184,9 +257,7 @@ class ModelLeaderboard
                 'status' => $run->status,
                 'duration_seconds' => $run->duration_seconds,
                 'failed_stages' => $run->stageResults->where('status', 'fail')->pluck('stage')->values(),
-                'technical_score' => $run->stageResults->isEmpty()
-                    ? 0.0
-                    : round(($run->stageResults->where('status', 'pass')->count() / $run->stageResults->count()) * 100, 1),
+                'technical_score' => $this->runTechnicalScore($run),
                 'manual_score' => $run->evaluation?->overall_score,
                 'preview_available' => $this->benchmarkPreview->isAvailable($run->benchmarkRun, $run),
             ])

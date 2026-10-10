@@ -4,6 +4,7 @@ use App\Models\BenchmarkRun;
 use App\Models\ModelEvaluation;
 use App\Models\ModelRun;
 use App\Models\StageResult;
+use App\Services\ModelLeaderboard;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 
 uses(LazilyRefreshDatabase::class);
@@ -41,7 +42,71 @@ test('it ranks reviewed models using technical and manual scores', function () {
         ->assertSeeInOrder(['reviewed-model', 'unreviewed-model'])
         ->assertSee('77,0')
         ->assertSee('Değerlendirme bekliyor')
-        ->assertSee(route('models.show', 'reviewed-model'), escape: false);
+        ->assertSee(route('models.show', 'opencode-go~reviewed-model'), escape: false);
+});
+
+test('it groups runs by model identity instead of workspace folder', function () {
+    $firstRun = BenchmarkRun::factory()->create();
+    $secondRun = BenchmarkRun::factory()->create();
+    ModelRun::factory()->for($firstRun)->create([
+        'slug' => 'deepseek-v4.1-flash',
+        'model' => 'opencode-go/deepseek-v4.1-flash',
+    ])->stageResults()->create(['stage' => 'opencode', 'status' => 'pass']);
+    ModelRun::factory()->for($secondRun)->create([
+        'slug' => 'go-deepseek-v41-flash-9ab9da',
+        'model' => 'opencode-go/deepseek-v4.1-flash',
+    ])->stageResults()->create(['stage' => 'opencode', 'status' => 'pass']);
+
+    $models = app(ModelLeaderboard::class)->all();
+
+    expect($models)->toHaveCount(1)
+        ->and($models->first()['slug'])->toBe('opencode-go~deepseek-v4.1-flash')
+        ->and($models->first()['run_count'])->toBe(2);
+
+    $this->get(route('models.show', 'opencode-go~deepseek-v4.1-flash'))
+        ->assertOk()
+        ->assertSee('opencode-go/deepseek-v4.1-flash');
+    $this->get(route('models.show', 'go-deepseek-v41-flash-9ab9da'))
+        ->assertOk()
+        ->assertSee('opencode-go/deepseek-v4.1-flash');
+});
+
+test('it averages technical scores per run and gives no credit when the model step failed', function () {
+    $legacyRun = BenchmarkRun::factory()->create();
+    $extendedRun = BenchmarkRun::factory()->create();
+    $model = 'opencode-go/minimax-m3';
+
+    $legacy = ModelRun::factory()->for($legacyRun)->create(['slug' => 'minimax-m3', 'model' => $model]);
+    foreach (['opencode', 'lint', 'build'] as $stage) {
+        StageResult::factory()->for($legacy)->create(['stage' => $stage, 'status' => 'pass']);
+    }
+
+    $extended = ModelRun::factory()->for($extendedRun)->create(['slug' => 'or-minimax-m3', 'model' => $model]);
+    StageResult::factory()->for($extended)->create(['stage' => 'opencode', 'status' => 'fail']);
+    foreach (['lint', 'build'] as $stage) {
+        StageResult::factory()->for($extended)->create(['stage' => $stage, 'status' => 'pass']);
+    }
+    foreach (['export', 'routes', 'runtime'] as $stage) {
+        StageResult::factory()->for($extended)->create(['stage' => $stage, 'status' => 'skip']);
+    }
+
+    ModelRun::factory()->for(BenchmarkRun::factory())->create([
+        'slug' => 'minimax-m3',
+        'model' => $model,
+        'duration_seconds' => 0,
+    ]);
+
+    $summary = app(ModelLeaderboard::class)->find('opencode-go~minimax-m3');
+
+    expect($summary['technical']['score'])->toBe(50.0)
+        ->and($summary['run_count'])->toBe(3)
+        ->and($summary['measured_run_count'])->toBe(2)
+        ->and($summary['mixed_stage_sets'])->toBeTrue();
+
+    $this->get(route('models.index'))
+        ->assertOk()
+        ->assertSee('Farklı aşama setleri')
+        ->assertSee('2 koşu ortalaması');
 });
 
 test('it shows a model scorecard with run history and safely escaped notes', function () {

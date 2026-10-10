@@ -57,14 +57,34 @@
 
                 <span class="status-badge status-{{ $modelRun->status }}">
                     <span class="status-dot"></span>
-                    {{ $modelRun->status === 'pass' ? 'Başarılı' : 'Sorunlu' }}
+                    İlk teslim · {{ $modelRun->status === 'pass' ? 'Başarılı' : 'Sorunlu' }}
                 </span>
 
-                <button class="h-9 rounded-lg border border-[#67e8f9]/30 bg-[#67e8f9]/10 px-3 text-[10px] font-extrabold text-[#a5f3fc] transition hover:border-[#67e8f9] hover:bg-[#67e8f9]/15" type="button" data-evaluation-toggle aria-controls="evaluation-panel" aria-expanded="false">
-                    {{ $evaluation ? $evaluation->overall_score.'/10 · Düzenle' : 'Değerlendir' }}
-                </button>
+                @if ($hasInitialPreview && $hasRecoveredPreview)
+                    <nav class="flex h-9 items-center overflow-hidden rounded-lg border border-white/10 bg-white/5 text-[10px] font-extrabold" aria-label="Önizleme sürümü">
+                        <a
+                            class="grid h-full place-items-center px-3 transition {{ $showingRecovered ? 'text-[#aab4cc] hover:bg-white/10 hover:text-white' : 'bg-white/15 text-white' }}"
+                            href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'path' => $selectedRoute]) }}"
+                            @if (! $showingRecovered) aria-current="page" @endif
+                        >İlk teslim · puanlanan</a>
+                        <a
+                            class="grid h-full place-items-center border-l border-white/10 px-3 transition {{ $showingRecovered ? 'bg-white/15 text-white' : 'text-[#aab4cc] hover:bg-white/10 hover:text-white' }}"
+                            href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'path' => $selectedRoute, 'version' => 'recovered']) }}"
+                            @if ($showingRecovered) aria-current="page" @endif
+                        >Kurtarılmış{{ $recoveredAttempt ? ' · Deneme '.$recoveredAttempt->attempt_number : '' }}</a>
+                    </nav>
+                @endif
+
+                @if ($canEvaluate)
+                    <button class="h-9 rounded-lg border border-[#67e8f9]/30 bg-[#67e8f9]/10 px-3 text-[10px] font-extrabold text-[#a5f3fc] transition hover:border-[#67e8f9] hover:bg-[#67e8f9]/15" type="button" data-evaluation-toggle aria-controls="evaluation-panel" aria-expanded="false">
+                        {{ $evaluation ? $evaluation->overall_score.'/10 · Düzenle' : 'Değerlendir' }}
+                    </button>
+                @endif
 
                 <form class="flex items-center gap-2" method="GET" action="{{ route('runs.models.preview', [$run, $modelRun]) }}">
+                    @if ($showingRecovered && $hasInitialPreview)
+                        <input type="hidden" name="version" value="recovered">
+                    @endif
                     <label class="sr-only" for="preview-route">Sayfa rotası</label>
                     <select class="h-9 max-w-52 rounded-lg border border-white/10 bg-white/6 px-3 font-mono text-[11px] font-bold text-white outline-none focus:border-[#67e8f9]" id="preview-route" name="path">
                         @foreach ($availableRoutes as $routePath)
@@ -75,15 +95,25 @@
                 </form>
             </header>
 
+            @if ($showingRecovered)
+                <p class="shrink-0 border-b border-amber-300/30 bg-amber-300/10 px-4 py-2 text-[11px] font-bold text-amber-100 sm:px-5" role="note">
+                    Bu görünüm{{ $recoveredAttempt ? ' Deneme '.$recoveredAttempt->attempt_number.' ile' : '' }} kurtarılmış çıktıdır ve yalnız inceleme içindir; puanlanmaz. Manuel puan ve liderlik yalnız ilk teslime aittir.
+                    @unless ($hasInitialPreview)
+                        İlk teslimde görüntülenebilir çıktı olmadığı için bu model için puanlama kapalıdır.
+                    @endunless
+                </p>
+            @endif
+
             <div class="relative min-h-0 flex-1 bg-[#e9edf5] p-2 sm:p-3">
                 <iframe
                     class="h-full w-full rounded-lg border border-black/10 bg-white shadow-[0_18px_50px_rgb(15_23_42/0.18)]"
                     src="{{ $previewUrl }}"
-                    title="{{ str($modelRun->model)->after('/') }} tam ekran önizlemesi"
+                    title="{{ str($modelRun->model)->after('/') }} {{ $showingRecovered ? 'kurtarılmış çıktı' : 'ilk teslim' }} önizlemesi"
                     referrerpolicy="no-referrer"
                     sandbox="allow-scripts"
                 ></iframe>
 
+                @if ($canEvaluate)
                 <button class="absolute inset-0 z-10 hidden cursor-default bg-[#0b1020]/35 backdrop-blur-[1px]" type="button" data-evaluation-overlay aria-label="Değerlendirme panelini kapat"></button>
 
                 <aside
@@ -97,7 +127,7 @@
                         <div>
                             <p class="eyebrow">Manuel değerlendirme</p>
                             <h2 class="mt-1 text-base font-black">{{ str($modelRun->model)->after('/') }}</h2>
-                            <p class="mt-1 text-[10px] text-[var(--muted)]">Her ölçütü 1–10 arasında puanlayın.</p>
+                            <p class="mt-1 text-[10px] text-[var(--muted)]">İlk teslim çıktısını her ölçütte 1–10 arasında puanlayın.</p>
                         </div>
                         <button class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--line)] bg-white text-sm font-black text-[var(--muted)] transition hover:border-[var(--forest)] hover:text-[var(--forest)]" type="button" data-evaluation-close aria-label="Değerlendirme panelini kapat">×</button>
                     </header>
@@ -182,6 +212,7 @@
                         </form>
                     </div>
                 </aside>
+                @endif
             </div>
         </main>
     </body>

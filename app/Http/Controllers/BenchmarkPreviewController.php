@@ -5,18 +5,22 @@ namespace App\Http\Controllers;
 use App\Models\BenchmarkRun;
 use App\Models\ModelRun;
 use App\Services\BenchmarkPreview;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BenchmarkPreviewController extends Controller
 {
     public function __invoke(
+        Request $request,
         BenchmarkRun $benchmarkRun,
         ModelRun $modelRun,
         BenchmarkPreview $benchmarkPreview,
         ?string $path = null,
     ): Response|BinaryFileResponse {
-        $filePath = $benchmarkPreview->resolveFile($benchmarkRun, $modelRun, $path);
+        $routeName = $request->routeIs('runs.previews.recovered') ? 'runs.previews.recovered' : 'runs.previews.show';
+        $version = $routeName === 'runs.previews.recovered' ? BenchmarkPreview::RECOVERED : BenchmarkPreview::INITIAL;
+        $filePath = $benchmarkPreview->resolveFile($benchmarkRun, $modelRun, $path, $version);
 
         abort_if($filePath === null, 404);
 
@@ -29,7 +33,7 @@ class BenchmarkPreviewController extends Controller
         ];
 
         if ($benchmarkPreview->shouldRewrite($filePath)) {
-            $previewUrl = route('runs.previews.show', [$benchmarkRun, $modelRun], absolute: false);
+            $previewUrl = route($routeName, [$benchmarkRun, $modelRun], absolute: false);
 
             return response(
                 $benchmarkPreview->rewrittenContents($filePath, $modelRun, $previewUrl),

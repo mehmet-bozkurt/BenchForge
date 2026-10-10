@@ -64,7 +64,15 @@ test('it shows available model exports in the run report and comparison workspac
             ->assertSee('Modelleri aynı çerçevede inceleyin')
             ->assertSee('minimax-m3')
             ->assertSee('longcat-2.0')
-            ->assertSee('Güncel çıktı · Deneme 1 doğrulamaları geçti')
+            ->assertSee('İlk teslim çıktısı · puanlanan sürüm')
+            ->assertSee('Kurtarılmış çıktıyı incele (puanlanmaz)')
+            ->assertSee(route('runs.models.preview', [
+                'benchmarkRun' => $run,
+                'modelRun' => $rightModel,
+                'path' => '/cart',
+                'version' => 'recovered',
+            ]))
+            ->assertDontSee(route('runs.previews.show', [$run, $rightModel], absolute: false).'/cart', escape: false)
             ->assertSee('data-viewport-width="390"', escape: false)
             ->assertSee(route('runs.previews.show', [$run, $leftModel], absolute: false).'/cart', escape: false)
             ->assertSee('sandbox="allow-scripts"', escape: false)
@@ -94,6 +102,69 @@ test('it shows available model exports in the run report and comparison workspac
             ]), escape: false)
             ->assertSee(route('runs.previews.show', [$run, $leftModel], absolute: false).'/cart', escape: false)
             ->assertSee('sandbox="allow-scripts"', escape: false);
+    } finally {
+        File::deleteDirectory($runsRoot);
+    }
+});
+
+test('a recovered export is shown for review only and the first submission stays the scored preview', function () {
+    $runsRoot = storage_path('framework/testing/recovered-preview-'.Str::uuid());
+    config()->set('benchforge.runs_path', $runsRoot);
+
+    try {
+        $run = BenchmarkRun::factory()->create(['slug' => 'recovery-run', 'routes' => ['/']]);
+        $modelRun = ModelRun::factory()->for($run)->create(['slug' => 'glm-5.3', 'status' => 'fail']);
+        ModelRunAttempt::factory()->for($modelRun)->create(['attempt_number' => 1]);
+        $runPath = $runsRoot.'/'.$run->slug;
+
+        File::ensureDirectoryExists($runPath.'/_attempts/glm-5.3/attempt-1/out-before');
+        File::put($runPath.'/_attempts/glm-5.3/attempt-1/out-before/index.html', '<h1>First submission</h1>');
+        File::ensureDirectoryExists($runPath.'/_gallery/glm-5.3');
+        File::put($runPath.'/_gallery/glm-5.3/index.html', '<h1>Recovered export</h1>');
+
+        $this->get(route('runs.previews.show', [$run, $modelRun], absolute: false))
+            ->assertOk()
+            ->assertSee('First submission')
+            ->assertDontSee('Recovered export');
+        $this->get(route('runs.previews.recovered', [$run, $modelRun], absolute: false))
+            ->assertOk()
+            ->assertSee('Recovered export');
+
+        $this->get(route('runs.models.preview', [$run, $modelRun]))
+            ->assertOk()
+            ->assertSee('İlk teslim · puanlanan')
+            ->assertSee(route('runs.previews.show', [$run, $modelRun], absolute: false).'/', escape: false)
+            ->assertSee('data-evaluation-panel', escape: false);
+
+        $this->get(route('runs.models.preview', [$run, $modelRun, 'version' => 'recovered']))
+            ->assertOk()
+            ->assertSee('Deneme 1 ile kurtarılmış çıktıdır')
+            ->assertSee(route('runs.previews.recovered', [$run, $modelRun], absolute: false).'/', escape: false)
+            ->assertDontSee('data-evaluation-panel', escape: false);
+    } finally {
+        File::deleteDirectory($runsRoot);
+    }
+});
+
+test('a model without a first submission export can only be reviewed and not scored', function () {
+    $runsRoot = storage_path('framework/testing/recovered-only-'.Str::uuid());
+    config()->set('benchforge.runs_path', $runsRoot);
+
+    try {
+        $run = BenchmarkRun::factory()->create(['slug' => 'recovered-only', 'routes' => ['/']]);
+        $modelRun = ModelRun::factory()->for($run)->create(['slug' => 'kimi-k3', 'status' => 'fail']);
+        ModelRunAttempt::factory()->for($modelRun)->create(['attempt_number' => 1]);
+
+        File::ensureDirectoryExists($runsRoot.'/'.$run->slug.'/_gallery/kimi-k3');
+        File::put($runsRoot.'/'.$run->slug.'/_gallery/kimi-k3/index.html', '<h1>Recovered export</h1>');
+
+        $this->get(route('runs.previews.show', [$run, $modelRun], absolute: false))->assertNotFound();
+
+        $this->get(route('runs.models.preview', [$run, $modelRun, 'review' => 1]))
+            ->assertOk()
+            ->assertSee('bu model için puanlama kapalıdır')
+            ->assertSee(route('runs.previews.recovered', [$run, $modelRun], absolute: false).'/', escape: false)
+            ->assertDontSee('data-evaluation-panel', escape: false);
     } finally {
         File::deleteDirectory($runsRoot);
     }
