@@ -524,15 +524,25 @@ PROMPT;
 
         if ($execution->isActive() && ! $this->isRunnerProcess($runnerPid)) {
             $summaryExists = File::exists($this->projectRoot().'/runs/'.$execution->run_id.'/_summary.tsv');
-            $status = $summaryExists ? 'completed' : ($status === 'stopping' ? 'stopped' : 'failed');
+            $stopRequested = in_array($status, ['stopping', 'stopped'], true) || $execution->status === 'stopping';
+            $workerStatus = $status;
+            $status = match (true) {
+                $summaryExists => 'completed',
+                $stopRequested => 'stopped',
+                default => 'failed',
+            };
+            $workerReportedOutcome = $workerStatus === $status
+                && filled($state['finishedAt'] ?? null)
+                && filled($state['message'] ?? null);
             $state = array_merge($state ?? [], [
                 'status' => $status,
                 'finishedAt' => $state['finishedAt'] ?? now()->toIso8601String(),
-                'message' => $summaryExists
-                    ? 'Benchmark tamamlandı ve özet dosyası oluşturuldu.'
-                    : ($status === 'stopped'
-                        ? 'Benchmark kullanıcı tarafından durduruldu.'
-                        : 'Koşucu beklenmedik biçimde kapandı; ayrıntılar çalışma günlüğünde.'),
+                'message' => match (true) {
+                    $workerReportedOutcome => $state['message'],
+                    $status === 'completed' => 'Benchmark tamamlandı ve özet dosyası oluşturuldu.',
+                    $status === 'stopped' => 'Benchmark kullanıcı tarafından durduruldu.',
+                    default => 'Koşucu beklenmedik biçimde kapandı; ayrıntılar çalışma günlüğünde.',
+                },
             ]);
             $this->writeState($execution->state_path, $state);
             File::delete($this->runnerDirectory().'/active.lock');

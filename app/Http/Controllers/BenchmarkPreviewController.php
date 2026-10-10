@@ -24,7 +24,12 @@ class BenchmarkPreviewController extends Controller
 
         abort_if($filePath === null, 404);
 
+        /*
+         * Model output is untrusted and shares the admin origin. The CSP sandbox gives it an
+         * opaque origin even when opened outside the sandboxed iframe (e.g. "open in new tab").
+         */
         $headers = [
+            'Content-Security-Policy' => 'sandbox allow-scripts',
             'Cache-Control' => 'no-store, private',
             'Content-Type' => $benchmarkPreview->contentType($filePath),
             'Referrer-Policy' => 'no-referrer',

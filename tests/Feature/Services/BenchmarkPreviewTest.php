@@ -28,6 +28,7 @@ test('it serves and rewrites static preview assets from the configured runs dire
             ->assertOk()
             ->assertHeader('Content-Type', 'text/html; charset=UTF-8')
             ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertHeader('Content-Security-Policy', 'sandbox allow-scripts')
             ->assertHeaderMissing('Set-Cookie')
             ->assertSee($previewRoot.'/_next/app.css', escape: false)
             ->assertSee($previewRoot.'/cart/', escape: false);
@@ -35,6 +36,7 @@ test('it serves and rewrites static preview assets from the configured runs dire
         $this->get($previewRoot.'/_next/app.css')
             ->assertOk()
             ->assertHeader('Content-Type', 'text/css; charset=UTF-8')
+            ->assertHeader('Content-Security-Policy', 'sandbox allow-scripts')
             ->assertSee('color: black', escape: false);
     } finally {
         File::deleteDirectory($runsRoot);

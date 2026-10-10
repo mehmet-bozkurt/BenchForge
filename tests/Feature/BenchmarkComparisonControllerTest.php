@@ -128,6 +128,7 @@ test('a recovered export is shown for review only and the first submission stays
             ->assertDontSee('Recovered export');
         $this->get(route('runs.previews.recovered', [$run, $modelRun], absolute: false))
             ->assertOk()
+            ->assertHeader('Content-Security-Policy', 'sandbox allow-scripts')
             ->assertSee('Recovered export');
 
         $this->get(route('runs.models.preview', [$run, $modelRun]))

@@ -295,6 +295,75 @@ test('keeps manual cancellation distinct from a boundary interruption and cleans
     }
 });
 
+test('stops a model that exceeds its time limit together with its children', async () => {
+    const fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'benchforge-boundary-timeout-')));
+    const workspace = join(fixtureRoot, 'model-one');
+    const reportPath = join(fixtureRoot, '_boundary', 'model-one.json');
+    const dummyPath = join(workspace, 'dummy-model.mjs');
+    let wrapper;
+
+    try {
+        await mkdir(workspace);
+        await writeFile(dummyPath, [
+            'import { spawn } from "node:child_process";',
+            'import { writeFileSync } from "node:fs";',
+            'const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });',
+            'writeFileSync("grandchild-pid.txt", String(child.pid));',
+            'setInterval(() => {}, 1000);',
+        ].join('\n'));
+        wrapper = spawn(process.execPath, [monitorPath,
+            '--workspace', workspace,
+            '--event-log', join(fixtureRoot, '_logs', 'model-one.opencode.events.jsonl'),
+            '--stderr-log', join(fixtureRoot, '_logs', 'model-one.opencode.stderr.log'),
+            '--report', reportPath,
+            '--timeout-seconds', '1',
+            '--', process.execPath, dummyPath,
+        ], { stdio: ['ignore', 'pipe', 'ignore'] });
+        let output = '';
+        wrapper.stdout.on('data', (chunk) => { output += chunk; });
+        const watchdog = setTimeout(() => wrapper.kill('SIGKILL'), 10_000);
+
+        try {
+            const [code, signal] = await once(wrapper, 'exit');
+            const grandchildPid = Number(await readFile(join(workspace, 'grandchild-pid.txt'), 'utf8'));
+
+            assert.equal(code, 124);
+            assert.equal(signal, null);
+            assert.match(output, /süre sınırını aştığı için durduruldu/);
+            assert.equal(JSON.parse(await readFile(reportPath, 'utf8')).stoppedForBoundary, false);
+            assert.equal(isProcessRunning(grandchildPid), false);
+        } finally {
+            clearTimeout(watchdog);
+        }
+    } finally {
+        if (wrapper?.exitCode === null && wrapper.signalCode === null) wrapper.kill('SIGTERM');
+        await rm(fixtureRoot, { recursive: true, force: true });
+    }
+});
+
+test('rejects an invalid time limit without starting a model', async () => {
+    const fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'benchforge-boundary-bad-timeout-')));
+    const workspace = join(fixtureRoot, 'model-one');
+
+    try {
+        await mkdir(workspace);
+        const wrapper = spawn(process.execPath, [monitorPath,
+            '--workspace', workspace,
+            '--event-log', join(fixtureRoot, '_logs', 'model-one.opencode.events.jsonl'),
+            '--stderr-log', join(fixtureRoot, '_logs', 'model-one.opencode.stderr.log'),
+            '--report', join(fixtureRoot, '_boundary', 'model-one.json'),
+            '--timeout-seconds', '0',
+            '--', process.execPath, '-e', 'require("node:fs").writeFileSync("started.txt", "1")',
+        ], { stdio: 'ignore' });
+        const [code] = await once(wrapper, 'exit');
+
+        assert.equal(code, 64);
+        await assert.rejects(readFile(join(workspace, 'started.txt')));
+    } finally {
+        await rm(fixtureRoot, { recursive: true, force: true });
+    }
+});
+
 test('preserves a model command exit code and writes a zero-incident report', async () => {
     const fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'benchforge-boundary-complete-')));
     const workspace = join(fixtureRoot, 'model-one');

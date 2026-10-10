@@ -330,6 +330,9 @@ export async function runMonitoredModel(args) {
   const configOption = options.get("--opencode-config");
   const runtimeOption = options.get("--runtime-config");
   const basePathOption = options.get("--base-path");
+  const timeoutOption = options.get("--timeout-seconds");
+  const timeoutSeconds = timeoutOption === undefined ? null : Number(timeoutOption);
+  if (timeoutSeconds !== null && (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 86400)) return 64;
 
   if (configOption) environmentAdditions.OPENCODE_CONFIG = await realpath(configOption);
   if (runtimeOption) {
@@ -347,6 +350,8 @@ export async function runMonitoredModel(args) {
   let child;
   let stopSignal;
   let forceStopTimer;
+  let timeoutTimer;
+  let timedOut = false;
   let eventFd;
   let stderrFd;
   let modelClosed = false;
@@ -416,6 +421,13 @@ export async function runMonitoredModel(args) {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    if (timeoutSeconds !== null) {
+      // A model that never finishes would otherwise hold the run's only slot and keep spending tokens.
+      timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        requestStop("SIGTERM");
+      }, timeoutSeconds * 1000);
+    }
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
@@ -446,6 +458,7 @@ export async function runMonitoredModel(args) {
         accept({ code, signal });
       });
     });
+    if (timeoutTimer) clearTimeout(timeoutTimer);
     monitor.finishInput();
     await writeReport(monitor.snapshot());
 
@@ -455,10 +468,15 @@ export async function runMonitoredModel(args) {
       process.stdout.write("\nBENCHFORGE: Üç çalışma alanı dışı erişim reddi nedeniyle yalnızca bu model durduruldu.\n");
       return 78;
     }
+    if (timedOut) {
+      process.stdout.write(`\nBENCHFORGE: Model ${timeoutSeconds} saniyelik süre sınırını aştığı için durduruldu.\n`);
+      return 124;
+    }
     if (stopSignal || result.signal) return stopSignal === "SIGINT" ? 130 : 143;
     return result.code ?? 1;
   } finally {
     if (forceStopTimer) clearTimeout(forceStopTimer);
+    if (timeoutTimer) clearTimeout(timeoutTimer);
     process.off("SIGTERM", onTerminate);
     process.off("SIGINT", onInterrupt);
     process.stdout.off("error", onOutputError);

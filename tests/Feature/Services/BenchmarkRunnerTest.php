@@ -429,3 +429,42 @@ test('it distinguishes a completed runner from a benchmark with failed model che
         File::deleteDirectory($root);
     }
 });
+
+dataset('finished runner states', [
+    'a user stop' => ['stopping', ['status' => 'stopped', 'message' => 'Benchmark kullanıcı tarafından durduruldu.', 'finished' => true], 'stopped', 'Benchmark kullanıcı tarafından durduruldu.'],
+    'a worker reported failure' => ['running', ['status' => 'failed', 'message' => 'Benchmark koşucusu 3 koduyla kapandı.', 'finished' => true], 'failed', 'Benchmark koşucusu 3 koduyla kapandı.'],
+    'a crash without a final state' => ['running', ['status' => 'running', 'message' => 'Benchmark çalışıyor.', 'finished' => false], 'failed', 'Koşucu beklenmedik biçimde kapandı; ayrıntılar çalışma günlüğünde.'],
+]);
+
+test('it records the final status of a runner that has exited after', function (string $executionStatus, array $workerState, string $expectedStatus, string $expectedMessage) {
+    $root = storage_path('framework/testing/benchmark-root-'.Str::uuid());
+    $statePath = $root.'/runner/state.json';
+
+    File::ensureDirectoryExists($root.'/runs');
+    File::ensureDirectoryExists($root.'/runner');
+    config()->set('benchforge.root_path', $root);
+    config()->set('benchforge.runs_path', $root.'/runs');
+    config()->set('benchforge.runner_path', $root.'/runner');
+    File::put($statePath, json_encode([
+        'version' => 1,
+        'status' => $workerState['status'],
+        'message' => $workerState['message'],
+        'runnerPid' => 999999,
+        'finishedAt' => $workerState['finished'] ? now()->toIso8601String() : null,
+    ]));
+    BenchmarkExecution::factory()->create([
+        'status' => $executionStatus,
+        'runner_pid' => 999999,
+        'state_path' => $statePath,
+        'log_path' => $root.'/runner/missing.log',
+    ]);
+
+    try {
+        $snapshot = app(BenchmarkRunner::class)->snapshot();
+
+        expect($snapshot['status'])->toBe($expectedStatus)
+            ->and($snapshot['message'])->toBe($expectedMessage);
+    } finally {
+        File::deleteDirectory($root);
+    }
+})->with('finished runner states');
