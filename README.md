@@ -1,58 +1,110 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# BenchForge
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+BenchForge, yapay zekâ kodlama modellerini gerçek ürün geliştirmeye benzeyen görevlerde karşılaştıran, yerelde çalışan bir değerlendirme ortamıdır. Aynı görev metni ve aynı başlangıç projesiyle birden fazla model çalıştırılır. Teslimler teknik kontroller, süre, token, maliyet ve insan puanıyla yan yana incelenir.
 
-## About Laravel
+> **Durum:** Erken aşamada, tek kullanıcılı yerel bir araç. Modelleri çalıştıran zsh araçları henüz bu depoda yayımlanmadı (bkz. [Sınırlamalar](#sınırlamalar)). Arayüz Türkçedir.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Ne yapar?
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **Kod benchmarkı:** Seçtiğiniz 1–5 modeli [OpenCode](https://opencode.ai) üzerinden aynı görevle çalıştırır. Her teslim altı aşamada doğrulanır: model adımı, lint, production build, static export, rota kontrolü ve tarayıcıda çalışma testi.
+- **Model katalogları:** OpenRouter ve OpenCode Go kataloglarından model seçimi; OpenRouter için sağlayıcı yönlendirme tercihleri (otomatik, fiyat, hız, sabit endpoint).
+- **Önizleme ve karşılaştırma:** Üretilen siteleri aynı rota ve ekran genişliğinde yan yana görüntüleme. Önizlemeler sandbox'lı çerçevede ve CSP sandbox başlığıyla sunulur.
+- **İnsan puanlaması:** İlk teslimin çıktısı yedi ölçütte ve genel olarak 1–10 puanlanır. Kurtarma denemesiyle düzeltilmiş çıktı ayrı görünümde incelenir, puanlanmaz.
+- **Kurtarma denemeleri:** Başarısız bir modeli kaldığı oturumdan sürdürme ("devam") veya yalnız doğrulamaları tekrarlama. İlk teslimin sonucu ve puanı değişmez.
+- **Liderlik tablosu:** Model kimliğine göre gruplanır; %60 teknik başarı (koşu başına aşama oranlarının ortalaması) ve %40 insan puanı. Farklı çalışma koşullarında üretilmiş sonuçlar karıştırılmaz.
+- **Kullanım ve maliyet:** Token ve maliyet OpenCode'un yerel veritabanından okunur. Eksik veri sıfır diye gösterilmez.
+- **Hazırlık paketi karşılaştırması:** Aynı müşteri şartnamesinden modellerin ürettiği başlangıç promptu, gereksinimler, görev planı, hafıza bankası ve varsayımları yan yana karşılaştırma. Bu akışta model araç kullanmaz, yalnız metin üretir.
+- **Sistem ve Kurulum ekranı:** Araç sürümleri, yollar, yazma izinleri ve veritabanı kontrolleri. Benchmark kökü ve araç yolları arayüzden ayarlanabilir.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Nasıl çalışır?
 
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+Laravel arayüzü ──► Node işçileri (bin/) ──► zsh araçları (benchmark.zsh) ──► OpenCode CLI ──► model
+      ▲                                              │
+      └──── SQLite ◄── arşiv senkronu ◄── runs/<koşu>/ (çalışma alanları, günlükler, sonuçlar)
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+1. Arayüz koşuyu başlatır; işçi süreçleri arka planda, kendi süreç grubunda çalışır.
+2. Her model için başlangıç şablonu ayrı bir çalışma klasörüne kopyalanır.
+3. Model, OpenCode ile yalnız kendi klasöründe çalışacak şekilde izin politikası ve sınır izleyicisiyle çalıştırılır. Model başına 60 dakika süre sınırı vardır.
+4. Teslim doğrulanır, sonuçlar `runs/<koşu>/` altına yazılır ve veritabanına senkronlanır.
 
-## Contributing
+### Çalışma koşulu
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Kod üreten modeller `isolated-v1` koşulunda çalışır: her model kendi boş HOME ve OpenCode ayar klasörünü kullanır, böylece sizin global OpenCode ayarlarınız, eklentileriniz ve talimat dosyalarınız sonuçlara karışmaz. Giriş bilgileri, oturumlar ve kullanım verisi paylaşılan OpenCode veri klasöründe kalır. Başlangıç şablonunun `AGENTS.md` talimatı modele güvenilir bir bölüm olarak verilir. Koşulun adı ve talimat özeti her koşunun `_meta.txt` dosyasına kaydedilir.
 
-## Code of Conduct
+## Gereksinimler
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+| Araç | Sürüm |
+| --- | --- |
+| PHP | 8.3 veya üzeri |
+| Composer | 2.x |
+| Node.js | 20.19+ veya 22.12+ |
+| zsh | Koşucu betikleri için |
+| OpenCode CLI | 1.x |
+| rsync, curl, python3, shasum | Doğrulama aşamaları için |
+| Playwright + Chromium | Tarayıcı çalışma testi için |
 
-## Security Vulnerabilities
+macOS üzerinde geliştirilip test edildi. Linux denenmedi; Windows desteklenmiyor.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Kurulum
 
-## License
+```bash
+git clone https://github.com/mehmet-bozkurt/BenchForge.git
+cd BenchForge
+composer run setup
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+`setup` betiği bağımlılıkları kurar, `.env` dosyasını oluşturur, uygulama anahtarını üretir, SQLite veritabanını hazırlar ve arayüzü derler.
+
+Ardından:
+
+1. **Model sağlayıcısına bağlanın.** Anahtarlar OpenCode'un kendi kimlik deposunda tutulur; BenchForge onları okumaz veya kopyalamaz.
+   ```bash
+   opencode auth login
+   ```
+2. **Benchmark araçlarının yolunu ayarlayın.** `.env` içinde `BENCHFORGE_ROOT` değişkenini veya uygulamadaki **Sistem ve Kurulum** ekranını kullanın. Bu kök; `tools/`, `config/`, `prompts/`, `sablon/` ve `runs/` klasörlerini içermelidir.
+3. **Uygulamayı açın.** [Laravel Herd](https://herd.laravel.com) ile `http://benchforge.test` adresinden veya geliştirme sunucusuyla:
+   ```bash
+   composer run dev
+   ```
+
+Var olan bir arşivi veritabanına aktarmak için:
+
+```bash
+php artisan benchforge:sync
+```
+
+## Testler
+
+```bash
+php artisan test --compact
+```
+
+```bash
+npm run test:js
+```
+
+JavaScript entegrasyon testleri benchmark araçlarının bu deponun iki üst klasörünün yanında (`../../frontend-model-benchmark`) olmasını bekler.
+
+## Güvenlik notları
+
+- **Yalnız yerel kullanım içindir.** Uygulamada kullanıcı girişi yoktur; ağa açmayın.
+- **Bu bir güvenlik sandbox'ı değildir.** Modelin yazdığı kod, lint ve build sırasında sizin kullanıcı hesabınızın yetkileriyle çalışır. Güvenmediğiniz modelleri ayrı bir kullanıcı hesabında, sanal makinede veya konteynerde çalıştırmanız önerilir.
+- **Model çağrıları ücretlidir.** Koşu başlatmak seçilen sağlayıcıda maliyet oluşturur. Gösterilen tutarlar OpenCode kayıtlarına dayanır; sağlayıcı faturasının yerine geçmez.
+- Süreç ortamı izin listesiyle temizlenir: uygulamanın gizli anahtarları ve ortam değişkenlerindeki API anahtarları model süreçlerine aktarılmaz.
+
+## Sınırlamalar
+
+- **Benchmark araçları bu depoda değil.** `benchmark.zsh`, `resume-model.zsh`, model politikası ve başlangıç şablonu ayrı bir klasörde duruyor ve henüz yayımlanmadı. Bu yüzden depo şu an tek başına benchmark çalıştıramaz.
+- **Tek örnek:** Her model bir görevde bir kez çalışır; sonuçların istatistiksel güveni sınırlıdır.
+- **Liderlik evrensel bir sıralama değildir.** Görevler ve aşama setleri koşudan koşuya değişebilir; tablo yalnız aynı çalışma koşulundaki koşuları birleştirir.
+- **İnsan puanlaması kör değildir.** Değerlendirici model adını görür.
+
+## Teknolojiler
+
+Laravel 13, Blade, Tailwind CSS 4, Vite, SQLite, Pest, Node.js, zsh, OpenCode.
+
+## Lisans
+
+[MIT](LICENSE)
