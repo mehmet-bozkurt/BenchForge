@@ -183,6 +183,23 @@ test('it keeps submissions made outside the harness in their own condition', fun
         ->assertSee('claude-opus-5.5');
 });
 
+test('it leaves provider failures out of a model technical score', function () {
+    $model = 'opencode-go/space-bunny-free';
+    $failedByProvider = ModelRun::factory()->for(BenchmarkRun::factory()->isolated())->create(['slug' => 'space-bunny', 'model' => $model, 'status' => 'fail']);
+    StageResult::factory()->for($failedByProvider)->create(['stage' => 'opencode', 'status' => 'fail', 'exit_code' => StageResult::PROVIDER_ERROR_CODE]);
+    StageResult::factory()->for($failedByProvider)->create(['stage' => 'lint', 'status' => 'pass']);
+    $passed = ModelRun::factory()->for(BenchmarkRun::factory()->isolated())->create(['slug' => 'space-bunny', 'model' => $model, 'status' => 'pass']);
+    foreach (['opencode', 'lint'] as $stage) {
+        StageResult::factory()->for($passed)->create(['stage' => $stage, 'status' => 'pass']);
+    }
+
+    $summary = app(ModelLeaderboard::class)->find('opencode-go~space-bunny-free');
+
+    expect($summary['technical']['score'])->toBe(100.0)
+        ->and($summary['run_count'])->toBe(2)
+        ->and($summary['measured_run_count'])->toBe(1);
+});
+
 test('it explains an empty leaderboard for a condition without runs', function () {
     $this->get(route('models.index'))
         ->assertOk()

@@ -8,6 +8,14 @@ SCRIPT_DIZIN="${0:A:h}"
 ANA_DIZIN="${SCRIPT_DIZIN:h}"
 VERI_DIZIN="${BENCHFORGE_DATA_ROOT:-$ANA_DIZIN}"
 source "${SCRIPT_DIZIN}/benchforge-process-environment.zsh" || exit 78
+# Benchmark sirasinda Next.js anonim kullanim verisi gondermesin.
+export NEXT_TELEMETRY_DISABLED=1
+
+# Model adiminin ozel cikis kodlari:
+#   75 saglayici hatasi (sunucu/kapasite); model puanlanmaz.
+#   86 teslim yok: model sablonda hicbir dosyayi degistirmedi.
+SAGLAYICI_HATASI_KODU=75
+TESLIM_YOK_KODU=86
 
 if [[ "$VERI_DIZIN" != /* || ! -d "$VERI_DIZIN" ]]; then
   echo "HATA: Veri koku mutlak ve var olan bir klasor olmali -> $VERI_DIZIN"
@@ -51,6 +59,7 @@ BROWSER_SMOKE="${ANA_DIZIN}/tools/browser-smoke/check.mjs"
 BROWSER_SMOKE_DIZIN="${ANA_DIZIN}/tools/browser-smoke"
 SESSION_SECICI="${ANA_DIZIN}/tools/select-opencode-session.mjs"
 MODEL_POLICY="${ANA_DIZIN}/tools/benchforge-model-policy.mjs"
+HATA_SINIFLANDIRICI="${ANA_DIZIN}/tools/classify-opencode-failure.mjs"
 # Takilan bir model tek kosu yuvasini tutmasin ve token harcamaya devam etmesin.
 MODEL_SURE_SINIRI_SANIYE=3600
 # Modelin calisma kosulu: kullanicinin global OpenCode ayarlarindan yalitilmis ortam ve sablon talimati.
@@ -75,7 +84,7 @@ for KOMUT in node npm opencode rsync curl python3 shasum; do
   fi
 done
 
-if [[ ! -f "$BROWSER_SMOKE" || ! -f "$SESSION_SECICI" || ! -f "$MODEL_POLICY" ]]; then
+if [[ ! -f "$BROWSER_SMOKE" || ! -f "$SESSION_SECICI" || ! -f "$MODEL_POLICY" || ! -f "$HATA_SINIFLANDIRICI" ]]; then
   echo "HATA: Benchmark yardimci araci bulunamadi."
   exit 1
 fi
@@ -239,6 +248,17 @@ model_calistir() {
   else
     echo "HATA: $KLASOR calisma siniri hazirlanamadi; model cagrilmadi."
     OPENCODE_RC=65
+  fi
+
+  if [[ "$OPENCODE_RC" != "0" && "$OPENCODE_RC" != "65" && "$OPENCODE_RC" != "78" && "$OPENCODE_RC" != "124" ]] \
+    && [[ "$(node "$HATA_SINIFLANDIRICI" "$EVENT_LOG" 2>/dev/null)" == "provider" ]]; then
+    echo "[$KLASOR] Saglayici hatasi: model cagrisi saglayici tarafinda basarisiz oldu; puanlanmaz."
+    OPENCODE_RC=$SAGLAYICI_HATASI_KODU
+  elif [[ "$OPENCODE_RC" == "0" ]] && diff -rq \
+      -x node_modules -x .next -x out -x next-env.d.ts -x '*.tsbuildinfo' -x .DS_Store \
+      "$SABLON" "$PROJE" >/dev/null 2>&1; then
+    echo "[$KLASOR] Teslim yok: model sablonda hicbir dosyayi degistirmedi."
+    OPENCODE_RC=$TESLIM_YOK_KODU
   fi
 
   local SESSION_ID

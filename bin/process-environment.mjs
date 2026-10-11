@@ -37,7 +37,9 @@ export function modelEnvironment(additions = {}, source = process.env) {
 }
 
 // "legacy" = the model sees the host user's OpenCode configuration (runs before isolated-v1).
-// "isolated-v1" = an empty per-model HOME/config/state; shared data (auth, sessions, usage DB) and caches stay.
+// "isolated-v1" = a private per-model HOME and state, plus a BenchForge-owned OpenCode config directory
+// shared by all models (OpenCode installs its plugin SDK there once instead of once per model).
+// The host user's OpenCode configuration is never read; auth, sessions, usage DB and caches stay shared.
 export const ENVIRONMENT_PROFILES = Object.freeze(["legacy", "isolated-v1"]);
 
 export function isolatedModelEnvironment(additions = {}, privateHome, source = process.env) {
@@ -46,15 +48,17 @@ export function isolatedModelEnvironment(additions = {}, privateHome, source = p
   }
 
   const hostHome = source.HOME || homedir();
+  const cacheHome = source.XDG_CACHE_HOME || join(hostHome, ".cache");
 
   return modelEnvironment({
     ...additions,
     HOME: privateHome,
-    XDG_CONFIG_HOME: join(privateHome, ".config"),
+    XDG_CONFIG_HOME: join(cacheHome, "benchforge", "opencode-config"),
     XDG_STATE_HOME: join(privateHome, ".local", "state"),
     XDG_DATA_HOME: source.XDG_DATA_HOME || join(hostHome, ".local", "share"),
-    XDG_CACHE_HOME: source.XDG_CACHE_HOME || join(hostHome, ".cache"),
+    XDG_CACHE_HOME: cacheHome,
     npm_config_cache: join(hostHome, ".npm"),
+    NEXT_TELEMETRY_DISABLED: "1",
     OPENCODE_DISABLE_AUTOUPDATE: "1",
     OPENCODE_DISABLE_CLAUDE_CODE: "1",
     OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: "1",

@@ -5,6 +5,10 @@ set -u
 SCRIPT_DIZIN="${0:A:h}"
 ANA_DIZIN="${SCRIPT_DIZIN:h}"
 source "${SCRIPT_DIZIN}/benchforge-process-environment.zsh" || exit 78
+# Benchmark sirasinda Next.js anonim kullanim verisi gondermesin.
+export NEXT_TELEMETRY_DISABLED=1
+# Devam denemesinde model cagrisinin ust siniri; dogrulamalar bundan sonra yine calisir.
+MODEL_SURE_SINIRI_SANIYE=3600
 
 if (( $# != 10 )); then
   echo "Kullanim:"
@@ -230,6 +234,7 @@ if [[ "$MOD" == "continue" ]]; then
       --runtime-config "${MODEL_POLICY_DIZIN}/opencode-runtime.json" \
       --base-path "/${KLASOR}" \
       --environment-profile "$ORTAM_PROFILI" \
+      --timeout-seconds "$MODEL_SURE_SINIRI_SANIYE" \
       -- opencode run \
       --dir "$PROJE" \
       --agent benchforge-workspace \

@@ -180,7 +180,7 @@
                     @foreach ($stageLabels as $stage => $label)
                         <span><strong>{{ mb_substr($label, 0, 2) }}</strong> {{ $label }}</span>
                     @endforeach
-                    <span class="run-legend-marks"><i class="stage-cell stage-cell-pass">✓</i> geçti <i class="stage-cell stage-cell-fail">✗</i> başarısız <i class="stage-cell stage-cell-skip">–</i> çalışmadı</span>
+                    <span class="run-legend-marks"><i class="stage-cell stage-cell-pass">✓</i> geçti <i class="stage-cell stage-cell-fail">✗</i> başarısız <i class="stage-cell stage-cell-skip">–</i> çalışmadı <i class="stage-cell stage-cell-provider">!</i> sağlayıcı hatası <i class="stage-cell stage-cell-fail">∅</i> teslim yok</span>
                 </p>
             </div>
 
@@ -238,8 +238,16 @@
                                     <div class="run-matrix-row" role="row">
                                         <span class="run-matrix-model" role="rowheader" title="{{ $model['model'] }}">{{ $model['displayName'] }}</span>
                                         @foreach ($run['stageNames'] as $stage)
-                                            @php($status = $model['stages'][$stage]['status'] ?? 'unknown')
-                                            <span class="stage-cell stage-cell-{{ $status }}" role="cell" title="{{ ($stageLabels[$stage] ?? $stage).': '.($statusLabels[$status] ?? 'Veri yok') }}">{{ match ($status) { 'pass' => '✓', 'fail' => '✗', 'skip' => '–', default => '?' } }}</span>
+                                            @php
+                                                $status = $model['stages'][$stage]['status'] ?? 'unknown';
+                                                $code = $model['stages'][$stage]['code'] ?? null;
+                                                [$cellClass, $cellMark, $cellLabel] = match (true) {
+                                                    $stage === 'opencode' && $code === \App\Models\StageResult::PROVIDER_ERROR_CODE => ['provider', '!', 'Sağlayıcı hatası, puanlanmaz'],
+                                                    $stage === 'opencode' && $code === \App\Models\StageResult::NO_SUBMISSION_CODE => ['fail', '∅', 'Teslim yok'],
+                                                    default => [$status, match ($status) { 'pass' => '✓', 'fail' => '✗', 'skip' => '–', default => '?' }, $statusLabels[$status] ?? 'Veri yok'],
+                                                };
+                                            @endphp
+                                            <span class="stage-cell stage-cell-{{ $cellClass }}" role="cell" title="{{ ($stageLabels[$stage] ?? $stage).': '.$cellLabel }}">{{ $cellMark }}</span>
                                         @endforeach
                                     </div>
                                 @endforeach

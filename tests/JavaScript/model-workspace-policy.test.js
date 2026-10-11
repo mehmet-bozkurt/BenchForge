@@ -170,7 +170,7 @@ test('delivers the trusted starting template instructions to every model and rec
         assert.match(instructions, /BENCHFORGE STARTING TEMPLATE INSTRUCTIONS/u);
         assert.match(instructions, /This is NOT the Next\.js you know/u);
         assert.match(runtime.agent[POLICY_AGENT].prompt, /This is NOT the Next\.js you know/u);
-        assert.equal(metadata.templateInstructionsSha256, createHash('sha256').update(template.trim()).digest('hex'));
+        assert.equal(metadata.templateInstructionsSha256, createHash('sha256').update(template).digest('hex'));
         assert.match(metadata.instructionsSha256, /^[0-9a-f]{64}$/u);
 
         const withoutTemplate = buildModelPolicy({ workspace, modelSlug: 'fixture-model', mode: 'initial' });
