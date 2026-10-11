@@ -178,3 +178,25 @@ it('syncs only the requested run and skips while another sync holds the lock', f
         File::deleteDirectory($runsPath);
     }
 });
+
+it('explains provider failures and missing submissions in the model step', function () {
+    $runsPath = storage_path('framework/testing/sync-codes-'.Str::uuid());
+    File::ensureDirectoryExists($runsPath.'/code-run');
+    File::put($runsPath.'/code-run/_summary.tsv', "klasor|model|opencode|lint|build|export|routes|runtime|sure_sn\nflaky|opencode-go/flaky|75|0|0|1|1|1|12\nidle|opencode-go/idle|86|0|0|1|1|1|900\n");
+    config()->set('benchforge.runs_path', $runsPath);
+
+    try {
+        $this->artisan('benchforge:sync')->assertSuccessful();
+
+        $provider = StageResult::query()->whereHas('modelRun', fn ($query) => $query->where('slug', 'flaky'))->where('stage', 'opencode')->sole();
+        $idle = StageResult::query()->whereHas('modelRun', fn ($query) => $query->where('slug', 'idle'))->where('stage', 'opencode')->sole();
+
+        expect($provider->exit_code)->toBe(StageResult::PROVIDER_ERROR_CODE)
+            ->and($provider->isProviderError())->toBeTrue()
+            ->and($provider->message)->toContain('Sağlayıcı hatası')
+            ->and($idle->exit_code)->toBe(StageResult::NO_SUBMISSION_CODE)
+            ->and($idle->message)->toContain('Teslim yok');
+    } finally {
+        File::deleteDirectory($runsPath);
+    }
+});

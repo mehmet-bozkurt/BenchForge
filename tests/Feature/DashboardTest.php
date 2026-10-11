@@ -105,3 +105,17 @@ it('renders a helpful empty state when no history has been synchronized', functi
         ->assertOk()
         ->assertSee('Henüz benchmark bulunamadı');
 });
+
+it('marks provider failures and missing submissions in the run matrix', function () {
+    $run = BenchmarkRun::factory()->isolated()->create(['stage_names' => ['opencode', 'lint'], 'model_count' => 2, 'failed_count' => 2]);
+    $flaky = ModelRun::factory()->for($run)->create(['model' => 'opencode-go/flaky', 'status' => 'fail']);
+    StageResult::factory()->for($flaky)->create(['stage' => 'opencode', 'status' => 'fail', 'exit_code' => StageResult::PROVIDER_ERROR_CODE]);
+    $idle = ModelRun::factory()->for($run)->create(['model' => 'opencode-go/idle', 'status' => 'fail']);
+    StageResult::factory()->for($idle)->create(['stage' => 'opencode', 'status' => 'fail', 'exit_code' => StageResult::NO_SUBMISSION_CODE]);
+
+    $this->get(route('dashboard'))
+        ->assertOk()
+        ->assertSee('Üretim: Sağlayıcı hatası, puanlanmaz')
+        ->assertSee('stage-cell-provider', escape: false)
+        ->assertSee('Üretim: Teslim yok');
+});

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\StageResult;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -202,11 +203,17 @@ class BenchmarkArchive
                     $status = 'skip';
                 }
 
+                $code = is_numeric($row[$stageName] ?? null) ? (int) $row[$stageName] : null;
                 $stages[$stageName] = [
                     'status' => $status,
-                    'code' => is_numeric($row[$stageName] ?? null) ? (int) $row[$stageName] : null,
+                    'code' => $code,
                     'rawValue' => $row[$stageName] ?? null,
-                    'message' => $status === 'skip' ? 'Önceki aşama başarısız olduğu için çalıştırılmadı.' : null,
+                    'message' => match (true) {
+                        $status === 'skip' => 'Önceki aşama başarısız olduğu için çalıştırılmadı.',
+                        $stageName === 'opencode' && $code === StageResult::PROVIDER_ERROR_CODE => 'Sağlayıcı hatası: model çağrısı sağlayıcı tarafında başarısız oldu; bu koşu puanlanmaz.',
+                        $stageName === 'opencode' && $code === StageResult::NO_SUBMISSION_CODE => 'Teslim yok: model başlangıç şablonunda hiçbir dosyayı değiştirmedi.',
+                        default => null,
+                    },
                 ];
             }
 

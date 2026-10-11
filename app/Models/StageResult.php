@@ -12,6 +12,21 @@ class StageResult extends Model
     /** @use HasFactory<StageResultFactory> */
     use HasFactory;
 
+    /**
+     * Model-step exit code for a provider-side failure (server error, capacity); the run is not scored.
+     */
+    public const PROVIDER_ERROR_CODE = 75;
+
+    /**
+     * Model-step exit code for a model that changed nothing in the starting template.
+     */
+    public const NO_SUBMISSION_CODE = 86;
+
+    public function isProviderError(): bool
+    {
+        return $this->stage === 'opencode' && $this->exit_code === self::PROVIDER_ERROR_CODE;
+    }
+
     protected $fillable = [
         'stage',
         'status',

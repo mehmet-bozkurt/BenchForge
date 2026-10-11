@@ -115,6 +115,7 @@ class ModelLeaderboard
     /**
      * A run's technical score is its own stage pass ratio; a run whose model step failed
      * produced no submission of its own, so untouched template checks earn nothing.
+     * A provider-side failure says nothing about the model and is left out (null).
      */
     public function runTechnicalScore(ModelRun $run): ?float
     {
@@ -123,6 +124,10 @@ class ModelLeaderboard
         }
 
         $modelStage = $run->stageResults->firstWhere('stage', 'opencode');
+
+        if ($modelStage?->isProviderError()) {
+            return null;
+        }
 
         if ($modelStage !== null && $modelStage->status !== 'pass') {
             return 0.0;
@@ -150,7 +155,7 @@ class ModelLeaderboard
      */
     private function summarize(string $identity, Collection $runs): array
     {
-        $measuredRuns = $runs->filter(fn (ModelRun $run): bool => $run->stageResults->isNotEmpty())->values();
+        $measuredRuns = $runs->filter(fn (ModelRun $run): bool => $this->runTechnicalScore($run) !== null)->values();
         $stageResults = $measuredRuns->flatMap(fn (ModelRun $run): Collection => $run->stageResults);
         $evaluations = $runs->pluck('evaluation')->filter()->values();
         $passedStages = $stageResults->where('status', 'pass')->count();

@@ -67,7 +67,8 @@ test('isolates the model from host OpenCode configuration while keeping shared a
     const model = isolatedModelEnvironment({ OPENCODE_CONFIG: '/fixture/run/config.json' }, '/fixture/run/_opencode-home/model-one', source);
 
     assert.equal(model.HOME, '/fixture/run/_opencode-home/model-one');
-    assert.equal(model.XDG_CONFIG_HOME, '/fixture/run/_opencode-home/model-one/.config');
+    assert.equal(model.XDG_CONFIG_HOME, '/fixture/home/.cache/benchforge/opencode-config');
+    assert.equal(model.NEXT_TELEMETRY_DISABLED, '1');
     assert.equal(model.XDG_STATE_HOME, '/fixture/run/_opencode-home/model-one/.local/state');
     assert.equal(model.XDG_DATA_HOME, '/fixture/home/.local/share');
     assert.equal(model.XDG_CACHE_HOME, '/fixture/home/.cache');
@@ -243,7 +244,7 @@ test('monitor gives an isolated model a private home outside its workspace and k
         const privateHome = join(root, '_opencode-home', 'fixture-model');
 
         assert.equal(isolated.home, privateHome);
-        assert.equal(isolated.config, join(privateHome, '.config'));
+        assert.equal(isolated.config, '/fixture/host-home/.cache/benchforge/opencode-config');
         assert.equal(isolated.data, '/fixture/host-home/.local/share');
         assert.equal(isolated.autoupdate, '1');
         assert.equal((await stat(privateHome)).mode & 0o777, 0o700);
@@ -276,7 +277,7 @@ test('initial terminal benchmark sanitizes npm install before any real model or 
         await Promise.all([
             mkdir(join(toolsPath, 'browser-smoke'), { recursive: true }), mkdir(commandPath), mkdir(homePath), mkdir(join(root, 'sablon')),
         ]);
-        for (const name of ['benchmark.zsh', 'benchforge-process-environment.zsh', 'benchforge-model-policy.mjs', 'select-opencode-session.mjs']) {
+        for (const name of ['benchmark.zsh', 'benchforge-process-environment.zsh', 'benchforge-model-policy.mjs', 'select-opencode-session.mjs', 'classify-opencode-failure.mjs']) {
             await copyFile(join(engineTools, name), join(toolsPath, name));
         }
         await writeFile(join(toolsPath, 'browser-smoke', 'check.mjs'), 'throw new Error("Browser must never run");\n');

@@ -178,7 +178,8 @@ export function buildModelPolicy({ workspace, modelSlug, mode, templateInstructi
             externalDirectory: 'deny',
             strikesBeforeStop: 3,
             operatingSystemSandbox: false,
-            templateInstructionsSha256: templateText === '' ? null : sha256(templateText),
+            // Hash of the file as written, so it matches template_instructions_sha256 in the run's _meta.txt.
+            templateInstructionsSha256: templateText === '' ? null : sha256(templateInstructions),
             instructionsSha256: sha256(instructions),
         },
         instructions: `${instructions}\n`,

@@ -13,12 +13,15 @@ if (!jobPath || process.env.BENCHFORGE_RUNNER !== "1") {
 }
 
 const job = JSON.parse(await readFile(jobPath, "utf8"));
+// Safety net for the whole attempt (model call, npm and validation). The model call itself
+// is limited separately by the boundary monitor.
+const DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 7200;
 const configuredTimeoutSeconds = Number(process.env.BENCHFORGE_ATTEMPT_TIMEOUT_SECONDS);
 const timeoutSeconds = Number.isInteger(configuredTimeoutSeconds)
   && configuredTimeoutSeconds >= 60
   && configuredTimeoutSeconds <= 7200
   ? configuredTimeoutSeconds
-  : null;
+  : DEFAULT_ATTEMPT_TIMEOUT_SECONDS;
 let currentState;
 let stopRequested = false;
 let stopReason = "user";
