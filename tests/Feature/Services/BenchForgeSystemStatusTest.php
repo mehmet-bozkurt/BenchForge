@@ -17,7 +17,7 @@ function createSystemStatusFixture(): string
         File::ensureDirectoryExists($root.'/'.$directory);
     }
 
-    foreach (['tools/benchmark.zsh', 'tools/resume-model.zsh', 'tools/browser-smoke/check.mjs', 'tools/select-opencode-session.mjs', 'tools/extract-opencode-event-session.mjs', 'tools/benchforge-model-policy.mjs', 'tools/browser-smoke/node_modules/playwright/package.json'] as $file) {
+    foreach (['tools/benchmark.zsh', 'tools/resume-model.zsh', 'tools/browser-smoke/check.mjs', 'tools/select-opencode-session.mjs', 'tools/extract-opencode-event-session.mjs', 'tools/benchforge-model-policy.mjs', 'tools/browser-smoke/node_modules/playwright/package.json', 'sablon/package.json'] as $file) {
         File::put($root.'/'.$file, '{}');
     }
 
@@ -26,6 +26,7 @@ function createSystemStatusFixture(): string
         chmod($root.'/bin/'.$command, 0755);
     }
 
+    config()->set('benchforge.engine_path', $root);
     config()->set('benchforge.root_path', $root);
     config()->set('benchforge.runs_path', $root.'/runs');
     config()->set('benchforge.runner_path', $root.'/private/runner');
@@ -93,7 +94,7 @@ test('it rejects a missing helper before considering the install ready', functio
 
         expect($result['ready'])->toBeFalse();
         expect(collect($result['checks'])->keyBy('key')['project'])->toMatchArray([
-            'status' => 'fail', 'message' => 'Eksik veya okunamayan: tools/resume-model.zsh',
+            'status' => 'fail', 'message' => 'Eksik veya okunamayan: engine/tools/resume-model.zsh',
         ]);
         Process::assertRanTimes(fn ($process): bool => true, 8);
     } finally {

@@ -81,7 +81,7 @@ try {
     ["-f", job.scriptPath, job.runId, job.promptPath, job.configPath, job.routes.join(","), job.openCodeConfigPath],
     {
       cwd: job.projectRoot,
-      env: subprocessEnvironment({ BENCHFORGE_BOUNDARY_MONITOR: boundaryMonitorPath }),
+      env: subprocessEnvironment({ BENCHFORGE_BOUNDARY_MONITOR: boundaryMonitorPath, BENCHFORGE_DATA_ROOT: job.projectRoot }),
       stdio: ["ignore", logFd, logFd],
     },
   );

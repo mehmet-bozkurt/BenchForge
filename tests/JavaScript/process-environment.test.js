@@ -12,7 +12,7 @@ import { inheritedEnvironment, isolatedModelEnvironment, modelEnvironment, runne
 const execute = promisify(execFile);
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const binDirectory = join(testDirectory, '../../bin');
-const engineTools = join(testDirectory, '../../../../frontend-model-benchmark/tools');
+const engineTools = join(testDirectory, '../../engine/tools');
 const fakeSecrets = {
     APP_KEY: 'fixture-app-secret',
     DB_PASSWORD: 'fixture-database-secret',

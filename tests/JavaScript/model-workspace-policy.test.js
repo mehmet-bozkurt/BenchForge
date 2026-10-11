@@ -8,8 +8,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 
-const projectRoot = process.env.BENCHFORGE_PROJECT_ROOT
-    ?? resolve(dirname(fileURLToPath(import.meta.url)), '../../../../frontend-model-benchmark');
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../engine');
 const helperPath = join(projectRoot, 'tools/benchforge-model-policy.mjs');
 const { buildModelPolicy, writeModelPolicy, POLICY_VERSION, POLICY_AGENT } = await import(pathToFileURL(helperPath));
 const execute = promisify(execFile);

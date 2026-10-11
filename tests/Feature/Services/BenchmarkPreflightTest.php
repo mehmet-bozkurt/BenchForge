@@ -16,6 +16,9 @@ function preparePreflightTools(string $root): void
     foreach (['resume-model.zsh', 'browser-smoke/check.mjs', 'select-opencode-session.mjs', 'extract-opencode-event-session.mjs', 'benchforge-model-policy.mjs'] as $file) {
         File::put($root.'/tools/'.$file, "fixture\n");
     }
+
+    File::put($root.'/sablon/package.json', "{}\n");
+    config()->set('benchforge.engine_path', $root);
 }
 
 /** @return array{root: string, binPath: string} */

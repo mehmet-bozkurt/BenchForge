@@ -43,6 +43,7 @@
             "@php artisan key:generate",
             "@php artisan migrate --force",
             "npm install --ignore-scripts",
+            "npm ci --prefix engine/tools/browser-smoke --no-audit --no-fund",
             "npm run build"
         ],
         "dev": [

@@ -1,0 +1,14 @@
+Küçük bir mahalle kahvecisi için çok sayfalı, modern ve mobil uyumlu bir tanıtım sitesi geliştir.
+
+Proje, bu klasördeki Next.js başlangıç şablonudur. Yeni bir proje oluşturma; mevcut şablonun üzerinde çalış.
+
+Sayfalar:
+- / : Kahvecinin kısa tanıtımı, öne çıkan üç ürün ve "Menüyü gör" çağrısı.
+- /menu : Kategorilere ayrılmış menü (sıcak içecekler, soğuk içecekler, tatlılar); her ürünün adı, kısa açıklaması ve fiyatı.
+- /iletisim : Adres, çalışma saatleri ve bir iletişim formu. Form gönderildiğinde sayfada bir teşekkür mesajı göster; gerçek bir sunucuya gönderme.
+
+Beklentiler:
+- Tüm metinler Türkçe ve gerçekçi olsun.
+- Ortak bir üst menü ve alt bilgi alanı kullan.
+- Site static export ile derlenebilmeli ve tüm sayfalar dışa aktarılmış çıktıda çalışmalı.
+- Erişilebilirlik ve responsive tasarıma dikkat et.

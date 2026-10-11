@@ -74,3 +74,16 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Engine: shipped runner scripts, template and examples. Run data and personal inputs stay local.
+/engine/runs/*
+!/engine/runs/.gitkeep
+/engine/prompts/*
+!/engine/prompts/example.txt
+/engine/config/*
+!/engine/config/example.conf
+!/engine/config/opencode-benchmark.json
+/engine/sablon/node_modules/
+/engine/sablon/.next/
+/engine/sablon/out/
+/engine/tools/browser-smoke/node_modules/

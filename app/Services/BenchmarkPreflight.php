@@ -89,7 +89,7 @@ class BenchmarkPreflight
             return $this->fail('project', 'Benchmark projesi', 'Benchmark kök klasörü bulunamadı.');
         }
 
-        foreach (['prompts', 'config', 'runs', 'sablon'] as $directory) {
+        foreach (['prompts', 'config', 'runs'] as $directory) {
             if (! is_dir($root.DIRECTORY_SEPARATOR.$directory)) {
                 return $this->fail('project', 'Benchmark projesi', "{$directory} klasörü bulunamadı.");
             }
@@ -101,13 +101,16 @@ class BenchmarkPreflight
             return $this->fail('project', 'Benchmark projesi', 'Sonuç klasörü benchmark kökündeki runs klasörüyle eşleşmiyor.');
         }
 
+        $enginePath = rtrim((string) config('benchforge.engine_path'), DIRECTORY_SEPARATOR);
+
+        if (! is_dir($enginePath.DIRECTORY_SEPARATOR.'sablon')) {
+            return $this->fail('project', 'Benchmark projesi', 'sablon klasörü bulunamadı.');
+        }
+
         $requiredFiles = [
-            (string) config('benchforge.benchmark_script', $root.'/tools/benchmark.zsh'),
-            (string) config('benchforge.resume_script', $root.'/tools/resume-model.zsh'),
-            $root.'/tools/browser-smoke/check.mjs',
-            $root.'/tools/select-opencode-session.mjs',
-            $root.'/tools/extract-opencode-event-session.mjs',
-            $root.'/tools/benchforge-model-policy.mjs',
+            (string) config('benchforge.benchmark_script'),
+            (string) config('benchforge.resume_script'),
+            ...array_map(fn (string $file): string => $enginePath.'/'.$file, BenchForgeSettings::REQUIRED_ENGINE_FILES),
         ];
 
         foreach ($requiredFiles as $file) {

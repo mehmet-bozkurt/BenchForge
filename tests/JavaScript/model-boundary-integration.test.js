@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
-const engineTools = join(testDirectory, '../../../../frontend-model-benchmark/tools');
+const engineTools = join(testDirectory, '../../engine/tools');
 const monitorPath = join(testDirectory, '../../bin/model-boundary-monitor.mjs');
 
 async function writeCommand(directory, name, source) {
