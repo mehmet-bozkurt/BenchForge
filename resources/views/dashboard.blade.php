@@ -176,85 +176,88 @@
                     <p class="eyebrow">Koşu geçmişi</p>
                     <h2 class="mt-1 text-2xl font-black tracking-[-0.04em] text-[var(--ink)]">Benchmark suite’leri</h2>
                 </div>
-                <p class="max-w-lg text-xs leading-5 text-[var(--muted)] sm:text-right">
-                    Legacy sonuçlar üç temel aşamayı; V2 sonuçlar export, rota ve runtime kontrollerini de kapsar.
+                <p class="run-legend" aria-label="Aşama kısaltmaları">
+                    @foreach ($stageLabels as $stage => $label)
+                        <span><strong>{{ mb_substr($label, 0, 2) }}</strong> {{ $label }}</span>
+                    @endforeach
+                    <span class="run-legend-marks"><i class="stage-cell stage-cell-pass">✓</i> geçti <i class="stage-cell stage-cell-fail">✗</i> başarısız <i class="stage-cell stage-cell-skip">–</i> çalışmadı</span>
                 </p>
             </div>
 
             <section class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Benchmark suite'leri">
                 @foreach ($runs as $index => $run)
                     @php
-                        $passRate = $run['counts']['total'] > 0
-                            ? (int) round(($run['counts']['pass'] / $run['counts']['total']) * 100)
-                            : 0;
-                        $hasFailure = $run['counts']['fail'] > 0;
-                        $isIncomplete = $run['schema'] === 'incomplete';
+                        $total = $run['counts']['total'];
+                        $passed = $run['counts']['pass'];
+                        $isIncomplete = $run['schema'] === 'incomplete' || $run['stageNames'] === [];
+                        $resultTone = match (true) {
+                            $isIncomplete || $total === 0 => 'empty',
+                            $passed === $total => 'all',
+                            $passed === 0 => 'none',
+                            default => 'some',
+                        };
+                        $visibleModels = array_slice($run['models'], 0, 6);
+                        $hiddenModelCount = count($run['models']) - count($visibleModels);
+                        $cost = $run['costUsd'];
+                        $costLabel = match (true) {
+                            $cost === null => null,
+                            $cost <= 0.0 => '$0',
+                            $cost < 0.01 => '<$0,01',
+                            default => '$'.number_format($cost, 2, ',', '.'),
+                        };
                     @endphp
-                    <article class="run-card group relative flex min-h-72 flex-col rounded-2xl border border-[var(--line)] bg-white p-5">
-                        <div class="flex items-start justify-between gap-4">
-                            <div class="flex flex-wrap gap-2">
-                                <span class="schema-badge {{ in_array($run['schema'], ['legacy', 'incomplete'], true) ? 'schema-badge-legacy' : 'schema-badge-extended' }}">
-                                    {{ $schemaLabel($run['schema']) }} · {{ count($run['stageNames']) }} aşama
-                                </span>
-                                <span class="status-badge {{ $isIncomplete ? 'status-unknown' : ($hasFailure ? 'status-fail' : 'status-pass') }}">
-                                    <span class="status-dot"></span>
-                                    {{ $isIncomplete ? 'Sonuç özeti yok' : ($hasFailure ? $run['counts']['fail'].' sorunlu' : 'Teknik olarak temiz') }}
-                                </span>
-                            </div>
-                            <span class="font-mono text-[10px] font-bold tracking-[0.12em] text-[var(--line-strong)]">{{ str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT) }}</span>
+                    <article class="run-card group relative flex flex-col rounded-2xl border border-[var(--line)] bg-white p-5">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <span class="condition-pill condition-{{ $run['environmentProfile'] }}">
+                                {{ \App\Models\BenchmarkRun::ENVIRONMENT_PROFILES[$run['environmentProfile']] }} · {{ $run['date']->locale('tr')->translatedFormat('j M Y') }}
+                            </span>
+                            <span class="result-pill result-{{ $resultTone }}">
+                                {{ $resultTone === 'empty' ? 'Sonuç özeti yok' : $passed.' / '.$total.' geçti' }}
+                            </span>
                         </div>
 
-                        <div class="mt-6">
-                            <p class="text-[11px] font-bold tracking-[0.08em] text-[var(--muted)] uppercase">{{ $run['date']->locale('tr')->translatedFormat('j M Y') }}</p>
-                            <h3 class="mt-2 text-xl font-black tracking-[-0.035em] text-[var(--ink)]">
-                                <a class="stretched-link" href="{{ route('runs.show', $run['slug']) }}">{{ $run['name'] }}</a>
-                            </h3>
-                            <p class="mt-2 truncate font-mono text-[11px] text-[var(--muted)]">{{ $run['slug'] }}</p>
-                        </div>
+                        <h3 class="mt-4 text-xl font-black tracking-[-0.035em] text-[var(--ink)]">
+                            <a class="stretched-link" href="{{ route('runs.show', $run['slug']) }}">{{ $run['name'] }}</a>
+                        </h3>
+                        <p class="run-task">{{ $run['taskSummary'] ?? 'Görev metni bulunamadı.' }}</p>
+                        @if ($run['routes'] !== [])
+                            <p class="mt-1 truncate font-mono text-[10.5px] text-[var(--muted)]">Rotalar: {{ implode(', ', $run['routes']) }}</p>
+                        @endif
 
-                        <div class="mt-6 grid grid-cols-2 gap-4 border-y border-[var(--line)] py-4">
-                            <div>
-                                <span class="card-stat-label">Model koşusu</span>
-                                <strong class="mt-1 block text-lg font-black">{{ count($run['models']) }}</strong>
-                            </div>
-                            <div>
-                                <span class="card-stat-label">Toplam süre</span>
-                                <strong class="mt-1 block text-lg font-black">{{ $formatDuration($run['totalDurationSeconds']) }}</strong>
-                            </div>
-                        </div>
-
-                        <div class="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-[var(--surface-subtle)] p-3" aria-label="Disk kullanımı">
-                            <div>
-                                <span class="block text-[8px] font-extrabold tracking-[0.06em] text-[var(--muted)] uppercase">Toplam</span>
-                                <strong class="mt-1 block text-[11px]">{{ $formatFileSize($run['storage']['totalBytes']) }}</strong>
-                            </div>
-                            <div>
-                                <span class="block text-[8px] font-extrabold tracking-[0.06em] text-[var(--muted)] uppercase">Çalışma</span>
-                                <strong class="mt-1 block text-[11px]">{{ $formatFileSize($run['storage']['workspaceBytes']) }}</strong>
-                            </div>
-                            <div>
-                                <span class="block text-[8px] font-extrabold tracking-[0.06em] text-[var(--muted)] uppercase">Sonuç</span>
-                                <strong class="mt-1 block text-[11px]">{{ $formatFileSize($run['storage']['resultBytes']) }}</strong>
-                            </div>
-                        </div>
-
-                        <div class="mt-4">
-                            <div class="mb-2 flex items-center justify-between text-[11px]">
-                                <span class="font-semibold text-[var(--muted)]">Başarı oranı</span>
-                                <span class="font-extrabold text-[var(--ink)]">%{{ $passRate }}</span>
-                            </div>
-                            <div class="h-1.5 overflow-hidden rounded-full bg-[var(--surface-subtle)]" role="progressbar" aria-valuenow="{{ $passRate }}" aria-valuemin="0" aria-valuemax="100">
-                                <div class="h-full rounded-full bg-[var(--success)]" style="width: {{ $passRate }}%"></div>
-                            </div>
-                        </div>
-
-                        <div class="mt-auto flex items-end justify-between gap-3 pt-5">
-                            <div class="flex -space-x-1">
-                                @foreach ($run['stageNames'] as $stage)
-                                    <span class="stage-abbreviation" title="{{ $stageLabels[$stage] ?? $stage }}">{{ mb_substr($stageLabels[$stage] ?? $stage, 0, 2) }}</span>
+                        @if ($isIncomplete)
+                            <p class="run-empty">Bu koşunun sonuç özeti yok; model klasörleri bulundu ama aşama sonuçları kaydedilmemiş.</p>
+                        @else
+                            <div class="run-matrix" style="--stage-count: {{ count($run['stageNames']) }}" role="table" aria-label="{{ $run['name'] }}: model ve aşama sonuçları">
+                                <div class="run-matrix-row" role="row">
+                                    <span role="columnheader"><span class="sr-only">Model</span></span>
+                                    @foreach ($run['stageNames'] as $stage)
+                                        <span class="run-matrix-head" role="columnheader" title="{{ $stageLabels[$stage] ?? $stage }}">{{ mb_substr($stageLabels[$stage] ?? $stage, 0, 2) }}</span>
+                                    @endforeach
+                                </div>
+                                @foreach ($visibleModels as $model)
+                                    <div class="run-matrix-row" role="row">
+                                        <span class="run-matrix-model" role="rowheader" title="{{ $model['model'] }}">{{ $model['displayName'] }}</span>
+                                        @foreach ($run['stageNames'] as $stage)
+                                            @php($status = $model['stages'][$stage]['status'] ?? 'unknown')
+                                            <span class="stage-cell stage-cell-{{ $status }}" role="cell" title="{{ ($stageLabels[$stage] ?? $stage).': '.($statusLabels[$status] ?? 'Veri yok') }}">{{ match ($status) { 'pass' => '✓', 'fail' => '✗', 'skip' => '–', default => '?' } }}</span>
+                                        @endforeach
+                                    </div>
                                 @endforeach
                             </div>
-                            <span class="text-xs font-extrabold text-[var(--forest)]">Raporu aç →</span>
+                            @if ($hiddenModelCount > 0)
+                                <p class="mt-2 text-[11px] font-semibold text-[var(--muted)]">+{{ $hiddenModelCount }} model daha · raporda</p>
+                            @endif
+                        @endif
+
+                        <div class="run-footer">
+                            <span>
+                                {{ $formatDuration($run['totalDurationSeconds']) }}
+                                @if ($costLabel !== null)
+                                    · {{ $costLabel }}
+                                @endif
+                                · {{ $formatFileSize($run['storage']['totalBytes']) }}
+                            </span>
+                            <span class="font-extrabold text-[var(--forest)]">Raporu aç →</span>
                         </div>
                     </article>
                 @endforeach
