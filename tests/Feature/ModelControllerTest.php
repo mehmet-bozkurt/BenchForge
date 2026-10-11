@@ -170,6 +170,19 @@ test('it never mixes runs from different working conditions', function () {
         ->assertSee('Eski koşul');
 });
 
+test('it keeps submissions made outside the harness in their own condition', function () {
+    $manualRun = BenchmarkRun::factory()->create(['metadata' => ['environment_profile' => 'manual']]);
+    ModelRun::factory()->for($manualRun)->create(['slug' => 'claude-opus-5-5', 'model' => 'claude-code/claude-opus-5.5']);
+
+    expect($manualRun->environmentProfile())->toBe('manual');
+
+    $this->get(route('models.index'))->assertOk()->assertDontSee('claude-opus-5.5');
+    $this->get(route('models.index', ['condition' => 'manual']))
+        ->assertOk()
+        ->assertSee('Harness dışı')
+        ->assertSee('claude-opus-5.5');
+});
+
 test('it explains an empty leaderboard for a condition without runs', function () {
     $this->get(route('models.index'))
         ->assertOk()

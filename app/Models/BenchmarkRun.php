@@ -21,6 +21,7 @@ class BenchmarkRun extends Model
     public const ENVIRONMENT_PROFILES = [
         'isolated-v1' => 'Yalıtılmış koşul v1',
         'legacy' => 'Eski koşul',
+        'manual' => 'Harness dışı',
     ];
 
     protected $fillable = [
