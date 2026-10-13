@@ -70,6 +70,7 @@
     data-provider-endpoints-url="{{ route('runner.openrouter.endpoints') }}"
     data-preflight-ready="{{ $preflightReady ? 'true' : 'false' }}"
     data-runs-url="{{ url('/runs') }}"
+    data-model-limit="{{ \App\Services\BenchmarkRunner::CUSTOM_MODEL_LIMIT }}"
 >
     <header class="mb-8 flex flex-col gap-4 min-[1700px]:flex-row min-[1700px]:items-end min-[1700px]:justify-between">
         <div>
@@ -155,7 +156,7 @@
 
     @if ($errors->any())
         <div class="mb-5 rounded-xl border border-[#f2c9cf] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
-            <strong class="font-extrabold">Koşu başlatılamadı.</strong>
+            <strong class="font-extrabold">{{ $errors->has('group_name') ? 'Grup kaydedilemedi.' : 'Koşu başlatılamadı.' }}</strong>
             <ul class="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">
                 @foreach ($errors->all() as $error)
                     <li>{{ $error }}</li>
@@ -256,12 +257,15 @@
                                 <option value="{{ $config['value'] }}" data-model-count="{{ $config['modelCount'] }}" data-ports="{{ implode(', ', $config['ports']) }}" data-providers="{{ implode(', ', $config['providers'] ?? []) }}" data-max-parallel="{{ $config['maxParallel'] ?? $config['modelCount'] }}" @selected($defaultConfig === $config['value'])>{{ $config['label'] }} · {{ $config['modelCount'] }} model</option>
                             @endforeach
                         </select>
+                        <p class="mt-2 text-[10px] leading-4 text-[var(--muted)]">
+                            Grupları eklemek, düzenlemek veya silmek için <a class="font-extrabold text-[var(--forest)] underline" href="{{ route('model-groups.index') }}">Model Grupları</a> sayfasını kullanın.
+                        </p>
                     </div>
 
                     <div class="grid gap-3" data-model-panel="custom" @class(['hidden' => $defaultModelMode !== 'custom'])>
                         <div class="flex items-center gap-2">
                             <input class="h-10 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-white px-3.5 text-sm outline-none focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)]" type="search" placeholder="Model adı veya yayıncı ara…" data-model-search data-runner-input @disabled($active)>
-                            <span class="whitespace-nowrap text-[10px] font-extrabold text-[var(--muted)]"><span data-model-visible-count>{{ $openRouterModels->count() }}</span> sonuç · <span data-model-selected-count>{{ count($selectedModels) }}</span>/5 seçili</span>
+                            <span class="whitespace-nowrap text-[10px] font-extrabold text-[var(--muted)]"><span data-model-visible-count>{{ $openRouterModels->count() }}</span> sonuç · <span data-model-selected-count>{{ count($selectedModels) }}</span>/{{ \App\Services\BenchmarkRunner::CUSTOM_MODEL_LIMIT }} seçili</span>
                         </div>
                         <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                             <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
@@ -401,7 +405,7 @@
                     <div class="grid gap-3" data-model-panel="opencode_go" @class(['hidden' => $defaultModelMode !== 'opencode_go'])>
                         <div class="flex items-center gap-2">
                             <input class="h-10 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-white px-3.5 text-sm outline-none focus:border-[var(--violet)] focus:ring-3 focus:ring-[var(--violet-soft)]" type="search" placeholder="OpenCode Go modeli ara…" data-go-model-search data-runner-input @disabled($active)>
-                            <span class="whitespace-nowrap text-[10px] font-extrabold text-[var(--muted)]"><span data-go-model-visible-count>{{ $openCodeGoModels->count() }}</span> sonuç · <span data-go-model-selected-count>{{ count($selectedGoModels) }}</span>/5 seçili</span>
+                            <span class="whitespace-nowrap text-[10px] font-extrabold text-[var(--muted)]"><span data-go-model-visible-count>{{ $openCodeGoModels->count() }}</span> sonuç · <span data-go-model-selected-count>{{ count($selectedGoModels) }}</span>/{{ \App\Services\BenchmarkRunner::CUSTOM_MODEL_LIMIT }} seçili</span>
                         </div>
                         <div class="grid gap-2 sm:grid-cols-3">
                             <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
@@ -502,6 +506,18 @@
                             </div>
                         </section>
                     </div>
+
+                    <div @class(['grid gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] p-3', 'hidden' => $defaultModelMode === 'group']) data-selection-group>
+                        <label class="text-xs font-extrabold text-[var(--ink)]" for="selection-group-name">Bu seçimi grup olarak kaydet</label>
+                        <div class="flex flex-col gap-2 sm:flex-row">
+                            <input class="h-10 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-white px-3 font-mono text-xs outline-none focus:border-[var(--forest)]" id="selection-group-name" type="text" name="group_name" value="{{ old('group_name') }}" maxlength="63" placeholder="ornek-grup-adi" @disabled($active)>
+                            <button class="rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[11px] font-extrabold text-[var(--forest)] disabled:opacity-50" type="submit" formaction="{{ route('model-groups.selection.store') }}" formnovalidate data-save-selection-group @disabled($active)>Grup olarak kaydet</button>
+                        </div>
+                        @error('group_name')
+                            <p class="text-[10px] font-semibold text-[var(--red)]" role="alert">{{ $message }}</p>
+                        @enderror
+                        <p class="text-[10px] leading-4 text-[var(--muted)]">Koşu başlatmaz; yalnız seçili modelleri kayıtlı gruplara ekler. OpenRouter grupları, buradaki sabit sağlayıcı seçimini değil ortak yönlendirme ayarını kullanır.</p>
+                    </div>
                 </fieldset>
 
                 <label class="grid gap-2 text-xs font-extrabold text-[var(--ink)]">
@@ -560,6 +576,7 @@
                         <strong class="mt-1 block" data-runner-max-parallel>{{ $defaultMaxParallel }}</strong>
                     </div>
                 </div>
+                <p class="mt-3 hidden rounded-lg px-3 py-2 text-[10px] leading-4" data-runner-load-estimate aria-live="polite"></p>
             </div>
 
             <section class="mt-5 rounded-xl border border-[var(--line)] bg-white p-4" aria-labelledby="preflight-title" data-preflight-panel>

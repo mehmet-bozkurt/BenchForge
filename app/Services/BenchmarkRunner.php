@@ -24,7 +24,7 @@ class BenchmarkRunner
 
     private const ROUTE_PATTERN = "/^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%\/]*$/";
 
-    private const CUSTOM_MODEL_LIMIT = 5;
+    public const CUSTOM_MODEL_LIMIT = 10;
 
     private const CUSTOM_MODEL_PORT_START = 3251;
 
@@ -678,7 +678,7 @@ PROMPT;
         )));
 
         if ($selectedModels === [] || count($selectedModels) > self::CUSTOM_MODEL_LIMIT) {
-            throw new BenchmarkRunnerException('OpenRouter kataloğundan 1–5 model seçin.');
+            throw new BenchmarkRunnerException('OpenRouter kataloğundan 1–'.self::CUSTOM_MODEL_LIMIT.' model seçin.');
         }
 
         $modelsById = OpenRouterModel::query()
@@ -758,7 +758,7 @@ PROMPT;
         )));
 
         if ($selectedModels === [] || count($selectedModels) > self::CUSTOM_MODEL_LIMIT) {
-            throw new BenchmarkRunnerException('OpenCode Go kataloğundan 1–5 model seçin.');
+            throw new BenchmarkRunnerException('OpenCode Go kataloğundan 1–'.self::CUSTOM_MODEL_LIMIT.' model seçin.');
         }
 
         $modelsById = OpenCodeGoModel::query()
