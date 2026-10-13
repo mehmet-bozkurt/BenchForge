@@ -30,6 +30,10 @@
                         <span aria-hidden="true">▷</span>
                         Yeni Benchmark
                     </a>
+                    <a class="nav-item {{ request()->routeIs('model-groups.*') ? 'nav-item-active' : '' }}" href="{{ route('model-groups.index') }}">
+                        <span aria-hidden="true">≡</span>
+                        Model Grupları
+                    </a>
                     <a class="nav-item {{ request()->routeIs('preparations.*') ? 'nav-item-active' : '' }}" href="{{ route('preparations.index') }}">
                         <span aria-hidden="true">▧</span>
                         Hazırlık Paketleri

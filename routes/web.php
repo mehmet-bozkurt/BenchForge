@@ -13,6 +13,7 @@ use App\Http\Controllers\BenchmarkWorkspaceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ModelController;
 use App\Http\Controllers\ModelEvaluationController;
+use App\Http\Controllers\ModelGroupController;
 use App\Http\Controllers\ModelRunAttemptController;
 use App\Http\Controllers\OpenCodeGoCatalogController;
 use App\Http\Controllers\OpenRouterCatalogController;
@@ -35,6 +36,14 @@ Route::get('/models', [ModelController::class, 'index'])->name('models.index');
 Route::middleware(EnsureLocalPreparationAccess::class)->prefix('system')->name('system.')->group(function (): void {
     Route::get('/', [SystemSettingsController::class, 'index'])->middleware('throttle:20,1')->name('index');
     Route::put('/', [SystemSettingsController::class, 'update'])->middleware('throttle:5,1')->name('update');
+});
+Route::middleware(EnsureLocalPreparationAccess::class)->prefix('model-groups')->name('model-groups.')->group(function (): void {
+    Route::get('/', [ModelGroupController::class, 'index'])->name('index');
+    Route::post('/', [ModelGroupController::class, 'store'])->middleware('throttle:20,1')->name('store');
+    Route::post('/selection', [ModelGroupController::class, 'storeSelection'])->middleware('throttle:20,1')->name('selection.store');
+    Route::get('/{group}/edit', [ModelGroupController::class, 'edit'])->where('group', '[A-Za-z0-9][A-Za-z0-9._-]*')->name('edit');
+    Route::put('/{group}', [ModelGroupController::class, 'update'])->where('group', '[A-Za-z0-9][A-Za-z0-9._-]*')->middleware('throttle:20,1')->name('update');
+    Route::delete('/{group}', [ModelGroupController::class, 'destroy'])->where('group', '[A-Za-z0-9][A-Za-z0-9._-]*')->middleware('throttle:20,1')->name('destroy');
 });
 Route::middleware(EnsureLocalPreparationAccess::class)->prefix('preparations')->name('preparations.')->group(function (): void {
     Route::get('/', [PreparationComparisonController::class, 'index'])->name('index');

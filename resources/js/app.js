@@ -56,6 +56,7 @@ function initializeRunner() {
 
     const form = panel.querySelector('[data-runner-form]');
     const submitButton = panel.querySelector('[data-runner-submit]');
+    const modelLimit = Number(panel.dataset.modelLimit || 10);
     const configSelect = panel.querySelector('[data-runner-config]');
     const modelModeInputs = [...panel.querySelectorAll('[data-model-mode]')];
     const promptModeInputs = [...panel.querySelectorAll('[data-prompt-mode]')];
@@ -440,6 +441,9 @@ function initializeRunner() {
         panel.querySelectorAll('[data-model-panel]').forEach((element) => {
             element.classList.toggle('hidden', element.dataset.modelPanel !== modelMode);
         });
+        panel.querySelectorAll('[data-selection-group]').forEach((element) => {
+            element.classList.toggle('hidden', modelMode === 'group');
+        });
         panel.querySelectorAll('[data-prompt-panel]').forEach((element) => {
             element.classList.toggle('hidden', element.dataset.promptPanel !== promptMode);
         });
@@ -452,7 +456,7 @@ function initializeRunner() {
         if (counter) counter.textContent = String(selectedCount);
 
         customModelInputs.forEach((input) => {
-            input.disabled = runnerActive || (selectedCount >= 5 && !input.checked);
+            input.disabled = runnerActive || (selectedCount >= modelLimit && !input.checked);
         });
 
         updateCostEstimate();
@@ -465,7 +469,7 @@ function initializeRunner() {
         if (counter) counter.textContent = String(selectedCount);
 
         goModelInputs.forEach((input) => {
-            input.disabled = runnerActive || (selectedCount >= 5 && !input.checked);
+            input.disabled = runnerActive || (selectedCount >= modelLimit && !input.checked);
         });
 
         updateGoCostEstimate();
@@ -627,6 +631,34 @@ function initializeRunner() {
         preflightTimer = window.setTimeout(() => void refreshPreflight(), 180);
     }
 
+    /** Rough per-model figures: each model gets its own workspace with node_modules and a 60-minute limit. */
+    function updateLoadEstimate() {
+        const estimate = panel.querySelector('[data-runner-load-estimate]');
+
+        if (!estimate) return;
+
+        const modelCount = selectedModelCount();
+        const parallel = Math.max(1, Math.min(Number(concurrencySelect?.value || 1), modelCount || 1));
+
+        if (modelCount === 0) {
+            estimate.classList.add('hidden');
+            return;
+        }
+
+        const diskGigabytes = (modelCount * 0.5).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+        const worstHours = Math.ceil(modelCount / parallel);
+        const heavy = modelCount > 5;
+
+        estimate.textContent = `Tahmini yük: yaklaşık ${diskGigabytes} GB çalışma alanı (model başına ~0,5 GB). `
+            + `${parallel} model aynı anda çalışırsa en kötü durumda yaklaşık ${worstHours} saat sürer (model başına 60 dk sınır).`
+            + (heavy ? ' Model sayısı arttıkça maliyet de doğrusal artar.' : '');
+        estimate.classList.remove('hidden');
+        estimate.classList.toggle('bg-[#fff9eb]', heavy);
+        estimate.classList.toggle('text-[#815d0c]', heavy);
+        estimate.classList.toggle('bg-white', !heavy);
+        estimate.classList.toggle('text-[var(--muted)]', !heavy);
+    }
+
     function updateConfigSummary() {
         const modelMode = selectedModelMode();
         const option = configSelect?.selectedOptions[0];
@@ -639,6 +671,7 @@ function initializeRunner() {
         const maxParallel = panel.querySelector('[data-runner-max-parallel]');
 
         updateConcurrencyOptions();
+        updateLoadEstimate();
 
         if (modelMode === 'custom' || modelMode === 'opencode_go') {
             if (modelCount) modelCount.textContent = selectedCount ? String(selectedCount) : '—';
@@ -774,7 +807,7 @@ function initializeRunner() {
     }));
     promptModeInputs.forEach((input) => input.addEventListener('change', updateModePanels));
     customModelInputs.forEach((input) => input.addEventListener('change', () => {
-        if (checkedCustomModels().length > 5) input.checked = false;
+        if (checkedCustomModels().length > modelLimit) input.checked = false;
         updateCustomModelSelection();
         renderFixedProviderList();
         loadSelectedEndpoints();
@@ -782,7 +815,7 @@ function initializeRunner() {
         schedulePreflight();
     }));
     goModelInputs.forEach((input) => input.addEventListener('change', () => {
-        if (checkedGoModels().length > 5) input.checked = false;
+        if (checkedGoModels().length > modelLimit) input.checked = false;
         updateGoModelSelection();
         updateConfigSummary();
         schedulePreflight();
@@ -815,8 +848,8 @@ function initializeRunner() {
         window.clearTimeout(preflightTimer);
         void refreshPreflight();
     });
-    form?.addEventListener('submit', () => {
-        if (!submitButton) return;
+    form?.addEventListener('submit', (event) => {
+        if (!submitButton || event.submitter?.hasAttribute('data-save-selection-group')) return;
 
         submitButton.disabled = true;
         submitButton.textContent = 'Başlatılıyor…';
@@ -985,7 +1018,46 @@ function initializeAttemptRefresh() {
     }, 2500);
 }
 
+function initializeModelGroups() {
+    document.querySelectorAll('form[data-confirm]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+        });
+    });
+
+    document.querySelectorAll('[data-group-editor]').forEach((editor) => {
+        const textarea = editor.querySelector('[data-group-models]');
+        const picker = editor.querySelector('[data-group-model-picker]');
+        const addButton = editor.querySelector('[data-group-model-add]');
+
+        if (!textarea || !picker || !addButton) return;
+
+        const addPickedModel = () => {
+            const model = picker.value.trim();
+
+            if (!model) return;
+
+            const lines = textarea.value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+
+            if (!lines.includes(model)) lines.push(model);
+
+            textarea.value = lines.join('\n');
+            picker.value = '';
+            picker.focus();
+        };
+
+        addButton.addEventListener('click', addPickedModel);
+        picker.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+
+            event.preventDefault();
+            addPickedModel();
+        });
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    initializeModelGroups();
     initializeRunner();
     initializePreparationCreate();
     initializePreparationShow();

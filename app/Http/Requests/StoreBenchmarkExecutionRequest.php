@@ -31,7 +31,7 @@ class StoreBenchmarkExecutionRequest extends FormRequest
             'save_prompt' => ['nullable', 'boolean'],
             'model_mode' => ['required', Rule::in(['group', 'custom', 'opencode_go'])],
             'config' => [Rule::requiredIf(fn (): bool => $this->input('model_mode') === 'group'), 'nullable', 'string', Rule::in(array_column($options['configs'], 'value'))],
-            'models' => [Rule::requiredIf(fn (): bool => $this->input('model_mode') === 'custom'), 'nullable', 'array', 'min:1', 'max:5'],
+            'models' => [Rule::requiredIf(fn (): bool => $this->input('model_mode') === 'custom'), 'nullable', 'array', 'min:1', 'max:'.BenchmarkRunner::CUSTOM_MODEL_LIMIT],
             'models.*' => [
                 'string',
                 'distinct',
@@ -39,7 +39,7 @@ class StoreBenchmarkExecutionRequest extends FormRequest
                     ->where('available', true)
                     ->where('agent_compatible', true)),
             ],
-            'go_models' => [Rule::requiredIf(fn (): bool => $this->input('model_mode') === 'opencode_go'), 'nullable', 'array', 'min:1', 'max:5'],
+            'go_models' => [Rule::requiredIf(fn (): bool => $this->input('model_mode') === 'opencode_go'), 'nullable', 'array', 'min:1', 'max:'.BenchmarkRunner::CUSTOM_MODEL_LIMIT],
             'go_models.*' => [
                 'string',
                 'distinct',
@@ -48,7 +48,7 @@ class StoreBenchmarkExecutionRequest extends FormRequest
                     ->where('agent_compatible', true)),
             ],
             'routing_mode' => ['exclude_unless:model_mode,custom', 'required', Rule::in(OpenRouterProviderRouting::MODES)],
-            'fixed_providers' => ['exclude_unless:model_mode,custom', Rule::requiredIf(fn (): bool => $this->input('model_mode') === 'custom' && $this->input('routing_mode') === 'fixed'), 'nullable', 'array', 'max:5',
+            'fixed_providers' => ['exclude_unless:model_mode,custom', Rule::requiredIf(fn (): bool => $this->input('model_mode') === 'custom' && $this->input('routing_mode') === 'fixed'), 'nullable', 'array', 'max:'.BenchmarkRunner::CUSTOM_MODEL_LIMIT,
                 function (string $attribute, mixed $value, Closure $fail): void {
                     foreach ((array) $value as $modelId => $slug) {
                         if (! is_string($modelId) || ! is_string($slug) || preg_match('/^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,159}$/', $slug) !== 1) {
@@ -82,12 +82,12 @@ class StoreBenchmarkExecutionRequest extends FormRequest
             'config.in' => 'Listeden geçerli bir model grubu seçin.',
             'models.required' => 'OpenRouter kataloğundan en az bir model seçin.',
             'models.min' => 'OpenRouter kataloğundan en az bir model seçin.',
-            'models.max' => 'Tek koşuda en fazla 5 özel model seçebilirsiniz.',
+            'models.max' => 'Tek koşuda en fazla '.BenchmarkRunner::CUSTOM_MODEL_LIMIT.' özel model seçebilirsiniz.',
             'models.*.exists' => 'Seçilen modellerden biri artık kullanılamıyor. Kataloğu yenileyin.',
             'models.*.distinct' => 'Aynı model birden fazla seçilemez.',
             'go_models.required' => 'OpenCode Go kataloğundan en az bir model seçin.',
             'go_models.min' => 'OpenCode Go kataloğundan en az bir model seçin.',
-            'go_models.max' => 'Tek koşuda en fazla 5 OpenCode Go modeli seçebilirsiniz.',
+            'go_models.max' => 'Tek koşuda en fazla '.BenchmarkRunner::CUSTOM_MODEL_LIMIT.' OpenCode Go modeli seçebilirsiniz.',
             'go_models.*.exists' => 'Seçilen OpenCode Go modellerinden biri artık kullanılamıyor. Kataloğu yenileyin.',
             'go_models.*.distinct' => 'Aynı OpenCode Go modeli birden fazla seçilemez.',
             'routing_mode.in' => 'Geçerli bir OpenRouter sağlayıcı tercihi seçin.',
