@@ -51,7 +51,7 @@ class ModelGroupController extends Controller
 
         return back()
             ->withInput($request->except('group_name'))
-            ->with('status', "Seçim “{$request->validated('group_name')}” grubu olarak kaydedildi. Kayıtlı grup listesinde görünür.");
+            ->with('group_status', "“{$request->validated('group_name')}” grubu kaydedildi. Kayıtlı grup listesinde görünür.");
     }
 
     public function edit(string $group, ModelGroupStore $groups): View

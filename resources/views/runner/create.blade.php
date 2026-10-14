@@ -508,15 +508,19 @@
                     </div>
 
                     <div @class(['grid gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] p-3', 'hidden' => $defaultModelMode === 'group']) data-selection-group>
-                        <label class="text-xs font-extrabold text-[var(--ink)]" for="selection-group-name">Bu seçimi grup olarak kaydet</label>
+                        <label class="text-xs font-extrabold text-[var(--ink)]" for="selection-group-name">Bu seçimi grup olarak kaydet <span class="font-semibold text-[var(--muted)]">(isteğe bağlı)</span></label>
                         <div class="flex flex-col gap-2 sm:flex-row">
-                            <input class="h-10 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-white px-3 font-mono text-xs outline-none focus:border-[var(--forest)]" id="selection-group-name" type="text" name="group_name" value="{{ old('group_name') }}" maxlength="63" placeholder="ornek-grup-adi" @disabled($active)>
+                            <input class="h-10 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-white px-3 font-mono text-xs outline-none focus:border-[var(--forest)]" id="selection-group-name" type="text" name="group_name" value="{{ old('group_name') }}" maxlength="80" placeholder="Örnek: Kurtuluş Savaşı modelleri" aria-describedby="selection-group-help" data-group-name-input @disabled($active)>
                             <button class="rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[11px] font-extrabold text-[var(--forest)] disabled:opacity-50" type="submit" formaction="{{ route('model-groups.selection.store') }}" formnovalidate data-save-selection-group @disabled($active)>Grup olarak kaydet</button>
                         </div>
+                        <p class="hidden font-mono text-[10px] text-[var(--forest)]" data-group-name-preview aria-live="polite"></p>
                         @error('group_name')
                             <p class="text-[10px] font-semibold text-[var(--red)]" role="alert">{{ $message }}</p>
                         @enderror
-                        <p class="text-[10px] leading-4 text-[var(--muted)]">Koşu başlatmaz; yalnız seçili modelleri kayıtlı gruplara ekler. OpenRouter grupları, buradaki sabit sağlayıcı seçimini değil ortak yönlendirme ayarını kullanır.</p>
+                        @if (session('group_status'))
+                            <p class="text-[10px] font-semibold text-[var(--success)]" role="status">{{ session('group_status') }}</p>
+                        @endif
+                        <p class="text-[10px] leading-4 text-[var(--muted)]" id="selection-group-help">Ad yazıp koşuyu başlatırsanız seçim koşuyla birlikte kaydedilir; yalnız kaydetmek için “Grup olarak kaydet” düğmesini kullanın. Ad, dosya adına çevrilir (örneğin “Kurtuluş Savaşı” → kurtulus-savasi). OpenRouter grupları sabit sağlayıcı seçimini değil ortak yönlendirme ayarını kullanır.</p>
                     </div>
                 </fieldset>
 

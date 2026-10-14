@@ -25,6 +25,23 @@ class ModelGroupStore
 
     private const TRASH_DIRECTORY = '.silinen';
 
+    /** Turns a free-form name such as "Kurtuluş Savaşı" into a valid group file name ("kurtulus-savasi"). */
+    public static function normalizeName(string $name): string
+    {
+        return Str::limit(Str::slug($name), 63, '');
+    }
+
+    public function exists(string $name): bool
+    {
+        try {
+            $this->existingPath($name);
+
+            return true;
+        } catch (BenchmarkRunnerException) {
+            return false;
+        }
+    }
+
     /**
      * @return list<array{name: string, label: string, models: list<array{folder: string, model: string, port: int}>, valid: bool, error: ?string, updatedAt: Carbon}>
      */
