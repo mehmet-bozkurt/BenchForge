@@ -523,6 +523,9 @@ PROMPT;
         $runnerPid = (int) ($state['runnerPid'] ?? $execution->runner_pid);
 
         if ($execution->isActive() && ! $this->isRunnerProcess($runnerPid)) {
+            // The worker may have written its final state between the first read and the liveness check.
+            $state = $this->readState($execution->state_path) ?? $state;
+            $status = is_string($state['status'] ?? null) ? $state['status'] : $execution->status;
             $summaryExists = File::exists($this->projectRoot().'/runs/'.$execution->run_id.'/_summary.tsv');
             $stopRequested = in_array($status, ['stopping', 'stopped'], true) || $execution->status === 'stopping';
             $workerStatus = $status;

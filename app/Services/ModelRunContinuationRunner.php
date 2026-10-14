@@ -127,6 +127,11 @@ class ModelRunContinuationRunner
         }
 
         if (! $this->isRunnerProcess($runnerPid, $attempt)) {
+            // The worker may have written its final state between the first read and the liveness check.
+            $state = $this->readState($attempt) ?? $state;
+            $status = is_string($state['status'] ?? null) && in_array($state['status'], [...ModelRunAttempt::ACTIVE_STATUSES, 'completed', 'failed', 'stopped'], true)
+                ? $state['status']
+                : $status;
             $hasResult = File::isFile($attempt->attempt_path.'/result.txt');
             $status = match (true) {
                 in_array($status, ['stopping', 'stopped'], true) => 'stopped',
