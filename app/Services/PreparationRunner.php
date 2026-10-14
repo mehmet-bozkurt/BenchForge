@@ -102,9 +102,11 @@ class PreparationRunner
             return $comparison->refresh()->load('packages');
         }
 
+        // Check liveness before reading the state: a worker that writes its final state and exits in
+        // between would otherwise look dead with unfinished packages and be marked as failed.
+        $runnerIsAlive = $this->isRunnerProcess($comparison->runner_pid, $comparison, $workingDirectory);
         $job = $this->readJob($comparison, $workingDirectory);
         $state = $this->readState($comparison, $workingDirectory);
-        $runnerIsAlive = $this->isRunnerProcess($comparison->runner_pid, $comparison, $workingDirectory);
 
         if ($state !== null && $job !== null) {
             $this->syncPackages($comparison, $state, $job, $workingDirectory);

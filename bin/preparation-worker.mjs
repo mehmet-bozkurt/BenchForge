@@ -221,12 +221,18 @@ function queueState(root, patch) {
   return stateWriteQueue;
 }
 
+// macOS answers EPERM instead of ESRCH when the group only holds an exited, not yet reaped child,
+// e.g. when the CLI writes its last output and exits just as the worker aborts it.
 function signalChildGroup(child, signal) {
   if (!child?.pid) return;
   try {
     process.kill(-child.pid, signal);
   } catch (error) {
-    if (error.code !== "ESRCH") throw error;
+    if (error.code === "EPERM") {
+      try { child.kill(signal); } catch { /* the child has already exited */ }
+    } else if (error.code !== "ESRCH") {
+      throw error;
+    }
   }
 }
 
@@ -236,7 +242,7 @@ function isChildGroupAlive(child) {
     process.kill(-child.pid, 0);
     return true;
   } catch (error) {
-    if (error.code === "ESRCH") return false;
+    if (error.code === "ESRCH" || error.code === "EPERM") return false;
     throw error;
   }
 }
