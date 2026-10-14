@@ -1047,6 +1047,30 @@ function initializeGroupNamePreview() {
     update();
 }
 
+/** Native confirmation dialogs (data-dialog-open="id") and links that open a <details> section before jumping to it. */
+function initializeDialogs() {
+    document.querySelectorAll('[data-dialog-open]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const dialog = document.getElementById(button.dataset.dialogOpen);
+            if (dialog && typeof dialog.showModal === 'function') dialog.showModal();
+        });
+    });
+    document.querySelectorAll('dialog [data-dialog-close]').forEach((button) => {
+        button.addEventListener('click', () => button.closest('dialog')?.close());
+    });
+    document.querySelectorAll('[data-open-details]').forEach((link) => {
+        link.addEventListener('click', () => {
+            const details = document.getElementById(link.dataset.openDetails);
+            if (details) details.open = true;
+        });
+    });
+    const hash = window.location?.hash ?? '';
+    if (hash.startsWith('#recovery-')) {
+        const details = document.getElementById(hash.slice(1));
+        if (details) details.open = true;
+    }
+}
+
 function initializeModelGroups() {
     document.querySelectorAll('form[data-confirm]').forEach((form) => {
         form.addEventListener('submit', (event) => {
@@ -1087,6 +1111,7 @@ function initializeModelGroups() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeModelGroups();
+    initializeDialogs();
     initializeGroupNamePreview();
     initializeRunner();
     initializePreparationCreate();

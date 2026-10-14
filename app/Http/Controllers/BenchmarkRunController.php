@@ -11,6 +11,7 @@ use App\Services\BenchmarkPreview;
 use App\Services\BenchmarkRunStorage;
 use App\Services\ModelRunBoundaryReport;
 use App\Services\ModelRunContinuationRunner;
+use App\Services\ModelRunOutcome;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\RedirectResponse;
@@ -23,6 +24,7 @@ class BenchmarkRunController extends Controller
         BenchmarkPreview $benchmarkPreview,
         ModelRunContinuationRunner $continuationRunner,
         ModelRunBoundaryReport $boundaryReport,
+        ModelRunOutcome $outcome,
     ): View {
         $continuationRunner->reconcileForRun($benchmarkRun);
 
@@ -70,6 +72,9 @@ class BenchmarkRunController extends Controller
             'attemptLogTails' => $attemptLogTails,
             'modelBoundaryReports' => $modelBoundaryReports,
             'attemptBoundaryReports' => $attemptBoundaryReports,
+            'outcomes' => $benchmarkRun->modelRuns->mapWithKeys(fn (ModelRun $model): array => [
+                $model->id => $outcome->describe($benchmarkRun, $model),
+            ]),
         ]);
     }
 
