@@ -6,6 +6,7 @@ use App\Exceptions\BenchmarkRunnerException;
 use App\Http\Requests\StoreBenchmarkExecutionRequest;
 use App\Models\BenchmarkPrompt;
 use App\Services\BenchmarkRunner;
+use App\Services\ModelGroupStore;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -33,7 +34,7 @@ class BenchmarkExecutionController extends Controller
         ]);
     }
 
-    public function store(StoreBenchmarkExecutionRequest $request, BenchmarkRunner $benchmarkRunner): RedirectResponse
+    public function store(StoreBenchmarkExecutionRequest $request, BenchmarkRunner $benchmarkRunner, ModelGroupStore $groups): RedirectResponse
     {
         try {
             $input = $request->benchmarkInput();
@@ -54,8 +55,20 @@ class BenchmarkExecutionController extends Controller
             return back()->withInput()->withErrors(['runner' => $exception->getMessage()]);
         }
 
+        $status = "{$execution->run_id} benchmark koşusu başlatıldı.";
+        $group = $request->groupToSave();
+
+        if ($group !== null) {
+            try {
+                $groups->save($group['name'], $group['models']);
+                $status .= " Model seçimi “{$group['name']}” grubu olarak kaydedildi.";
+            } catch (BenchmarkRunnerException $exception) {
+                $status .= " Ancak grup kaydedilemedi: {$exception->getMessage()}";
+            }
+        }
+
         return redirect()
             ->route('runner.create')
-            ->with('status', "{$execution->run_id} benchmark koşusu başlatıldı.");
+            ->with('status', $status);
     }
 }

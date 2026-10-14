@@ -118,7 +118,7 @@ test('it saves a catalog selection from the runner as a group', function () {
         'go_models' => ['glm-5.3-flash', 'kimi-k3'],
         'models' => ['acme/ignored'],
         'run_id' => 'deneme',
-    ])->assertRedirect(route('runner.create'))->assertSessionHas('status');
+    ])->assertRedirect(route('runner.create'))->assertSessionHas('group_status');
 
     $contents = File::get($this->root.'/config/go-secimi.conf');
 
@@ -126,6 +126,16 @@ test('it saves a catalog selection from the runner as a group', function () {
         ->toContain('|opencode-go/kimi-k3|3252')
         ->not->toContain('acme/ignored')
         ->and(session()->getOldInput('run_id'))->toBe('deneme');
+});
+
+test('it normalises a free-form group name before saving a selection', function () {
+    $this->from(route('runner.create'))->post(route('model-groups.selection.store'), [
+        'group_name' => 'Kurtuluş Savaşı',
+        'model_mode' => 'opencode_go',
+        'go_models' => ['glm-5.3-flash'],
+    ])->assertRedirect(route('runner.create'))->assertSessionHas('group_status');
+
+    expect(File::exists($this->root.'/config/kurtulus-savasi.conf'))->toBeTrue();
 });
 
 test('it does not save a saved-group selection as a new group', function () {

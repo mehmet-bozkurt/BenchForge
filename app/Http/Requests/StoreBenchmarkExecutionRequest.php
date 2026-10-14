@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Services\BenchmarkRunner;
+use App\Services\ModelGroupStore;
 use App\Services\OpenRouterProviderRouting;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -59,6 +60,12 @@ class StoreBenchmarkExecutionRequest extends FormRequest
                 }],
             'max_parallel' => ['required', 'integer', 'between:1,5'],
             'routes' => ['required', 'string', 'max:4000'],
+            'group_name' => ['exclude_unless:model_mode,custom,opencode_go', 'nullable', 'string', 'max:63', 'regex:'.ModelGroupStore::NAME_PATTERN,
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    if (is_string($value) && $value !== '' && app(ModelGroupStore::class)->exists($value)) {
+                        $fail("“{$value}” adında bir grup zaten var; başka bir ad yazın ya da alanı boş bırakın.");
+                    }
+                }],
         ];
     }
 
@@ -98,6 +105,7 @@ class StoreBenchmarkExecutionRequest extends FormRequest
             'max_parallel.between' => 'Eşzamanlılık değeri 1 ile 5 arasında olmalıdır.',
             'routes.required' => 'En az bir doğrulama rotası girin.',
             'routes.max' => 'Rota listesi çok uzun.',
+            'group_name.regex' => 'Grup adı en az 2 harf veya rakam içermelidir.',
         ];
     }
 
@@ -135,6 +143,26 @@ class StoreBenchmarkExecutionRequest extends FormRequest
         ];
     }
 
+    /**
+     * The catalog selection to save as a model group alongside the run, or null when no group name was given.
+     *
+     * @return array{name: string, models: list<string>}|null
+     */
+    public function groupToSave(): ?array
+    {
+        $name = $this->validated('group_name');
+
+        if (! is_string($name) || $name === '') {
+            return null;
+        }
+
+        $models = $this->validated('model_mode') === 'opencode_go'
+            ? array_map(fn (string $model): string => 'opencode-go/'.$model, array_values($this->validated('go_models') ?? []))
+            : array_map(fn (string $model): string => 'openrouter/'.$model, array_values($this->validated('models') ?? []));
+
+        return ['name' => $name, 'models' => $models];
+    }
+
     protected function prepareForValidation(): void
     {
         $models = is_array($this->input('models'))
@@ -156,6 +184,7 @@ class StoreBenchmarkExecutionRequest extends FormRequest
             'go_models' => $goModels,
             'routing_mode' => $this->input('routing_mode', 'auto'),
             'max_parallel' => $this->integer('max_parallel', 2),
+            'group_name' => ModelGroupStore::normalizeName($this->string('group_name')->toString()),
         ]);
     }
 

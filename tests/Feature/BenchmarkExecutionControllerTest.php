@@ -6,6 +6,7 @@ use App\Models\OpenCodeGoModel;
 use App\Models\OpenRouterModel;
 use App\Services\BenchmarkRunner;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\File;
 
 use function Pest\Laravel\mock;
 
@@ -480,4 +481,29 @@ test('it rejects concurrency above the selected model count', function () {
         ->assertSessionHasErrors([
             'max_parallel' => 'Eşzamanlılık seçilen 1 modelden fazla olamaz.',
         ]);
+});
+
+test('it saves the catalog selection as a group when a group name is given at start', function () {
+    $model = OpenCodeGoModel::factory()->create(['model_id' => 'glm-5.3-flash']);
+    $runner = mock(BenchmarkRunner::class);
+    $runner->shouldReceive('options')->andReturn(['prompts' => [['value' => 'prompts/nova.txt', 'label' => 'Nova']], 'configs' => [], 'suggestedRoutes' => ['/']]);
+    $runner->shouldReceive('start')->once()->andReturn(BenchmarkExecution::factory()->make(['run_id' => 'group-run']));
+    $payload = [
+        'run_id' => 'group-run',
+        'prompt' => 'prompts/nova.txt',
+        'model_mode' => 'opencode_go',
+        'go_models' => [$model->model_id],
+        'max_parallel' => 1,
+        'routes' => '/',
+        'group_name' => 'Kurtuluş Savaşı',
+    ];
+
+    $this->post(route('runner.store'), $payload)
+        ->assertRedirect(route('runner.create'))
+        ->assertSessionHas('status', 'group-run benchmark koşusu başlatıldı. Model seçimi “kurtulus-savasi” grubu olarak kaydedildi.');
+
+    expect(File::get(config('benchforge.root_path').'/config/kurtulus-savasi.conf'))->toContain('|opencode-go/glm-5.3-flash|3251');
+
+    $this->from(route('runner.create'))->post(route('runner.store'), [...$payload, 'run_id' => 'group-run-2'])
+        ->assertSessionHasErrors(['group_name' => '“kurtulus-savasi” adında bir grup zaten var; başka bir ad yazın ya da alanı boş bırakın.']);
 });

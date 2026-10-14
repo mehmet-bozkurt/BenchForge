@@ -1018,6 +1018,35 @@ function initializeAttemptRefresh() {
     }, 2500);
 }
 
+/** Mirrors Str::slug for group names, so the runner can show the file name before saving. */
+export function groupFileName(value) {
+    const turkish = { ç: 'c', ğ: 'g', ı: 'i', i̇: 'i', ö: 'o', ş: 's', ü: 'u' };
+    return value
+        .toLocaleLowerCase('tr-TR')
+        .replace(/[çğıöşü]|i̇/g, (letter) => turkish[letter] ?? letter)
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 63);
+}
+
+function initializeGroupNamePreview() {
+    const input = document.querySelector('[data-group-name-input]');
+    const preview = document.querySelector('[data-group-name-preview]');
+
+    if (!input || !preview) return;
+
+    const update = () => {
+        const name = groupFileName(input.value);
+        preview.classList.toggle('hidden', input.value.trim() === '');
+        preview.textContent = name.length >= 2 ? `Kaydedilecek ad: ${name}` : 'Ad en az 2 harf veya rakam içermeli.';
+    };
+
+    input.addEventListener('input', update);
+    update();
+}
+
 function initializeModelGroups() {
     document.querySelectorAll('form[data-confirm]').forEach((form) => {
         form.addEventListener('submit', (event) => {
@@ -1058,6 +1087,7 @@ function initializeModelGroups() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeModelGroups();
+    initializeGroupNamePreview();
     initializeRunner();
     initializePreparationCreate();
     initializePreparationShow();

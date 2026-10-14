@@ -37,12 +37,17 @@ class StoreModelSelectionGroupRequest extends FormRequest
         ];
     }
 
+    protected function prepareForValidation(): void
+    {
+        $this->merge(['group_name' => ModelGroupStore::normalizeName($this->string('group_name')->toString())]);
+    }
+
     /** @return array<string, string> */
     public function messages(): array
     {
         return [
             'group_name.required' => 'Seçimi kaydetmek için bir grup adı yazın.',
-            'group_name.regex' => 'Grup adı 2–63 karakter olmalı; yalnızca küçük harf, sayı ve tire kullanın.',
+            'group_name.regex' => 'Grup adı en az 2 harf veya rakam içermelidir.',
             'model_mode.in' => 'Grup olarak yalnızca katalogdan yapılan seçim kaydedilebilir.',
             'models.required' => 'Kaydetmek için OpenRouter kataloğundan en az bir model seçin.',
             'go_models.required' => 'Kaydetmek için OpenCode Go kataloğundan en az bir model seçin.',
