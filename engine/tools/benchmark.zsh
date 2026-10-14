@@ -13,9 +13,19 @@ export NEXT_TELEMETRY_DISABLED=1
 
 # Model adiminin ozel cikis kodlari:
 #   75 saglayici hatasi (sunucu/kapasite); model puanlanmaz.
+#   77 baglanti sonda koptu: saglayici hatasi geldi ama model bir teslim birakti; teslim puanlanir.
 #   86 teslim yok: model sablonda hicbir dosyayi degistirmedi.
 SAGLAYICI_HATASI_KODU=75
+BAGLANTI_SONDA_KOPTU_KODU=77
 TESLIM_YOK_KODU=86
+# Cikti sinirina takilip hicbir dosya yazmayan modele, ayni oturumda bir kez verilen standart devam mesaji.
+OTOMATIK_DEVAM_MESAJI="Onceki yanitin cikti sinirina takildi ve calisma alaninda hicbir dosya degismedi. Gorevi surdur: dosyalari simdi, kucuk parcalar halinde (her yazma veya duzenlemede en fazla yaklasik 300 satir) olustur ve calisan kodu erkenden kaydet."
+
+# Calisma alani baslangic sablonuyla ayniysa (model hicbir sey teslim etmediyse) basarili doner.
+sablon_ayni() {
+  diff -rq -x node_modules -x .next -x out -x next-env.d.ts -x '*.tsbuildinfo' -x .DS_Store \
+    "$SABLON" "$1" >/dev/null 2>&1
+}
 
 if [[ "$VERI_DIZIN" != /* || ! -d "$VERI_DIZIN" ]]; then
   echo "HATA: Veri koku mutlak ve var olan bir klasor olmali -> $VERI_DIZIN"
@@ -250,17 +260,6 @@ model_calistir() {
     OPENCODE_RC=65
   fi
 
-  if [[ "$OPENCODE_RC" != "0" && "$OPENCODE_RC" != "65" && "$OPENCODE_RC" != "78" && "$OPENCODE_RC" != "124" ]] \
-    && [[ "$(node "$HATA_SINIFLANDIRICI" "$EVENT_LOG" 2>/dev/null)" == "provider" ]]; then
-    echo "[$KLASOR] Saglayici hatasi: model cagrisi saglayici tarafinda basarisiz oldu; puanlanmaz."
-    OPENCODE_RC=$SAGLAYICI_HATASI_KODU
-  elif [[ "$OPENCODE_RC" == "0" ]] && diff -rq \
-      -x node_modules -x .next -x out -x next-env.d.ts -x '*.tsbuildinfo' -x .DS_Store \
-      "$SABLON" "$PROJE" >/dev/null 2>&1; then
-    echo "[$KLASOR] Teslim yok: model sablonda hicbir dosyayi degistirmedi."
-    OPENCODE_RC=$TESLIM_YOK_KODU
-  fi
-
   local SESSION_ID
   SESSION_ID=$(
     (
@@ -271,6 +270,56 @@ model_calistir() {
 
   if [[ "$SESSION_ID" == ses_* ]]; then
     printf '%s\n' "$SESSION_ID" > "${SESSION_DIZIN}/${KLASOR}.session"
+  fi
+
+  # Model cikti sinirina takilip hicbir sey yazmadan durduysa ayni oturumda bir kez otomatik devam edilir.
+  # Kural her modele ayni uygulanir; kaydi <model>.auto-continue.log dosyasindadir.
+  if [[ "$OPENCODE_RC" == "0" && "$SESSION_ID" == ses_* ]] && sablon_ayni "$PROJE" \
+      && [[ "$(node "$HATA_SINIFLANDIRICI" --stop-reason "$EVENT_LOG" 2>/dev/null)" == "length" ]]; then
+    local KALAN_SURE=$(( MODEL_SURE_SINIRI_SANIYE - ($(date +%s) - BASLANGIC) ))
+
+    if (( KALAN_SURE >= 120 )); then
+      echo "[$KLASOR] Cikti siniri: model hicbir dosya yazmadan durdu; ayni oturumda bir kez otomatik devam ediliyor."
+      printf 'reason=output-limit\nsession=%s\nremaining_seconds=%s\nmessage=%s\n' \
+        "$SESSION_ID" "$KALAN_SURE" "$OTOMATIK_DEVAM_MESAJI" > "${LOG_DIZIN}/${KLASOR}.auto-continue.log"
+      EVENT_LOG="${LOG_DIZIN}/${KLASOR}.opencode.continue.events.jsonl"
+      (
+        cd "$PROJE"
+        node "$BOUNDARY_MONITOR" \
+          --workspace "$PROJE" \
+          --event-log "$EVENT_LOG" \
+          --stderr-log "${LOG_DIZIN}/${KLASOR}.opencode.continue.stderr.log" \
+          --report "${BOUNDARY_DIZIN}/${KLASOR}.continue.json" \
+          --policy-version "workspace-boundary-v1" \
+          --opencode-config "$OPENCODE_CONFIG_DOSYASI" \
+          --runtime-config "${MODEL_POLICY_DIZIN}/opencode-runtime.json" \
+          --base-path "/${KLASOR}" \
+          --timeout-seconds "$KALAN_SURE" \
+          --environment-profile "$ORTAM_PROFILI" \
+          -- opencode run \
+          --agent benchforge-workspace \
+          --model "$MODEL" \
+          --session "$SESSION_ID" \
+          --format json \
+          "$OTOMATIK_DEVAM_MESAJI"
+      ) > "${LOG_DIZIN}/${KLASOR}.opencode.continue.log" 2>&1
+
+      OPENCODE_RC=$?
+    fi
+  fi
+
+  if [[ "$OPENCODE_RC" != "0" && "$OPENCODE_RC" != "65" && "$OPENCODE_RC" != "78" && "$OPENCODE_RC" != "124" ]] \
+    && [[ "$(node "$HATA_SINIFLANDIRICI" "$EVENT_LOG" 2>/dev/null)" == "provider" ]]; then
+    if sablon_ayni "$PROJE"; then
+      echo "[$KLASOR] Saglayici hatasi: model cagrisi saglayici tarafinda basarisiz oldu; puanlanmaz."
+      OPENCODE_RC=$SAGLAYICI_HATASI_KODU
+    else
+      echo "[$KLASOR] Baglanti sonda koptu: saglayici hatasi geldi ama model bir teslim birakti; teslim puanlanir."
+      OPENCODE_RC=$BAGLANTI_SONDA_KOPTU_KODU
+    fi
+  elif [[ "$OPENCODE_RC" == "0" ]] && sablon_ayni "$PROJE"; then
+    echo "[$KLASOR] Teslim yok: model sablonda hicbir dosyayi degistirmedi."
+    OPENCODE_RC=$TESLIM_YOK_KODU
   fi
 
   echo "[$(date +%H:%M:%S)] $KLASOR: OpenCode tamamlandi. Kontroller basliyor."

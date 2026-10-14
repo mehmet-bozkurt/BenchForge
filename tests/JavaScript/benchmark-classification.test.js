@@ -17,6 +17,11 @@ async function writeCommand(directory, name, body) {
 
 /** Runs the real initial benchmark script with a scripted model and returns the model step's exit code. */
 async function runWithModel(modelScript) {
+    return (await runWithModelDetails(modelScript)).code;
+}
+
+/** Same, but also reports whether the engine continued the session automatically. */
+async function runWithModelDetails(modelScript) {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'benchforge-classification-')));
     const commands = join(root, 'commands');
 
@@ -39,7 +44,7 @@ async function runWithModel(modelScript) {
         await writeCommand(commands, 'opencode', [
             'const args = process.argv.slice(2);',
             'if (args[0] === "--version") { console.log("0.0.0-fixture"); process.exit(0); }',
-            'if (args[0] === "session") { console.log("[]"); process.exit(0); }',
+            'if (args[0] === "session") { console.log(JSON.stringify([{ id: "ses_fixture1", directory: process.cwd(), title: "benchforge:fixture-run:fixture-model:initial", updated: 1 }])); process.exit(0); }',
             modelScript,
         ].join('\n'));
 
@@ -53,7 +58,8 @@ async function runWithModel(modelScript) {
         clearTimeout(watchdog);
 
         const result = await readFile(join(root, 'runs', 'fixture-run', '_results', 'fixture-model.result'), 'utf8');
-        return result.trim().split('|')[2];
+        const autoContinue = await readFile(join(root, 'runs', 'fixture-run', '_logs', 'fixture-model.auto-continue.log'), 'utf8').catch(() => null);
+        return { code: result.trim().split('|')[2], autoContinue };
     } finally {
         await rm(root, { recursive: true, force: true });
     }
@@ -71,4 +77,38 @@ test('records a provider-side failure separately from a model failure', async ()
 test('keeps an ordinary model failure and a real submission unchanged', async () => {
     assert.equal(await runWithModel('process.exit(3);'), '3');
     assert.equal(await runWithModel('require("node:fs").writeFileSync("src/page.tsx", "export default function Page() { return 1; }\\n"); process.exit(0);'), '0');
+});
+
+const lengthStop = JSON.stringify({ type: 'step_finish', part: { reason: 'length', tokens: { output: 32000 } } });
+const writeSubmission = 'require("node:fs").writeFileSync("src/page.tsx", "export default function Page() { return 1; }\\n");';
+
+test('continues a model once in the same session when it hit the output limit without writing anything', async () => {
+    const details = await runWithModelDetails([
+        'if (args.includes("--session")) {',
+        `  if (!args.includes("ses_fixture1")) process.exit(9);`,
+        `  ${writeSubmission}`,
+        '  process.exit(0);',
+        '}',
+        `console.log(${JSON.stringify(lengthStop)});`,
+        'process.exit(0);',
+    ].join('\n'));
+
+    assert.equal(details.code, '0');
+    assert.match(details.autoContinue, /reason=output-limit/);
+    assert.match(details.autoContinue, /session=ses_fixture1/);
+});
+
+test('does not continue a model that stopped normally or already wrote files', async () => {
+    const stopped = await runWithModelDetails('process.exit(0);');
+    assert.equal(stopped.code, '86');
+    assert.equal(stopped.autoContinue, null);
+
+    const wrote = await runWithModelDetails(`${writeSubmission} console.log(${JSON.stringify(lengthStop)}); process.exit(0);`);
+    assert.equal(wrote.code, '0');
+    assert.equal(wrote.autoContinue, null);
+});
+
+test('scores a submission whose provider connection dropped at the end', async () => {
+    const providerError = JSON.stringify({ type: 'error', error: { name: 'APIError', data: { statusCode: 500, message: 'Upstream request failed: Endpoint is unavailable.' } } });
+    assert.equal(await runWithModel(`${writeSubmission} console.log(${JSON.stringify(providerError)}); process.exit(1);`), '77');
 });

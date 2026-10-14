@@ -244,6 +244,7 @@
                                                 [$cellClass, $cellMark, $cellLabel] = match (true) {
                                                     $stage === 'opencode' && $code === \App\Models\StageResult::PROVIDER_ERROR_CODE => ['provider', '!', 'Sağlayıcı hatası, puanlanmaz'],
                                                     $stage === 'opencode' && $code === \App\Models\StageResult::NO_SUBMISSION_CODE => ['fail', '∅', 'Teslim yok'],
+                                                    $stage === 'opencode' && $code === \App\Models\StageResult::INTERRUPTED_AFTER_SUBMISSION_CODE => ['pass', '✓', 'Bağlantı sonda koptu, teslim puanlandı'],
                                                     default => [$status, match ($status) { 'pass' => '✓', 'fail' => '✗', 'skip' => '–', default => '?' }, $statusLabels[$status] ?? 'Veri yok'],
                                                 };
                                             @endphp

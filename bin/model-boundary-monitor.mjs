@@ -94,6 +94,10 @@ async function prepareOutputPaths(workspace, eventPath, stderrPath, reportPath) 
   if (reportRelative === `_boundary/${modelSlug}.json`) {
     expectedEvent = join(runPath, "_logs", `${modelSlug}.opencode.events.jsonl`);
     expectedStderr = join(runPath, "_logs", `${modelSlug}.opencode.stderr.log`);
+  } else if (reportRelative === `_boundary/${modelSlug}.continue.json`) {
+    // The engine's single automatic continuation after an output-limit stop keeps its own logs.
+    expectedEvent = join(runPath, "_logs", `${modelSlug}.opencode.continue.events.jsonl`);
+    expectedStderr = join(runPath, "_logs", `${modelSlug}.opencode.continue.stderr.log`);
   } else {
     const attemptParts = reportRelative.split("/");
     if (attemptParts.length !== 4 || attemptParts[0] !== "_attempts" || attemptParts[1] !== modelSlug

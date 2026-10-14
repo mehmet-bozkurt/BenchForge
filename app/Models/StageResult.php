@@ -18,6 +18,12 @@ class StageResult extends Model
     public const PROVIDER_ERROR_CODE = 75;
 
     /**
+     * Model-step exit code for a provider failure that came after the model had already changed the workspace.
+     * The submission is validated and scored like a normal one; the code only records the interrupted connection.
+     */
+    public const INTERRUPTED_AFTER_SUBMISSION_CODE = 77;
+
+    /**
      * Model-step exit code for a model that changed nothing in the starting template.
      */
     public const NO_SUBMISSION_CODE = 86;

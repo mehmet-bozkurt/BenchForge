@@ -210,8 +210,9 @@ class BenchmarkArchive
                     'rawValue' => $row[$stageName] ?? null,
                     'message' => match (true) {
                         $status === 'skip' => 'Önceki aşama başarısız olduğu için çalıştırılmadı.',
-                        $stageName === 'opencode' && $code === StageResult::PROVIDER_ERROR_CODE => 'Sağlayıcı hatası: model çağrısı sağlayıcı tarafında başarısız oldu; bu koşu puanlanmaz.',
+                        $stageName === 'opencode' && $code === StageResult::PROVIDER_ERROR_CODE => 'Sağlayıcı veya hesap hatası: model çağrısı sağlayıcı tarafında ya da hesap ayarı yüzünden başarısız oldu; bu koşu puanlanmaz.',
                         $stageName === 'opencode' && $code === StageResult::NO_SUBMISSION_CODE => 'Teslim yok: model başlangıç şablonunda hiçbir dosyayı değiştirmedi.',
+                        $stageName === 'opencode' && $code === StageResult::INTERRUPTED_AFTER_SUBMISSION_CODE => 'Bağlantı sonda koptu: sağlayıcı hatası geldi ama model bir teslim bıraktı; teslim normal puanlanır.',
                         default => null,
                     },
                 ];
@@ -450,7 +451,7 @@ class BenchmarkArchive
             return 'skip';
         }
 
-        if (in_array($value, ['0', 'pass', 'passed', 'ok'], true)) {
+        if (in_array($value, ['0', 'pass', 'passed', 'ok', (string) StageResult::INTERRUPTED_AFTER_SUBMISSION_CODE], true)) {
             return 'pass';
         }
 
