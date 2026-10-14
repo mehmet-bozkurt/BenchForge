@@ -37,7 +37,6 @@ test('it blocks secrets and execution injection variables in a real Symfony chil
         'BASH_ENV', 'ENV', 'ZDOTDIR', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES',
         'GIT_CONFIG_COUNT', 'OPENCODE_CONFIG', 'OPENCODE_CONFIG_CONTENT', 'HTTP_PROXY',
     ];
-    config()->set('benchforge.home_path', '/private/tmp');
     config()->set('benchforge.command_path', '/usr/bin:/bin');
 
     withBenchmarkEnvironmentFixture(array_fill_keys($blocked, 'benchforge-test-only-secret'), function () use ($blocked): void {
@@ -52,7 +51,6 @@ test('it blocks secrets and execution injection variables in a real Symfony chil
 });
 
 test('it blocks inherited application secrets through the Laravel process facade', function () {
-    config()->set('benchforge.home_path', '/private/tmp');
     config()->set('benchforge.command_path', '/usr/bin:/bin');
 
     withBenchmarkEnvironmentFixture(['BENCHFORGE_TEST_FACADE_SECRET' => 'benchforge-facade-test-only-secret'], function (): void {
@@ -66,7 +64,7 @@ test('it blocks inherited application secrets through the Laravel process facade
 });
 
 test('it preserves explicitly safe paths locale and terminal preferences and uses configured home and path', function () {
-    config()->set('benchforge.home_path', '/private/tmp/benchforge-configured-home');
+    $configuredHome = (string) config('benchforge.home_path');
     config()->set('benchforge.command_path', '/usr/bin:/bin');
     $safe = [
         'HOME' => '/private/tmp/untrusted-home', 'PATH' => '/private/tmp/untrusted-bin',
@@ -78,13 +76,13 @@ test('it preserves explicitly safe paths locale and terminal preferences and use
         'COLORTERM' => 'truecolor', 'NO_COLOR' => '1',
     ];
 
-    withBenchmarkEnvironmentFixture($safe, function () use ($safe): void {
+    withBenchmarkEnvironmentFixture($safe, function () use ($safe, $configuredHome): void {
         $script = '$names = json_decode($argv[1], true); echo json_encode(array_combine($names, array_map("getenv", $names)));';
         $process = new Process([PHP_BINARY, '-r', $script, json_encode(array_keys($safe), JSON_THROW_ON_ERROR)], null, app(BenchmarkProcessEnvironment::class)->make());
         $process->mustRun();
 
         expect(json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR))->toBe(array_replace($safe, [
-            'HOME' => '/private/tmp/benchforge-configured-home', 'PATH' => '/usr/bin:/bin',
+            'HOME' => $configuredHome, 'PATH' => '/usr/bin:/bin',
         ]));
     });
 });

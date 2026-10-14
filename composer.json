@@ -54,6 +54,22 @@
             "@php artisan config:clear --ansi @no_additional_args",
             "@php artisan test"
         ],
+        "test:js": [
+            "npm run test:js"
+        ],
+        "lint": [
+            "pint --test"
+        ],
+        "check:syntax": [
+            "for file in engine/tools/*.zsh; do zsh -n \"$file\" || exit 1; done",
+            "for file in bin/*.mjs engine/tools/*.mjs engine/tools/browser-smoke/*.mjs; do node --check \"$file\" || exit 1; done"
+        ],
+        "check": [
+            "@lint",
+            "@check:syntax",
+            "@test",
+            "@test:js"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
