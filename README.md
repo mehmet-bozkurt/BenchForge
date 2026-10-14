@@ -1,5 +1,7 @@
 # BenchForge
 
+[![CI](https://github.com/mehmet-bozkurt/BenchForge/actions/workflows/ci.yml/badge.svg)](https://github.com/mehmet-bozkurt/BenchForge/actions/workflows/ci.yml)
+
 BenchForge, yapay zekâ kodlama modellerini gerçek ürün geliştirmeye benzeyen görevlerde karşılaştıran, yerelde çalışan bir değerlendirme ortamıdır. Aynı görev metni ve aynı başlangıç projesiyle birden fazla model çalıştırılır. Teslimler teknik kontroller, süre, token, maliyet ve insan puanıyla yan yana incelenir.
 
 > **Durum:** Erken aşamada, tek kullanıcılı yerel bir araç. Arayüz Türkçedir.
@@ -96,13 +98,15 @@ php artisan benchforge:sync
 
 ## Testler
 
-```bash
-php artisan test --compact
-```
+Tüm kontroller (Pint biçim kontrolü, zsh ve Node sözdizimi, PHP ve JavaScript testleri) tek komutla çalışır:
 
 ```bash
-npm run test:js
+composer check
 ```
+
+Aynı kontroller her pull request'te ve `main` dalına her gönderimde GitHub Actions ile macOS ve Linux üzerinde çalışır.
+
+PHP testlerinde BenchForge'un veri kökü, koşucu, ayar, home ve OpenCode veritabanı yolları her test için `storage/framework/testing/` altında yeniden oluşturulan geçici bir klasöre yönlendirilir; böylece testler gerçek koşularınıza ve OpenCode verinize dokunmaz, bir benchmark çalışırken de güvenle çalıştırılabilir. Bu yollardan biri testten önce ya da sonra klasörün dışını gösterirse test başarısız olur. JavaScript testleri kendi geçici klasörlerini kullanır.
 
 ## Güvenlik notları
 

@@ -240,6 +240,8 @@ test('monitor gives an isolated model a private home outside its workspace and k
         await mkdir(workspace);
         const environment = { ...process.env, ...fakeSecrets, HOME: '/fixture/host-home' };
         delete environment.XDG_DATA_HOME;
+        delete environment.XDG_CACHE_HOME;
+        delete environment.XDG_CONFIG_HOME;
         const isolated = JSON.parse((await execute(process.execPath, monitorArguments('', ['--environment-profile', 'isolated-v1']), { env: environment })).stdout);
         const privateHome = join(root, '_opencode-home', 'fixture-model');
 
