@@ -112,7 +112,7 @@ test('it shows a benchmark run report with stage logs and route metadata', funct
         ->assertSee('Sabit sağlayıcı; fallback kapalı')
         ->assertSee('İstenen sabit sağlayıcılar')
         ->assertSee('minimax/minimax-m3:coreweave/fp4')
-        ->assertSee('Yarım kalan işi güvenli biçimde sürdür')
+        ->assertSee('Kaldığı yerden devam ettir')
         ->assertSee('Aktif kurtarma: 0/2')
         ->assertSee('İki farklı model aynı anda devam edebilir')
         ->assertSee('Yalnız doğrulamayı çalıştır')
