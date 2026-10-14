@@ -63,6 +63,8 @@ class BenchmarkRunStorage
             }
 
             $directories = $this->workspaceDirectories($runPath);
+            // Previews of models that did not pass every stage live only in their workspace; keep a copy first.
+            $this->archivePreviews($runPath, $directories);
             $freedBytes = array_sum(array_map($this->directoryBytes(...), $directories));
             $failed = [];
 
@@ -86,6 +88,57 @@ class BenchmarkRunStorage
 
             return ['freedBytes' => $freedBytes, 'deletedCount' => count($directories)];
         });
+    }
+
+    /**
+     * Removes what can be reinstalled (node_modules, .next) from every model workspace and keeps the model's
+     * source and export. Previews that exist only in a workspace are archived to _gallery first.
+     *
+     * @return array{freedBytes: int, slimmedCount: int, archivedPreviews: int}
+     */
+    public function slimWorkspaces(BenchmarkRun $benchmarkRun, bool $dryRun = false): array
+    {
+        $slim = function () use ($benchmarkRun, $dryRun): array {
+            $runPath = $this->runPath($benchmarkRun);
+
+            if ($runPath === null) {
+                return ['freedBytes' => 0, 'slimmedCount' => 0, 'archivedPreviews' => 0];
+            }
+
+            $directories = $this->workspaceDirectories($runPath);
+            $targets = [];
+
+            foreach ($directories as $directory) {
+                foreach (['node_modules', '.next'] as $name) {
+                    $path = $directory.DIRECTORY_SEPARATOR.$name;
+
+                    if (is_dir($path) && ! is_link($path) && realpath($path) === $path) {
+                        $targets[] = $path;
+                    }
+                }
+            }
+
+            $freedBytes = array_sum(array_map($this->directoryBytes(...), $targets));
+            $slimmed = count(array_unique(array_map('dirname', $targets)));
+
+            if ($dryRun) {
+                return ['freedBytes' => $freedBytes, 'slimmedCount' => $slimmed, 'archivedPreviews' => $this->archivePreviews($runPath, $directories, true)];
+            }
+
+            $archived = $this->archivePreviews($runPath, $directories);
+
+            foreach ($targets as $target) {
+                if (! $this->deleteDirectory($target)) {
+                    throw new BenchmarkStorageException('Bağımlılık klasörü silinemedi: '.basename(dirname($target)).'/'.basename($target));
+                }
+            }
+
+            $this->refresh($benchmarkRun);
+
+            return ['freedBytes' => $freedBytes, 'slimmedCount' => $slimmed, 'archivedPreviews' => $archived];
+        };
+
+        return $this->deleteWithLock($benchmarkRun, $dryRun ? 'slim-dry-run' : 'slim', $slim);
     }
 
     /** @return array{freedBytes: int} */
@@ -245,6 +298,42 @@ class BenchmarkRunStorage
 
             throw $failure;
         }
+    }
+
+    /**
+     * Copies a workspace's static export to _gallery/<model> when no archived preview exists yet.
+     *
+     * @param  list<string>  $workspaces
+     */
+    private function archivePreviews(string $runPath, array $workspaces, bool $dryRun = false): int
+    {
+        $archived = 0;
+        $gallery = $runPath.DIRECTORY_SEPARATOR.'_gallery';
+
+        foreach ($workspaces as $workspace) {
+            $export = $workspace.DIRECTORY_SEPARATOR.'out';
+            $target = $gallery.DIRECTORY_SEPARATOR.basename($workspace);
+
+            if (! is_file($export.DIRECTORY_SEPARATOR.'index.html') || is_link($export) || file_exists($target) || is_link($target)) {
+                continue;
+            }
+
+            if (! $dryRun) {
+                if (is_link($gallery)) {
+                    throw new BenchmarkStorageException('Önizleme arşivi klasörü güvenli değil.');
+                }
+
+                File::ensureDirectoryExists($gallery);
+
+                if (! File::copyDirectory($export, $target)) {
+                    throw new BenchmarkStorageException('Önizleme arşive kopyalanamadı: '.basename($workspace).'. Hiçbir klasör silinmedi.');
+                }
+            }
+
+            $archived++;
+        }
+
+        return $archived;
     }
 
     private function deleteDirectory(string $directory): bool

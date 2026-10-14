@@ -21,6 +21,13 @@ TESLIM_YOK_KODU=86
 # Cikti sinirina takilip hicbir dosya yazmayan modele, ayni oturumda bir kez verilen standart devam mesaji.
 OTOMATIK_DEVAM_MESAJI="Onceki yanitin cikti sinirina takildi ve calisma alaninda hicbir dosya degismedi. Gorevi surdur: dosyalari simdi, kucuk parcalar halinde (her yazma veya duzenlemede en fazla yaklasik 300 satir) olustur ve calisan kodu erkenden kaydet."
 
+# Dogrulama bittikten sonra calisma alani hafifletilir: yeniden kurulabilen bagimliliklar (node_modules) ve
+# build onbellegi (.next) silinir; modelin kaynak kodu, out/ ve kilit dosyasi kalir. Kurtarma denemesi
+# baslarken bagimliliklar yeniden kurulur.
+calisma_alanini_hafiflet() {
+  rm -rf "${1:?}/node_modules" "${1:?}/.next"
+}
+
 # Calisma alani baslangic sablonuyla ayniysa (model hicbir sey teslim etmediyse) basarili doner.
 sablon_ayni() {
   diff -rq -x node_modules -x .next -x out -x next-env.d.ts -x '*.tsbuildinfo' -x .DS_Store \
@@ -424,6 +431,14 @@ model_calistir() {
   echo "${KLASOR}|${MODEL}|${OPENCODE_RC}|${LINT_RC}|${BUILD_RC}|${EXPORT_RC}|${ROUTES_RC}|${RUNTIME_RC}|${SURE}" \
     > "${RESULT_DIZIN}/${KLASOR}.result"
 
+  # Ilk teslimin onizlemesi, asama sonucu ne olursa olsun sonuc arsivine (_gallery) kopyalanir; calisma alani
+  # hafifletildiginde ya da silindiginde onizleme ve puanlama bu kopyadan devam eder.
+  if [[ -f "${PROJE}/out/index.html" ]]; then
+    mkdir -p "${GALLERY_DIZIN}/${KLASOR}" && rsync -a --delete "${PROJE}/out/" "${GALLERY_DIZIN}/${KLASOR}/"
+  fi
+
+  calisma_alanini_hafiflet "$PROJE"
+
   echo "[$(date +%H:%M:%S)] $KLASOR bitti (${SURE}s)."
 }
 
@@ -473,7 +488,6 @@ for (( i = 1; i <= ${#KLASORLER}; i++ )); do
   fi
 done
 
-rm -rf "$GALLERY_DIZIN"
 mkdir -p "$GALLERY_DIZIN"
 
 cat > "${GALLERY_DIZIN}/index.html" <<HTML
@@ -513,8 +527,6 @@ for (( i = 1; i <= ${#KLASORLER}; i++ )); do
   IFS='|' read -r _ _ OP LI BU EX RO RU SU < "$RESULT"
 
   if [[ "$OP" -eq 0 && "$LI" -eq 0 && "$BU" -eq 0 && "$EX" -eq 0 && "$RO" -eq 0 && "$RU" -eq 0 ]]; then
-    rsync -a "${RUN_DIZIN}/${KLASOR}/out/" "${GALLERY_DIZIN}/${KLASOR}/"
-
     cat >> "${GALLERY_DIZIN}/index.html" <<HTML
 <a href="/${KLASOR}/">
 <strong>${MODEL#*/}</strong>
