@@ -22,6 +22,9 @@ export function isProviderError(event) {
 
   if (Number.isInteger(status) && (status >= 500 || status === 429)) return true;
   if (name === "APIError" && data.isRetryable === true) return true;
+  // The provider refuses the model for this account (for example a data-training privacy setting):
+  // an account configuration problem, not something the model did.
+  if (status === 400 && /privacy settings|trains on request data/iu.test(message)) return true;
 
   return name === "UnknownError" && /unexpected server error/iu.test(message);
 }
@@ -50,7 +53,36 @@ export async function classifyEventLog(path) {
   return lastError !== null && isProviderError(lastError) ? "provider" : "model";
 }
 
+/** Reason of the last finished step ("length" means the response hit the output token limit). */
+export async function lastStopReason(path) {
+  try {
+    if ((await stat(path)).size > MAX_EVENT_LOG_BYTES) return "unknown";
+  } catch {
+    return "unknown";
+  }
+
+  let reason = "unknown";
+  const lines = createInterface({ input: createReadStream(path, { encoding: "utf8" }), crlfDelay: Infinity });
+
+  for await (const line of lines) {
+    if (!line.includes('"type":"step_finish"')) continue;
+
+    try {
+      const event = JSON.parse(line);
+      if (event.type === "step_finish" && typeof event.part?.reason === "string") reason = event.part.reason;
+    } catch {
+      // Ignore partial or malformed lines.
+    }
+  }
+
+  return reason;
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [eventLog] = process.argv.slice(2);
-  process.stdout.write(`${eventLog ? await classifyEventLog(eventLog) : "model"}\n`);
+  const args = process.argv.slice(2);
+  if (args[0] === "--stop-reason") {
+    process.stdout.write(`${args[1] ? await lastStopReason(args[1]) : "unknown"}\n`);
+  } else {
+    process.stdout.write(`${args[0] ? await classifyEventLog(args[0]) : "model"}\n`);
+  }
 }
