@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +21,7 @@ async function runWithModel(modelScript) {
 }
 
 /** Same, but also reports whether the engine continued the session automatically. */
-async function runWithModelDetails(modelScript) {
+async function runWithModelDetails(modelScript, { npm = 'process.exit(process.argv.includes("build") ? 1 : 0);', inspect } = {}) {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'benchforge-classification-')));
     const commands = join(root, 'commands');
 
@@ -40,7 +40,7 @@ async function runWithModelDetails(modelScript) {
         await writeFile(join(root, 'prompt.txt'), 'fixture prompt');
         await writeFile(join(root, 'models.conf'), 'fixture-model|fixture/fake|35560\n');
         await writeFile(join(root, 'opencode.json'), '{}');
-        await writeCommand(commands, 'npm', 'process.exit(process.argv.includes("build") ? 1 : 0);');
+        await writeCommand(commands, 'npm', npm);
         await writeCommand(commands, 'opencode', [
             'const args = process.argv.slice(2);',
             'if (args[0] === "--version") { console.log("0.0.0-fixture"); process.exit(0); }',
@@ -59,6 +59,7 @@ async function runWithModelDetails(modelScript) {
 
         const result = await readFile(join(root, 'runs', 'fixture-run', '_results', 'fixture-model.result'), 'utf8');
         const autoContinue = await readFile(join(root, 'runs', 'fixture-run', '_logs', 'fixture-model.auto-continue.log'), 'utf8').catch(() => null);
+        if (inspect) await inspect(join(root, 'runs', 'fixture-run'));
         return { code: result.trim().split('|')[2], autoContinue };
     } finally {
         await rm(root, { recursive: true, force: true });
@@ -111,4 +112,41 @@ test('does not continue a model that stopped normally or already wrote files', a
 test('scores a submission whose provider connection dropped at the end', async () => {
     const providerError = JSON.stringify({ type: 'error', error: { name: 'APIError', data: { statusCode: 500, message: 'Upstream request failed: Endpoint is unavailable.' } } });
     assert.equal(await runWithModel(`${writeSubmission} console.log(${JSON.stringify(providerError)}); process.exit(1);`), '77');
+});
+
+test('slims every workspace after validation and archives the export of a model that did not pass', async () => {
+    const npm = [
+        'const fs = require("node:fs");',
+        'if (process.argv.includes("ci")) { fs.mkdirSync("node_modules/pkg", { recursive: true }); fs.writeFileSync("node_modules/pkg/index.js", "1"); }',
+        'if (process.argv.includes("build")) {',
+        '  fs.mkdirSync(".next/cache", { recursive: true });',
+        '  fs.mkdirSync("out/_next", { recursive: true });',
+        '  fs.writeFileSync("out/index.html", `<script src="${process.env.NEXT_PUBLIC_BASE_PATH}/_next/app.js"></script>`);',
+        '}',
+        'process.exit(0);',
+    ].join('\n');
+    const exists = (path) => access(path).then(() => true, () => false);
+    let observed;
+
+    await runWithModelDetails(writeSubmission + ' process.exit(0);', {
+        npm,
+        inspect: async (run) => {
+            observed = {
+                nodeModules: await exists(join(run, 'fixture-model', 'node_modules')),
+                nextCache: await exists(join(run, 'fixture-model', '.next')),
+                source: await exists(join(run, 'fixture-model', 'src', 'page.tsx')),
+                export: await exists(join(run, 'fixture-model', 'out', 'index.html')),
+                gallery: await readFile(join(run, '_gallery', 'fixture-model', 'index.html'), 'utf8').catch(() => null),
+            };
+        },
+    });
+
+    // The browser check fails in this fixture, so the model did not pass every stage; its export is archived anyway.
+    assert.deepEqual({ ...observed, gallery: observed.gallery?.includes('/fixture-model/_next/') }, {
+        nodeModules: false,
+        nextCache: false,
+        source: true,
+        export: true,
+        gallery: true,
+    });
 });

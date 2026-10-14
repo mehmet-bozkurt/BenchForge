@@ -188,6 +188,19 @@ echo "Model: $MODEL"
 echo "Klasor: $KLASOR"
 echo "Mod: $MOD"
 
+# Ilk kosu calisma alanini hafifletmis olabilir (node_modules ve .next silinir); deneme bagimliliklari
+# yeniden kurarak baslar. Model package.json'u kilit dosyasiyla uyumsuz biraktiysa npm install denenir.
+if [[ ! -d "${PROJE}/node_modules" ]]; then
+  echo "Bagimliliklar yeniden kuruluyor (calisma alani hafifletilmisti)."
+  if ! (
+    cd "$PROJE"
+    npm ci --prefer-offline --no-audit --no-fund || npm install --ignore-scripts --no-audit --no-fund
+  ) > "${DENEME_DIZIN}/npm-ci.log" 2>&1; then
+    echo "HATA: Bagimliliklar kurulamadi; ayrintilar npm-ci.log dosyasinda."
+    exit 74
+  fi
+fi
+
 if [[ "$MOD" == "continue" ]]; then
   ONCEKI_CALISMA="${DENEME_DIZIN}/workspace-before"
   mkdir -p "$ONCEKI_CALISMA"
@@ -456,6 +469,9 @@ fi
 
 GALLERY_PUBLISH_PENDING=0
 OUT_BUILD_PENDING=0
+
+# Deneme sonucu ve onizlemesi kaydedildi; yeniden kurulabilen bagimliliklar ve build onbellegi silinir.
+rm -rf "${PROJE:?}/node_modules" "${PROJE:?}/.next"
 
 echo "Deneme tamamlandi (${SURE}s)."
 exit 0

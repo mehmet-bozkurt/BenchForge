@@ -59,6 +59,7 @@ test('wires a resumed model to its scoped policy and monitor without live servic
             'const fs = require("node:fs");',
             'const args = process.argv.slice(2);',
             'fs.appendFileSync("npm-observed.jsonl", JSON.stringify({ args, runtime: process.env.OPENCODE_CONFIG_CONTENT, pure: process.env.OPENCODE_PURE, projectConfigDisabled: process.env.OPENCODE_DISABLE_PROJECT_CONFIG, basePath: process.env.NEXT_PUBLIC_BASE_PATH, environmentKeys: Object.keys(process.env) }) + "\\n");',
+            'if (args[0] === "ci") { fs.mkdirSync("node_modules", { recursive: true }); process.exit(0); }',
             'if (args.join(" ") === "run lint") { console.log("fixture lint passed"); process.exit(0); }',
             'if (args.join(" ") === "run build") { console.log("fixture build failed without export"); process.exit(1); }',
             'process.exit(94);',
@@ -132,10 +133,12 @@ test('wires a resumed model to its scoped policy and monitor without live servic
             assert.equal(report.observedCrossModelReadCount, 0);
             assert.deepEqual(result.slice(0, 9), ['continue', 'ses_fixtureSource', 'ses_fixtureContinued', '78', '0', '1', '1', '1', '1']);
             assert.equal(result[10], 'fixture/fake-model');
-            assert.deepEqual(npmCalls.map((call) => call.args), [['run', 'lint'], ['run', 'build']]);
+            // The workspace was slimmed after the first run, so dependencies are reinstalled before the model runs.
+            assert.deepEqual(npmCalls.map((call) => call.args), [['ci', '--prefer-offline', '--no-audit', '--no-fund'], ['run', 'lint'], ['run', 'build']]);
             assert.ok(npmCalls.every((call) => call.runtime === undefined && call.pure === undefined && call.projectConfigDisabled === undefined));
             assert.equal(npmCalls[0].basePath, undefined);
-            assert.equal(npmCalls[1].basePath, '/fixture-model');
+            assert.equal(npmCalls[1].basePath, undefined);
+            assert.equal(npmCalls[2].basePath, '/fixture-model');
             for (const keys of [observed.environmentKeys, ...npmCalls.map((call) => call.environmentKeys)]) {
                 for (const key of ['APP_KEY', 'OPENROUTER_API_KEY', 'DB_PASSWORD', 'NODE_OPTIONS']) assert.ok(!keys.includes(key));
             }

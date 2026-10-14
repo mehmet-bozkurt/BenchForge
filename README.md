@@ -44,6 +44,7 @@ Laravel arayüzü ──► Node işçileri (bin/) ──► engine/tools/benchm
 2. Her model için başlangıç şablonu ayrı bir çalışma klasörüne kopyalanır.
 3. Model, OpenCode ile yalnız kendi klasöründe çalışacak şekilde izin politikası ve sınır izleyicisiyle çalıştırılır. Model başına 60 dakika süre sınırı vardır.
 4. Teslim doğrulanır, sonuçlar `runs/<koşu>/` altına yazılır ve veritabanına senkronlanır.
+5. Doğrulamadan hemen sonra modelin çıktısı önizleme arşivine (`_gallery/`) kopyalanır ve çalışma alanı hafifletilir: yeniden kurulabilen `node_modules` ve `.next` silinir, kaynak kod ve `out/` kalır. Bir model koşusu böylece yaklaşık 500 MB yerine birkaç MB yer kaplar. Kurtarma denemesi başlarken bağımlılıklar kendiliğinden yeniden kurulur. Eski koşular için: `php artisan benchforge:slim` (`--dry-run` ile önce ne kazanılacağını görün).
 
 ### Çalışma koşulu
 

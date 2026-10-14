@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\BenchmarkStorageException;
 use App\Models\Artifact;
 use App\Models\BenchmarkExecution;
 use App\Models\BenchmarkRun;
@@ -648,4 +649,63 @@ test('it preserves files and records when the filesystem throws during full dele
         File::deleteDirectory($runsPath);
         File::deleteDirectory($runnerRoot);
     }
+});
+
+test('it slims workspaces to source and exports and archives previews that exist only there', function () {
+    $runPath = config('benchforge.runs_path').'/slim-run';
+    File::ensureDirectoryExists($runPath.'/failed-model/node_modules/pkg');
+    File::ensureDirectoryExists($runPath.'/failed-model/.next/cache');
+    File::ensureDirectoryExists($runPath.'/failed-model/src');
+    File::ensureDirectoryExists($runPath.'/failed-model/out');
+    File::ensureDirectoryExists($runPath.'/passed-model/node_modules');
+    File::ensureDirectoryExists($runPath.'/passed-model/out');
+    File::ensureDirectoryExists($runPath.'/_gallery/passed-model');
+    File::put($runPath.'/failed-model/node_modules/pkg/index.js', str_repeat('n', 400));
+    File::put($runPath.'/failed-model/.next/cache/a', str_repeat('c', 100));
+    File::put($runPath.'/failed-model/src/page.tsx', 'export default 1;');
+    File::put($runPath.'/failed-model/out/index.html', '<p>failed model export</p>');
+    File::put($runPath.'/passed-model/node_modules/x.js', str_repeat('n', 50));
+    File::put($runPath.'/passed-model/out/index.html', '<p>workspace copy</p>');
+    File::put($runPath.'/_gallery/passed-model/index.html', '<p>already archived</p>');
+    $run = BenchmarkRun::factory()->create(['slug' => 'slim-run']);
+
+    $preview = app(BenchmarkRunStorage::class)->slimWorkspaces($run, dryRun: true);
+
+    expect($preview)->toBe(['freedBytes' => 550, 'slimmedCount' => 2, 'archivedPreviews' => 1])
+        ->and(File::exists($runPath.'/failed-model/node_modules'))->toBeTrue()
+        ->and(File::exists($runPath.'/_gallery/failed-model'))->toBeFalse();
+
+    $this->artisan('benchforge:slim', ['run' => 'slim-run'])->assertSuccessful();
+
+    expect(File::exists($runPath.'/failed-model/node_modules'))->toBeFalse()
+        ->and(File::exists($runPath.'/failed-model/.next'))->toBeFalse()
+        ->and(File::exists($runPath.'/passed-model/node_modules'))->toBeFalse()
+        ->and(File::get($runPath.'/failed-model/src/page.tsx'))->toBe('export default 1;')
+        ->and(File::get($runPath.'/_gallery/failed-model/index.html'))->toBe('<p>failed model export</p>')
+        ->and(File::get($runPath.'/_gallery/passed-model/index.html'))->toBe('<p>already archived</p>')
+        ->and($run->refresh()->storage_scanned_at)->not->toBeNull();
+});
+
+test('deleting workspaces keeps a copy of previews that existed only in a workspace', function () {
+    $runPath = config('benchforge.runs_path').'/archive-run';
+    File::ensureDirectoryExists($runPath.'/failed-model/out');
+    File::put($runPath.'/failed-model/out/index.html', '<p>only here</p>');
+    $run = BenchmarkRun::factory()->create(['slug' => 'archive-run']);
+
+    $this->from(route('runs.show', $run))
+        ->delete(route('runs.workspace.destroy', $run), ['confirmation' => '1'])
+        ->assertRedirect(route('runs.show', $run));
+
+    expect(File::exists($runPath.'/failed-model'))->toBeFalse()
+        ->and(File::get($runPath.'/_gallery/failed-model/index.html'))->toBe('<p>only here</p>');
+});
+
+test('it refuses to slim a run while a recovery attempt is active', function () {
+    File::ensureDirectoryExists(config('benchforge.runs_path').'/busy-run/model/node_modules');
+    $run = BenchmarkRun::factory()->create(['slug' => 'busy-run']);
+    ModelRunAttempt::factory()->for(ModelRun::factory()->for($run))->create(['status' => 'running']);
+
+    expect(fn () => app(BenchmarkRunStorage::class)->slimWorkspaces($run))
+        ->toThrow(BenchmarkStorageException::class, 'Aktif bir kurtarma denemesinin');
+    expect(File::exists(config('benchforge.runs_path').'/busy-run/model/node_modules'))->toBeTrue();
 });

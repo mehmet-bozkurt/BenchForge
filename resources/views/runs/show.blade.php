@@ -600,12 +600,12 @@
                 <p class="mt-3 text-xs leading-5 text-[var(--muted)]">Ölçüm: {{ $run->storage_scanned_at?->locale('tr')->translatedFormat('j M Y · H:i') ?? 'henüz ölçülmedi' }}. Değerler diskteki dosyaların mantıksal byte toplamıdır.</p>
 
                 <div class="mt-5 grid gap-3 border-t border-[var(--line)] pt-5 xl:grid-cols-3">
-                    <form class="rounded-xl border border-[#f1d7a5] bg-[var(--amber-soft)] p-4" method="POST" action="{{ route('runs.workspace.destroy', $run) }}" data-destructive-form data-confirm-message="Model çalışma alanları kalıcı olarak silinsin mi? Yalnız tüm aşamaları geçen modellerin önizlemesi ayrı arşivde durur; diğerlerinin önizlemesi çalışma alanıyla birlikte silinir.">
+                    <form class="rounded-xl border border-[#f1d7a5] bg-[var(--amber-soft)] p-4" method="POST" action="{{ route('runs.workspace.destroy', $run) }}" data-destructive-form data-confirm-message="Model çalışma alanları (kaynak kod dahil) kalıcı olarak silinsin mi? Önizlemeler önce arşive kopyalanır; sonuçlar, loglar ve puanlar korunur. Bu koşuda kurtarma denemesi artık yapılamaz.">
                         @csrf
                         @method('DELETE')
                         <input type="hidden" name="confirmation" value="">
                         <h3 class="text-sm font-black text-[#8b5a16]">Yalnızca çalışma alanlarını sil</h3>
-                        <p class="mt-2 text-xs leading-5 text-[#8b5a16]">Model proje klasörlerini, node_modules ve build dosyalarını siler. Sonuç özeti, loglar ve puanlar korunur. Tüm aşamaları geçmeyen modellerin önizlemesi çalışma alanında durduğu için onlar da silinir.</p>
+                        <p class="mt-2 text-xs leading-5 text-[#8b5a16]">Modellerin kaynak kodunu da siler. Önizlemeler önce arşive kopyalanır; sonuç özeti, loglar ve puanlar korunur. Sonrasında bu koşuda kurtarma denemesi yapılamaz. Bağımlılıklar (node_modules) her koşudan sonra zaten otomatik silinir.</p>
                         <button class="mt-4 rounded-lg border border-[#d9b968] bg-white px-3.5 py-2 text-sm font-extrabold text-[#8b5a16] transition hover:border-[#8b5a16] disabled:cursor-not-allowed disabled:opacity-45" type="submit" @disabled($run->workspace_count === 0)>
                             {{ $run->workspace_count === 0 ? 'Çalışma alanı zaten yok' : 'Çalışma alanlarını sil · '.$formatFileSize($run->workspace_bytes) }}
                         </button>
