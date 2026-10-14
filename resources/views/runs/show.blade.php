@@ -183,7 +183,7 @@
             <p class="text-sm text-[var(--muted)]">Aşama işaretleri ilk teslimi gösterir ve logu açar. Maliyet OpenCode kaydıdır; OpenRouter faturası değildir.</p>
         </div>
 
-        <ol class="mt-4 grid gap-3">
+        <ol class="mt-4 grid gap-3" data-live-region="results">
             @foreach ($run->modelRuns as $modelRun)
                 @php
                     $outcome = $outcomes[$modelRun->id] ?? ['tone' => 'unknown', 'title' => 'Sonuç okunamadı', 'detail' => null, 'autoContinued' => false];
@@ -271,7 +271,7 @@
 
     {{-- Recovery: collapsed per model, attempts as a timeline, actions in one place --}}
     @if ($recoverableModels->isNotEmpty())
-        <section class="mt-10" aria-labelledby="diagnostics-title">
+        <section class="mt-10" aria-labelledby="diagnostics-title" data-live-region="recovery">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <p class="eyebrow">İlk sonuç korunur</p>
@@ -315,7 +315,7 @@
                         </summary>
 
                         <div class="grid gap-5 border-t border-[var(--line)] p-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-                            <div>
+                            <div class="min-w-0">
                                 <h4 class="text-sm font-black text-[var(--ink)]">Deneme geçmişi</h4>
                                 <ol class="timeline mt-3">
                                     <li class="timeline-item">
@@ -385,9 +385,9 @@
                                             @endif
                                             @include('runs.boundary-report', ['report' => $attemptBoundaryReports[$attempt->id] ?? []])
                                             @if ($attemptLogTail)
-                                                <details class="mt-2 rounded-lg bg-[#10182c] text-white" open>
-                                                    <summary class="cursor-pointer px-3 py-2 text-xs font-bold text-[#8ce6dc]">Canlı çalışma günlüğü</summary>
-                                                    <pre class="max-h-64 overflow-auto border-t border-white/10 p-3 font-mono text-xs leading-5 whitespace-pre-wrap text-[#dfe7f5]">{{ $attemptLogTail }}</pre>
+                                                <details class="mt-2 min-w-0 rounded-lg bg-[#10182c] text-white" data-log-id="attempt-{{ $attempt->id }}" open>
+                                                    <summary class="cursor-pointer px-3 py-2 text-xs font-bold text-[#8ce6dc]">Canlı çalışma günlüğü <span class="font-normal text-[#9fb0c9]">· son satırlar, kendiliğinden güncellenir</span></summary>
+                                                    <pre class="max-h-72 overflow-auto border-t border-white/10 p-3 font-mono text-xs leading-5 whitespace-pre-wrap text-[#dfe7f5] [overflow-wrap:anywhere]" data-log-id="attempt-{{ $attempt->id }}">{{ $attemptLogTail }}</pre>
                                                 </details>
                                             @endif
                                             @if (in_array($attempt->status, $activeAttemptStatuses, true))

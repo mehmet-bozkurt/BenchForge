@@ -1008,14 +1008,84 @@ export function initializeDestructiveForms() {
     });
 }
 
+const LIVE_REFRESH_MS = 3000;
+
+function scheduleAttemptRefresh() {
+    attemptRefreshTimeout = window.setTimeout(() => void refreshLiveRegions(), LIVE_REFRESH_MS);
+}
+
+/** True while the person is in the middle of something the update must not interrupt. */
+function isPersonBusy() {
+    const active = document.activeElement;
+
+    return Boolean(document.querySelector('dialog[open]'))
+        || Boolean(active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName));
+}
+
+/** Keeps a log at the bottom while new lines arrive, unless the person scrolled up to read. */
+function scrollLogsToEnd(root, previous = new Map()) {
+    root.querySelectorAll('pre[data-log-id]').forEach((log) => {
+        const before = previous.get(log.dataset.logId);
+        log.scrollTop = before === undefined || before.atEnd ? log.scrollHeight : before.scrollTop;
+    });
+}
+
+/**
+ * While a recovery attempt runs, re-renders only the live parts of the page (results and recovery) from a
+ * background fetch. Scroll position, open panels, open dialogs and focused fields are left untouched.
+ */
+async function refreshLiveRegions() {
+    attemptRefreshTimeout = undefined;
+    if (document.querySelector('[data-destructive-form][data-submitting]')) return;
+    if (isPersonBusy()) {
+        scheduleAttemptRefresh();
+        return;
+    }
+
+    let html;
+    try {
+        const response = await fetch(window.location.href, { headers: { Accept: 'text/html' }, cache: 'no-store' });
+        if (!response.ok) throw new Error('refresh failed');
+        html = await response.text();
+    } catch {
+        scheduleAttemptRefresh();
+        return;
+    }
+
+    if (document.querySelector('[data-destructive-form][data-submitting]')) return;
+    if (isPersonBusy()) {
+        scheduleAttemptRefresh();
+        return;
+    }
+
+    const next = new DOMParser().parseFromString(html, 'text/html');
+    next.querySelectorAll('[data-live-region]').forEach((fresh) => {
+        const current = document.querySelector(`[data-live-region="${fresh.dataset.liveRegion}"]`);
+        if (!current) return;
+
+        const openPanels = new Map([...current.querySelectorAll('details[id], details[data-log-id]')]
+            .map((panel) => [panel.id || panel.dataset.logId, panel.open]));
+        const logs = new Map([...current.querySelectorAll('pre[data-log-id]')].map((log) => [log.dataset.logId, {
+            scrollTop: log.scrollTop,
+            atEnd: log.scrollTop + log.clientHeight >= log.scrollHeight - 8,
+        }]));
+
+        current.innerHTML = fresh.innerHTML;
+        current.querySelectorAll('details[id], details[data-log-id]').forEach((panel) => {
+            const wasOpen = openPanels.get(panel.id || panel.dataset.logId);
+            if (wasOpen !== undefined) panel.open = wasOpen;
+        });
+        scrollLogsToEnd(current, logs);
+    });
+
+    if (next.querySelector('[data-attempt-refresh]')) scheduleAttemptRefresh();
+}
+
 function initializeAttemptRefresh() {
+    scrollLogsToEnd(document);
     if (!document.querySelector('[data-attempt-refresh]')) return;
 
-    attemptRefreshTimeout = window.setTimeout(() => {
-        if (!document.querySelector('[data-destructive-form][data-submitting]')) {
-            window.location.reload();
-        }
-    }, 2500);
+    scheduleAttemptRefresh();
 }
 
 /** Mirrors Str::slug for group names, so the runner can show the file name before saving. */
@@ -1049,20 +1119,33 @@ function initializeGroupNamePreview() {
 
 /** Native confirmation dialogs (data-dialog-open="id") and links that open a <details> section before jumping to it. */
 function initializeDialogs() {
-    document.querySelectorAll('[data-dialog-open]').forEach((button) => {
-        button.addEventListener('click', () => {
-            const dialog = document.getElementById(button.dataset.dialogOpen);
+    // Delegated, so buttons inside regions re-rendered by the live refresh keep working.
+    document.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!target || typeof target.closest !== 'function') return;
+
+        const opener = target.closest('[data-dialog-open]');
+        if (opener && !opener.disabled) {
+            const dialog = document.getElementById(opener.dataset.dialogOpen);
             if (dialog && typeof dialog.showModal === 'function') dialog.showModal();
-        });
-    });
-    document.querySelectorAll('dialog [data-dialog-close]').forEach((button) => {
-        button.addEventListener('click', () => button.closest('dialog')?.close());
-    });
-    document.querySelectorAll('[data-open-details]').forEach((link) => {
-        link.addEventListener('click', () => {
+            return;
+        }
+
+        const closer = target.closest('dialog [data-dialog-close]');
+        if (closer) {
+            closer.closest('dialog')?.close();
+            return;
+        }
+
+        const link = target.closest('[data-open-details]');
+        if (link) {
             const details = document.getElementById(link.dataset.openDetails);
-            if (details) details.open = true;
-        });
+            if (!details) return;
+            // Open and scroll without putting a #fragment in the address bar, so reloads do not jump back here.
+            event.preventDefault();
+            details.open = true;
+            details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     });
     const hash = window.location?.hash ?? '';
     if (hash.startsWith('#recovery-')) {
