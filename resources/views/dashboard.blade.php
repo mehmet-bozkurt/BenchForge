@@ -45,7 +45,7 @@
 
     <div class="content-frame">
         @if (session('status'))
-            <div class="mb-5 rounded-xl border border-[#b9ead8] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success)]" role="status">
+            <div class="mb-5 rounded-xl border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success)]" role="status">
                 {{ session('status') }}
             </div>
         @endif
@@ -65,7 +65,7 @@
         </header>
 
         @if ($latestRun === null)
-            <section class="rounded-3xl border border-dashed border-[var(--line-strong)] bg-white px-6 py-20 text-center">
+            <section class="rounded-3xl border border-dashed border-[var(--line-strong)] bg-[var(--surface)] px-6 py-20 text-center">
                 <img class="mx-auto h-12 w-12 rounded-2xl" src="{{ asset('brand/benchforge-mark.svg') }}" alt="" width="48" height="48">
                 <h2 class="mt-5 text-xl font-black text-[var(--ink)]">Henüz benchmark bulunamadı</h2>
                 <p class="mx-auto mt-2 max-w-lg text-sm leading-6 text-[var(--muted)]">
@@ -206,7 +206,7 @@
                             default => '$'.number_format($cost, 2, ',', '.'),
                         };
                     @endphp
-                    <article class="run-card group relative flex flex-col rounded-2xl border border-[var(--line)] bg-white p-5">
+                    <article class="run-card group relative flex flex-col rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <span class="condition-pill condition-{{ $run['environmentProfile'] }}">
                                 {{ \App\Models\BenchmarkRun::ENVIRONMENT_PROFILES[$run['environmentProfile']] }} · {{ $run['date']->locale('tr')->translatedFormat('j M Y') }}
@@ -272,7 +272,7 @@
                 @endforeach
             </section>
 
-            <section class="data-panel mt-10 overflow-hidden rounded-2xl border border-[var(--line)] bg-white">
+            <section class="data-panel mt-10 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
                 <div class="flex flex-col gap-4 border-b border-[var(--line)] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                     <div>
                         <p class="eyebrow">Aşama matrisi</p>
@@ -296,7 +296,7 @@
                         <tbody>
                             @foreach ($latestRun['models'] as $model)
                                 <tr class="border-b border-[var(--line)] last:border-b-0 hover:bg-[var(--surface-subtle)]">
-                                    <th class="sticky left-0 z-10 bg-white px-6 py-4" scope="row">
+                                    <th class="sticky left-0 z-10 bg-[var(--surface)] px-6 py-4" scope="row">
                                         <span class="block text-xs font-extrabold text-[var(--ink)]">{{ $model['displayName'] }}</span>
                                         <span class="mt-1 block text-[10px] font-medium text-[var(--muted)]">{{ $statusLabels[$model['overallStatus']] }}</span>
                                     </th>

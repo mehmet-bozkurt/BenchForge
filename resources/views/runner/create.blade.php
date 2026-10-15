@@ -81,7 +81,7 @@
             </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-            <div class="rounded-xl border border-[var(--line)] bg-white px-3.5 py-2 text-xs">
+            <div class="rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 py-2 text-xs">
                 <span class="text-[var(--muted)]">OpenRouter kataloğu</span>
                 <strong class="ml-1">{{ $catalog['count'] }} model</strong>
                 @if ($catalog['lastSyncedAt'])
@@ -90,11 +90,11 @@
             </div>
             <form method="POST" action="{{ route('runner.openrouter.sync') }}">
                 @csrf
-                <button class="rounded-xl border border-[var(--line)] bg-white px-3.5 py-2 text-xs font-extrabold text-[var(--forest)] transition hover:border-[var(--forest)] disabled:cursor-not-allowed disabled:opacity-45" type="submit" @disabled($active)>
+                <button class="rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 py-2 text-xs font-extrabold text-[var(--forest)] transition hover:border-[var(--forest)] disabled:cursor-not-allowed disabled:opacity-45" type="submit" @disabled($active)>
                     Kataloğu yenile
                 </button>
             </form>
-            <div class="rounded-xl border border-[var(--line)] bg-white px-3.5 py-2 text-xs">
+            <div class="rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 py-2 text-xs">
                 <span class="text-[var(--muted)]">OpenCode Go</span>
                 <strong class="ml-1">{{ $goCatalog['count'] }} model</strong>
                 @if ($goCatalog['lastSyncedAt'])
@@ -103,7 +103,7 @@
             </div>
             <form method="POST" action="{{ route('runner.opencode_go.sync') }}">
                 @csrf
-                <button class="rounded-xl border border-[var(--line)] bg-white px-3.5 py-2 text-xs font-extrabold text-[var(--violet)] transition hover:border-[var(--violet)] disabled:cursor-not-allowed disabled:opacity-45" type="submit" @disabled($active)>
+                <button class="rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 py-2 text-xs font-extrabold text-[var(--violet)] transition hover:border-[var(--violet)] disabled:cursor-not-allowed disabled:opacity-45" type="submit" @disabled($active)>
                     Go kataloğunu yenile
                 </button>
             </form>
@@ -114,7 +114,7 @@
         </div>
     </header>
 
-    <section class="mb-5 rounded-2xl border border-[var(--line)] bg-white p-4 sm:p-5" aria-labelledby="provider-connections-title" data-provider-connections>
+    <section class="mb-5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 sm:p-5" aria-labelledby="provider-connections-title" data-provider-connections>
         <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
                 <p class="eyebrow">Bağlantı ve hesap durumu</p>
@@ -149,13 +149,13 @@
     </section>
 
     @if (session('status'))
-        <div class="mb-5 rounded-xl border border-[#b9ead8] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success)]" role="status">
+        <div class="mb-5 rounded-xl border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success)]" role="status">
             {{ session('status') }}
         </div>
     @endif
 
     @if ($errors->any())
-        <div class="mb-5 rounded-xl border border-[#f2c9cf] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
+        <div class="mb-5 rounded-xl border border-[var(--red-line)] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
             <strong class="font-extrabold">{{ $errors->has('group_name') ? 'Grup kaydedilemedi.' : 'Koşu başlatılamadı.' }}</strong>
             <ul class="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">
                 @foreach ($errors->all() as $error)
@@ -166,7 +166,7 @@
     @endif
 
     <div class="grid gap-6 min-[1700px]:grid-cols-[minmax(0,1.08fr)_minmax(520px,0.92fr)]">
-        <form class="runner-card rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" method="POST" action="{{ route('runner.store') }}" data-runner-form>
+        <form class="runner-card rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" method="POST" action="{{ route('runner.store') }}" data-runner-form>
             @csrf
 
             <div class="flex items-start justify-between gap-4 border-b border-[var(--line)] pb-5">
@@ -174,7 +174,7 @@
                     <p class="eyebrow">Koşu tanımı</p>
                     <h2 class="mt-1 text-xl font-black tracking-[-0.03em]">Yeni teslim grubu</h2>
                 </div>
-                <span class="rounded-lg border border-[#d7ccff] bg-[var(--violet-soft)] px-2.5 py-1.5 text-[9px] font-extrabold tracking-[0.08em] text-[var(--violet)] uppercase">
+                <span class="rounded-lg border border-[var(--violet-line)] bg-[var(--violet-soft)] px-2.5 py-1.5 text-[9px] font-extrabold tracking-[0.08em] text-[var(--violet)] uppercase">
                     Üzerine yazma kapalı
                 </span>
             </div>
@@ -183,7 +183,7 @@
                 <label class="grid gap-2 text-xs font-extrabold text-[var(--ink)]">
                     Koşu adı
                     <input
-                        class="h-11 rounded-xl border border-[var(--line)] bg-white px-3.5 font-mono text-sm font-medium outline-none transition focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]"
+                        class="h-11 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 font-mono text-sm font-medium outline-none transition focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]"
                         type="text"
                         name="run_id"
                         value="{{ old('run_id') }}"
@@ -201,18 +201,18 @@
                 <fieldset class="grid gap-3" data-prompt-mode-fieldset>
                     <legend class="text-xs font-extrabold text-[var(--ink)]">Görev promptu</legend>
                     <div class="grid grid-cols-3 gap-2 rounded-xl bg-[var(--surface-subtle)] p-1">
-                        <label class="cursor-pointer rounded-lg px-3 py-2 text-center text-xs font-extrabold has-checked:bg-white has-checked:text-[var(--forest)] has-checked:shadow-sm">
+                        <label class="cursor-pointer rounded-lg px-3 py-2 text-center text-xs font-extrabold has-checked:bg-[var(--surface)] has-checked:text-[var(--forest)] has-checked:shadow-sm">
                             <input class="sr-only" type="radio" name="prompt_mode" value="saved" data-prompt-mode data-runner-input @checked($defaultPromptMode === 'saved') @disabled($active)>
                             Kayıtlı prompt
                         </label>
-                        <label class="cursor-pointer rounded-lg px-3 py-2 text-center text-xs font-extrabold has-checked:bg-white has-checked:text-[var(--forest)] has-checked:shadow-sm">
+                        <label class="cursor-pointer rounded-lg px-3 py-2 text-center text-xs font-extrabold has-checked:bg-[var(--surface)] has-checked:text-[var(--forest)] has-checked:shadow-sm">
                             <input class="sr-only" type="radio" name="prompt_mode" value="custom" data-prompt-mode data-runner-input @checked($defaultPromptMode === 'custom') @disabled($active)>
                             Yeni prompt yaz
                         </label>
                     </div>
 
                     <div data-prompt-panel="saved" @class(['hidden' => $defaultPromptMode !== 'saved'])>
-                        <select class="h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3.5 text-sm font-semibold outline-none transition focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]" name="prompt" data-runner-input @disabled($active)>
+                        <select class="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-sm font-semibold outline-none transition focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]" name="prompt" data-runner-input @disabled($active)>
                             @foreach (collect($options['prompts'])->groupBy('source') as $source => $prompts)
                                 <optgroup label="{{ $source === 'library' ? 'Prompt kütüphanesi' : 'Proje promptları' }}">
                                     @foreach ($prompts as $prompt)
@@ -224,8 +224,8 @@
                     </div>
 
                     <div class="grid gap-3" data-prompt-panel="custom" @class(['hidden' => $defaultPromptMode !== 'custom'])>
-                        <input class="h-11 rounded-xl border border-[var(--line)] bg-white px-3.5 text-sm font-semibold outline-none focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)]" type="text" name="custom_prompt_title" value="{{ old('custom_prompt_title') }}" maxlength="120" placeholder="Prompt başlığı (kaydetmek isterseniz gerekli)" data-runner-input @disabled($active)>
-                        <textarea class="min-h-48 resize-y rounded-xl border border-[var(--line)] bg-white px-3.5 py-3 font-mono text-xs leading-5 outline-none focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)]" name="custom_prompt_content" maxlength="60000" placeholder="Modele verilecek görevi ve kabul kriterlerini buraya yazın…" data-runner-input @disabled($active)>{{ old('custom_prompt_content') }}</textarea>
+                        <input class="h-11 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-sm font-semibold outline-none focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)]" type="text" name="custom_prompt_title" value="{{ old('custom_prompt_title') }}" maxlength="120" placeholder="Prompt başlığı (kaydetmek isterseniz gerekli)" data-runner-input @disabled($active)>
+                        <textarea class="min-h-48 resize-y rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 py-3 font-mono text-xs leading-5 outline-none focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)]" name="custom_prompt_content" maxlength="60000" placeholder="Modele verilecek görevi ve kabul kriterlerini buraya yazın…" data-runner-input @disabled($active)>{{ old('custom_prompt_content') }}</textarea>
                         <p class="text-[10px] leading-4 text-[var(--muted)]">Lint, static export, model klasörüne özel basePath ve rota doğrulama kuralları prompta otomatik eklenir.</p>
                         <label class="flex items-start gap-2 text-xs font-semibold text-[var(--muted)]">
                             <input class="mt-0.5 rounded border-[var(--line)] text-[var(--forest)]" type="checkbox" name="save_prompt" value="1" data-runner-input @checked(old('save_prompt')) @disabled($active)>
@@ -237,22 +237,22 @@
                 <fieldset class="grid gap-3" data-model-mode-fieldset>
                     <legend class="text-xs font-extrabold text-[var(--ink)]">Modeller</legend>
                     <div class="grid grid-cols-3 gap-2 rounded-xl bg-[var(--surface-subtle)] p-1">
-                        <label class="cursor-pointer rounded-lg px-3 py-2 text-center text-xs font-extrabold has-checked:bg-white has-checked:text-[var(--forest)] has-checked:shadow-sm">
+                        <label class="cursor-pointer rounded-lg px-3 py-2 text-center text-xs font-extrabold has-checked:bg-[var(--surface)] has-checked:text-[var(--forest)] has-checked:shadow-sm">
                             <input class="sr-only" type="radio" name="model_mode" value="group" data-model-mode data-runner-input @checked($defaultModelMode === 'group') @disabled($active)>
                             Kayıtlı grup
                         </label>
-                        <label class="cursor-pointer rounded-lg px-3 py-2 text-center text-xs font-extrabold has-checked:bg-white has-checked:text-[var(--forest)] has-checked:shadow-sm">
+                        <label class="cursor-pointer rounded-lg px-3 py-2 text-center text-xs font-extrabold has-checked:bg-[var(--surface)] has-checked:text-[var(--forest)] has-checked:shadow-sm">
                             <input class="sr-only" type="radio" name="model_mode" value="custom" data-model-mode data-runner-input @checked($defaultModelMode === 'custom') @disabled($active)>
                             OpenRouter kataloğu
                         </label>
-                        <label class="cursor-pointer rounded-lg px-3 py-2 text-center text-xs font-extrabold has-checked:bg-white has-checked:text-[var(--violet)] has-checked:shadow-sm">
+                        <label class="cursor-pointer rounded-lg px-3 py-2 text-center text-xs font-extrabold has-checked:bg-[var(--surface)] has-checked:text-[var(--violet)] has-checked:shadow-sm">
                             <input class="sr-only" type="radio" name="model_mode" value="opencode_go" data-model-mode data-runner-input @checked($defaultModelMode === 'opencode_go') @disabled($active)>
                             OpenCode Go
                         </label>
                     </div>
 
                     <div data-model-panel="group" @class(['hidden' => $defaultModelMode !== 'group'])>
-                        <select class="h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3.5 text-sm font-semibold outline-none transition focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]" name="config" data-runner-config data-runner-input @disabled($active)>
+                        <select class="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-sm font-semibold outline-none transition focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]" name="config" data-runner-config data-runner-input @disabled($active)>
                             @foreach ($options['configs'] as $config)
                                 <option value="{{ $config['value'] }}" data-model-count="{{ $config['modelCount'] }}" data-ports="{{ implode(', ', $config['ports']) }}" data-providers="{{ implode(', ', $config['providers'] ?? []) }}" data-max-parallel="{{ $config['maxParallel'] ?? $config['modelCount'] }}" @selected($defaultConfig === $config['value'])>{{ $config['label'] }} · {{ $config['modelCount'] }} model</option>
                             @endforeach
@@ -264,13 +264,13 @@
 
                     <div class="grid gap-3" data-model-panel="custom" @class(['hidden' => $defaultModelMode !== 'custom'])>
                         <div class="flex items-center gap-2">
-                            <input class="h-10 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-white px-3.5 text-sm outline-none focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)]" type="search" placeholder="Model adı veya yayıncı ara…" data-model-search data-runner-input @disabled($active)>
+                            <input class="h-10 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-sm outline-none focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)]" type="search" placeholder="Model adı veya yayıncı ara…" data-model-search data-runner-input @disabled($active)>
                             <span class="whitespace-nowrap text-[10px] font-extrabold text-[var(--muted)]"><span data-model-visible-count>{{ $openRouterModels->count() }}</span> sonuç · <span data-model-selected-count>{{ count($selectedModels) }}</span>/{{ \App\Services\BenchmarkRunner::CUSTOM_MODEL_LIMIT }} seçili</span>
                         </div>
                         <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                             <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
                                 Model yayıncısı
-                                <select class="h-9 rounded-lg border border-[var(--line)] bg-white px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--forest)]" data-model-author-filter data-runner-input @disabled($active)>
+                                <select class="h-9 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--forest)]" data-model-author-filter data-runner-input @disabled($active)>
                                     <option value="">Tümü</option>
                                     @foreach ($catalogAuthors as $author)
                                         <option value="{{ $author }}">{{ $author }}</option>
@@ -279,7 +279,7 @@
                             </label>
                             <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
                                 Ücret
-                                <select class="h-9 rounded-lg border border-[var(--line)] bg-white px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--forest)]" data-model-cost-filter data-runner-input @disabled($active)>
+                                <select class="h-9 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--forest)]" data-model-cost-filter data-runner-input @disabled($active)>
                                     <option value="all">Tümü</option>
                                     <option value="free">Yalnızca ücretsiz</option>
                                     <option value="paid">Yalnızca ücretli</option>
@@ -287,7 +287,7 @@
                             </label>
                             <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
                                 Sürüm
-                                <select class="h-9 rounded-lg border border-[var(--line)] bg-white px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--forest)]" data-model-release-filter data-runner-input @disabled($active)>
+                                <select class="h-9 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--forest)]" data-model-release-filter data-runner-input @disabled($active)>
                                     <option value="all">Tümü</option>
                                     <option value="stable">Kararlı</option>
                                     <option value="preview">Preview</option>
@@ -295,7 +295,7 @@
                             </label>
                             <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
                                 Sıralama
-                                <select class="h-9 rounded-lg border border-[var(--line)] bg-white px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--forest)]" data-model-sort data-runner-input @disabled($active)>
+                                <select class="h-9 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--forest)]" data-model-sort data-runner-input @disabled($active)>
                                     <option value="newest">En yeni</option>
                                     <option value="name">Ada göre</option>
                                     <option value="prompt-price">Girdi fiyatı</option>
@@ -304,24 +304,24 @@
                                 </select>
                             </label>
                         </div>
-                        <div class="grid gap-2 rounded-xl border border-[#f0d9a6] bg-[#fff9eb] p-3">
+                        <div class="grid gap-2 rounded-xl border border-[var(--amber-line)] bg-[var(--amber-soft)] p-3">
                             <label class="grid gap-1 text-xs font-extrabold text-[var(--ink)]" for="openrouter-routing-mode">
                                 OpenRouter sağlayıcı yönlendirmesi
                             </label>
-                            <select class="h-10 w-full rounded-lg border border-[#e8cf97] bg-white px-3 text-xs font-semibold outline-none focus:border-[var(--forest)] disabled:cursor-not-allowed disabled:opacity-50" id="openrouter-routing-mode" name="routing_mode" data-routing-mode data-runner-input @disabled($active || $defaultModelMode !== 'custom')>
+                            <select class="h-10 w-full rounded-lg border border-[var(--amber-line)] bg-[var(--surface)] px-3 text-xs font-semibold outline-none focus:border-[var(--forest)] disabled:cursor-not-allowed disabled:opacity-50" id="openrouter-routing-mode" name="routing_mode" data-routing-mode data-runner-input @disabled($active || $defaultModelMode !== 'custom')>
                                 <option value="auto" @selected($defaultRoutingMode === 'auto')>Otomatik · OpenRouter seçsin</option>
                                 <option value="price" @selected($defaultRoutingMode === 'price')>Düşük fiyat öncelikli</option>
                                 <option value="throughput" @selected($defaultRoutingMode === 'throughput')>Yüksek hız öncelikli</option>
                                 <option value="fixed" @selected($defaultRoutingMode === 'fixed')>Sabit sağlayıcı · model başına seç</option>
                             </select>
-                            <p class="text-[10px] leading-4 text-[#815d0c]" data-routing-explanation>
+                            <p class="text-[10px] leading-4 text-[var(--amber-ink)]" data-routing-explanation>
                                 Yalnız OpenRouter kataloğundan seçilen modeller için geçerlidir. Kayıtlı gruplar mevcut yönlendirme ayarlarını korur; OpenCode Go etkilenmez. Veri toplama izni verilmez; parametre uyumu aranır.
                             </p>
                         </div>
                         <div class="max-h-80 space-y-2 overflow-y-auto pr-1" data-model-catalog>
                             @forelse ($openRouterModels as $model)
                                 <label
-                                    class="block cursor-pointer rounded-xl border border-[var(--line)] bg-white p-3 transition has-checked:border-[var(--forest)] has-checked:bg-[var(--mint-soft)]"
+                                    class="block cursor-pointer rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 transition has-checked:border-[var(--forest)] has-checked:bg-[var(--mint-soft)]"
                                     data-model-card
                                     data-model-name="{{ $model->name }}"
                                     data-model-id="{{ $model->model_id }}"
@@ -368,12 +368,12 @@
                                     <h3 class="text-xs font-black" id="fixed-provider-title">Model başına sabit sağlayıcı</h3>
                                     <p class="mt-1 text-[10px] leading-4 text-[var(--muted)]">Her seçili model için araç kullanımını destekleyen bir uç nokta seçin. OpenRouter’ın sağlayıcı etiketi kullanılır ve seçim başlatmadan önce yeniden doğrulanır; anlık kullanılabilirlik veya veri politikası garantisi değildir.</p>
                                 </div>
-                                <button class="rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-[10px] font-extrabold text-[var(--forest)] disabled:cursor-not-allowed disabled:opacity-50" type="button" data-fixed-provider-refresh @disabled($active)>Sağlayıcıları yenile</button>
+                                <button class="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-[10px] font-extrabold text-[var(--forest)] disabled:cursor-not-allowed disabled:opacity-50" type="button" data-fixed-provider-refresh @disabled($active)>Sağlayıcıları yenile</button>
                             </div>
                             <div class="grid gap-3" data-fixed-provider-list aria-live="polite"></div>
                         </section>
 
-                        <section class="rounded-xl border border-[#d8d1f5] bg-[var(--violet-soft)] p-4" aria-labelledby="cost-estimate-title" data-cost-estimate>
+                        <section class="rounded-xl border border-[var(--violet-line)] bg-[var(--violet-soft)] p-4" aria-labelledby="cost-estimate-title" data-cost-estimate>
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                     <p class="text-[9px] font-extrabold tracking-[0.08em] text-[var(--violet)] uppercase">Bütçe senaryosu</p>
@@ -384,11 +384,11 @@
                             <div class="mt-3 grid gap-2 sm:grid-cols-2">
                                 <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
                                     Model başına toplam girdi tokenı
-                                    <input class="h-9 rounded-lg border border-[#d8d1f5] bg-white px-2.5 font-mono text-xs font-bold normal-case outline-none focus:border-[var(--violet)]" type="number" min="0" max="10000000" step="1000" value="100000" inputmode="numeric" data-cost-input-tokens data-runner-input @disabled($active)>
+                                    <input class="h-9 rounded-lg border border-[var(--violet-line)] bg-[var(--surface)] px-2.5 font-mono text-xs font-bold normal-case outline-none focus:border-[var(--violet)]" type="number" min="0" max="10000000" step="1000" value="100000" inputmode="numeric" data-cost-input-tokens data-runner-input @disabled($active)>
                                 </label>
                                 <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
                                     Model başına toplam çıktı tokenı
-                                    <input class="h-9 rounded-lg border border-[#d8d1f5] bg-white px-2.5 font-mono text-xs font-bold normal-case outline-none focus:border-[var(--violet)]" type="number" min="0" max="10000000" step="1000" value="25000" inputmode="numeric" data-cost-output-tokens data-runner-input @disabled($active)>
+                                    <input class="h-9 rounded-lg border border-[var(--violet-line)] bg-[var(--surface)] px-2.5 font-mono text-xs font-bold normal-case outline-none focus:border-[var(--violet)]" type="number" min="0" max="10000000" step="1000" value="25000" inputmode="numeric" data-cost-output-tokens data-runner-input @disabled($active)>
                                 </label>
                             </div>
                             <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[var(--muted)]">
@@ -404,13 +404,13 @@
 
                     <div class="grid gap-3" data-model-panel="opencode_go" @class(['hidden' => $defaultModelMode !== 'opencode_go'])>
                         <div class="flex items-center gap-2">
-                            <input class="h-10 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-white px-3.5 text-sm outline-none focus:border-[var(--violet)] focus:ring-3 focus:ring-[var(--violet-soft)]" type="search" placeholder="OpenCode Go modeli ara…" data-go-model-search data-runner-input @disabled($active)>
+                            <input class="h-10 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-sm outline-none focus:border-[var(--violet)] focus:ring-3 focus:ring-[var(--violet-soft)]" type="search" placeholder="OpenCode Go modeli ara…" data-go-model-search data-runner-input @disabled($active)>
                             <span class="whitespace-nowrap text-[10px] font-extrabold text-[var(--muted)]"><span data-go-model-visible-count>{{ $openCodeGoModels->count() }}</span> sonuç · <span data-go-model-selected-count>{{ count($selectedGoModels) }}</span>/{{ \App\Services\BenchmarkRunner::CUSTOM_MODEL_LIMIT }} seçili</span>
                         </div>
                         <div class="grid gap-2 sm:grid-cols-3">
                             <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
                                 Ücret
-                                <select class="h-9 rounded-lg border border-[var(--line)] bg-white px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--violet)]" data-go-model-cost-filter data-runner-input @disabled($active)>
+                                <select class="h-9 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--violet)]" data-go-model-cost-filter data-runner-input @disabled($active)>
                                     <option value="all">Tümü</option>
                                     <option value="free">Yalnızca ücretsiz</option>
                                     <option value="paid">Yalnızca ücretli</option>
@@ -418,7 +418,7 @@
                             </label>
                             <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
                                 Sürüm
-                                <select class="h-9 rounded-lg border border-[var(--line)] bg-white px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--violet)]" data-go-model-release-filter data-runner-input @disabled($active)>
+                                <select class="h-9 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--violet)]" data-go-model-release-filter data-runner-input @disabled($active)>
                                     <option value="all">Tümü</option>
                                     <option value="stable">Kararlı</option>
                                     <option value="preview">Preview</option>
@@ -426,7 +426,7 @@
                             </label>
                             <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
                                 Sıralama
-                                <select class="h-9 rounded-lg border border-[var(--line)] bg-white px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--violet)]" data-go-model-sort data-runner-input @disabled($active)>
+                                <select class="h-9 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold normal-case outline-none focus:border-[var(--violet)]" data-go-model-sort data-runner-input @disabled($active)>
                                     <option value="newest">En yeni</option>
                                     <option value="name">Ada göre</option>
                                     <option value="prompt-price">Girdi maliyeti</option>
@@ -435,13 +435,13 @@
                                 </select>
                             </label>
                         </div>
-                        <p class="rounded-lg border border-[#d8d1f5] bg-[var(--violet-soft)] px-3 py-2 text-[10px] leading-4 text-[var(--violet)]">
+                        <p class="rounded-lg border border-[var(--violet-line)] bg-[var(--violet-soft)] px-3 py-2 text-[10px] leading-4 text-[var(--violet)]">
                             OpenCode Go aboneliğiniz kullanılır. Gösterilen maliyet, ek ücret değil; aboneliğinizdeki kullanım limitinin yaklaşık dolar karşılığıdır. Modeller aşağıdaki eşzamanlılık seçimine göre çalışır.
                         </p>
                         <div class="max-h-80 space-y-2 overflow-y-auto pr-1" data-go-model-catalog>
                             @forelse ($openCodeGoModels as $model)
                                 <label
-                                    class="block cursor-pointer rounded-xl border border-[var(--line)] bg-white p-3 transition has-checked:border-[var(--violet)] has-checked:bg-[var(--violet-soft)]"
+                                    class="block cursor-pointer rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 transition has-checked:border-[var(--violet)] has-checked:bg-[var(--violet-soft)]"
                                     data-go-model-card
                                     data-model-name="{{ $model->name }}"
                                     data-model-search-text="{{ Str::lower($model->name.' '.$model->model_id.' '.$model->family) }}"
@@ -481,7 +481,7 @@
                             </div>
                         </div>
 
-                        <section class="rounded-xl border border-[#d8d1f5] bg-[var(--violet-soft)] p-4" aria-labelledby="go-cost-estimate-title">
+                        <section class="rounded-xl border border-[var(--violet-line)] bg-[var(--violet-soft)] p-4" aria-labelledby="go-cost-estimate-title">
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                     <p class="text-[9px] font-extrabold tracking-[0.08em] text-[var(--violet)] uppercase">Abonelik kullanım senaryosu</p>
@@ -492,11 +492,11 @@
                             <div class="mt-3 grid gap-2 sm:grid-cols-2">
                                 <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
                                     Model başına toplam girdi tokenı
-                                    <input class="h-9 rounded-lg border border-[#d8d1f5] bg-white px-2.5 font-mono text-xs font-bold normal-case outline-none focus:border-[var(--violet)]" type="number" min="0" max="10000000" step="1000" value="100000" inputmode="numeric" data-go-cost-input-tokens data-runner-input @disabled($active)>
+                                    <input class="h-9 rounded-lg border border-[var(--violet-line)] bg-[var(--surface)] px-2.5 font-mono text-xs font-bold normal-case outline-none focus:border-[var(--violet)]" type="number" min="0" max="10000000" step="1000" value="100000" inputmode="numeric" data-go-cost-input-tokens data-runner-input @disabled($active)>
                                 </label>
                                 <label class="grid gap-1 text-[9px] font-extrabold tracking-[0.07em] text-[var(--muted)] uppercase">
                                     Model başına toplam çıktı tokenı
-                                    <input class="h-9 rounded-lg border border-[#d8d1f5] bg-white px-2.5 font-mono text-xs font-bold normal-case outline-none focus:border-[var(--violet)]" type="number" min="0" max="10000000" step="1000" value="25000" inputmode="numeric" data-go-cost-output-tokens data-runner-input @disabled($active)>
+                                    <input class="h-9 rounded-lg border border-[var(--violet-line)] bg-[var(--surface)] px-2.5 font-mono text-xs font-bold normal-case outline-none focus:border-[var(--violet)]" type="number" min="0" max="10000000" step="1000" value="25000" inputmode="numeric" data-go-cost-output-tokens data-runner-input @disabled($active)>
                                 </label>
                             </div>
                             <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[var(--muted)]">
@@ -510,8 +510,8 @@
                     <div @class(['grid gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] p-3', 'hidden' => $defaultModelMode === 'group']) data-selection-group>
                         <label class="text-xs font-extrabold text-[var(--ink)]" for="selection-group-name">Bu seçimi grup olarak kaydet <span class="font-semibold text-[var(--muted)]">(isteğe bağlı)</span></label>
                         <div class="flex flex-col gap-2 sm:flex-row">
-                            <input class="h-10 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-white px-3 font-mono text-xs outline-none focus:border-[var(--forest)]" id="selection-group-name" type="text" name="group_name" value="{{ old('group_name') }}" maxlength="80" placeholder="Örnek: Kurtuluş Savaşı modelleri" aria-describedby="selection-group-help" data-group-name-input @disabled($active)>
-                            <button class="rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[11px] font-extrabold text-[var(--forest)] disabled:opacity-50" type="submit" formaction="{{ route('model-groups.selection.store') }}" formnovalidate data-save-selection-group @disabled($active)>Grup olarak kaydet</button>
+                            <input class="h-10 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 font-mono text-xs outline-none focus:border-[var(--forest)]" id="selection-group-name" type="text" name="group_name" value="{{ old('group_name') }}" maxlength="80" placeholder="Örnek: Kurtuluş Savaşı modelleri" aria-describedby="selection-group-help" data-group-name-input @disabled($active)>
+                            <button class="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[11px] font-extrabold text-[var(--forest)] disabled:opacity-50" type="submit" formaction="{{ route('model-groups.selection.store') }}" formnovalidate data-save-selection-group @disabled($active)>Grup olarak kaydet</button>
                         </div>
                         <p class="hidden font-mono text-[10px] text-[var(--forest)]" data-group-name-preview aria-live="polite"></p>
                         @error('group_name')
@@ -527,7 +527,7 @@
                 <label class="grid gap-2 text-xs font-extrabold text-[var(--ink)]">
                     Aynı anda çalışacak model sayısı
                     <select
-                        class="h-11 rounded-xl border border-[var(--line)] bg-white px-3.5 text-sm font-semibold outline-none transition focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]"
+                        class="h-11 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-sm font-semibold outline-none transition focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]"
                         name="max_parallel"
                         data-runner-concurrency
                         data-runner-input
@@ -548,7 +548,7 @@
                 <label class="grid gap-2 text-xs font-extrabold text-[var(--ink)]">
                     Doğrulanacak rotalar
                     <textarea
-                        class="resize-y rounded-xl border border-[var(--line)] bg-white px-3.5 py-3 font-mono text-sm leading-6 outline-none transition focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]"
+                        class="resize-y rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 py-3 font-mono text-sm leading-6 outline-none transition focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]"
                         name="routes"
                         rows="5"
                         placeholder="/&#10;/product/example&#10;/cart"
@@ -583,7 +583,7 @@
                 <p class="mt-3 hidden rounded-lg px-3 py-2 text-[10px] leading-4" data-runner-load-estimate aria-live="polite"></p>
             </div>
 
-            <section class="mt-5 rounded-xl border border-[var(--line)] bg-white p-4" aria-labelledby="preflight-title" data-preflight-panel>
+            <section class="mt-5 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-4" aria-labelledby="preflight-title" data-preflight-panel>
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <p class="eyebrow">Başlatma güvenliği</p>
@@ -622,7 +622,7 @@
             </button>
         </form>
 
-        <section class="runner-card overflow-hidden rounded-2xl border border-[var(--line)] bg-white" aria-labelledby="runner-status-title">
+        <section class="runner-card overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]" aria-labelledby="runner-status-title">
             <div class="border-b border-[var(--line)] p-5 sm:p-6">
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div>
@@ -659,15 +659,15 @@
                     </div>
 
                     <dl class="mt-4 grid grid-cols-3 gap-2 text-center {{ $outcome['available'] ? '' : 'hidden' }}" data-runner-outcome-counts>
-                        <div class="rounded-lg border border-[#b9ead8] bg-white px-2 py-2.5">
+                        <div class="rounded-lg border border-[var(--success-line)] bg-[var(--surface)] px-2 py-2.5">
                             <dt class="text-[9px] font-bold tracking-[0.08em] text-[var(--muted)] uppercase">Geçen</dt>
                             <dd class="mt-1 text-lg font-black text-[var(--success)]" data-runner-outcome-passed>{{ $outcome['passedModels'] }}</dd>
                         </div>
-                        <div class="rounded-lg border border-[#f2c9cf] bg-white px-2 py-2.5">
+                        <div class="rounded-lg border border-[var(--red-line)] bg-[var(--surface)] px-2 py-2.5">
                             <dt class="text-[9px] font-bold tracking-[0.08em] text-[var(--muted)] uppercase">Sorunlu</dt>
                             <dd class="mt-1 text-lg font-black text-[var(--red)]" data-runner-outcome-failed>{{ $outcome['failedModels'] }}</dd>
                         </div>
-                        <div class="rounded-lg border border-[var(--line)] bg-white px-2 py-2.5">
+                        <div class="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2 py-2.5">
                             <dt class="text-[9px] font-bold tracking-[0.08em] text-[var(--muted)] uppercase">Diğer</dt>
                             <dd class="mt-1 text-lg font-black text-[var(--amber)]" data-runner-outcome-other>{{ $outcome['otherModels'] }}</dd>
                         </div>
@@ -684,7 +684,7 @@
                     <form method="POST" action="{{ route('runner.stop') }}" data-runner-stop-form @class(['hidden' => ! $active])>
                         @csrf
                         @method('DELETE')
-                        <button class="rounded-lg border border-[#e9b9b5] bg-[var(--red-soft)] px-3.5 py-2 text-xs font-extrabold text-[var(--red)] transition hover:border-[var(--red)] disabled:cursor-not-allowed disabled:opacity-50" type="submit" data-runner-stop-button @disabled($state['status'] === 'stopping')>
+                        <button class="rounded-lg border border-[var(--red-line)] bg-[var(--red-soft)] px-3.5 py-2 text-xs font-extrabold text-[var(--red)] transition hover:border-[var(--red)] disabled:cursor-not-allowed disabled:opacity-50" type="submit" data-runner-stop-button @disabled($state['status'] === 'stopping')>
                             {{ $state['status'] === 'stopping' ? 'Durduruluyor…' : 'Koşuyu durdur' }}
                         </button>
                     </form>
@@ -704,7 +704,7 @@
         </section>
     </div>
 
-    <section class="maintenance-card mt-5 rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6">
+    <section class="maintenance-card mt-5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6">
         <p class="eyebrow text-[var(--amber)]">Çalışma ilkeleri</p>
         <div class="mt-3 grid gap-4 text-xs leading-5 text-[var(--muted)] sm:grid-cols-3">
             <p><strong class="block text-[var(--ink)]">Tek aktif koşu</strong>Port ve dosya çakışmalarını önlemek için aynı anda yalnızca bir benchmark yürütülür.</p>

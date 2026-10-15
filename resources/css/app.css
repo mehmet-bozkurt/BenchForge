@@ -3,6 +3,8 @@
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 @theme {
     --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
@@ -29,6 +31,64 @@
     --amber-soft: #fff7e6;
     --violet: #7c3aed;
     --violet-soft: #f5f3ff;
+    --surface-sunken: #e9edf5;
+    --slate-line: #ccd9f5;
+    --slate-ink: #526584;
+    --slate-soft: #f1f5fb;
+    --indigo-line: #c7d2fe;
+    --indigo-soft: #eef2ff;
+    --indigo-ink: #3730a3;
+    --success-line: #b9ead8;
+    --success-ink: #0f7a5a;
+    --red-line: #f2c9cf;
+    --amber-line: #f1d7a5;
+    --amber-ink: #8b5a16;
+    --violet-line: #d8d1f5;
+    --violet-ink: #5b35ad;
+    --violet-strong: #7c3aed;
+    --grid-line: rgb(79 70 229 / 1.8%);
+    --glow: rgb(103 232 249 / 14%);
+    color-scheme: light;
+}
+
+/* Dark theme: only the tokens change. `data-theme` is set before first paint by the inline theme script. */
+:root[data-theme='dark'] {
+    --canvas: #0c0f1d;
+    --surface: #141a2d;
+    --surface-subtle: #192038;
+    --surface-sunken: #0a0d18;
+    --ink: #e6e9f3;
+    --muted: #9aa4bb;
+    --line: #252d47;
+    --line-strong: #364062;
+    --forest: #6d72f6;
+    --forest-deep: #080b16;
+    --mint-soft: #0f2831;
+    --success: #3cc897;
+    --success-soft: #0e2a24;
+    --success-line: #1e4d3e;
+    --success-ink: #5fd8aa;
+    --red: #e2566a;
+    --red-soft: #321620;
+    --red-line: #5b2533;
+    --amber: #e9a23b;
+    --amber-soft: #2c2113;
+    --amber-line: #5a4321;
+    --amber-ink: #f1b862;
+    --violet: #a78bfa;
+    --violet-soft: #211a3c;
+    --violet-line: #3e336b;
+    --violet-ink: #c9b8ff;
+    --violet-strong: #6d4ae6;
+    --slate-line: #2f3a58;
+    --slate-ink: #a3b3d3;
+    --slate-soft: #1a2137;
+    --indigo-line: #353e7e;
+    --indigo-soft: #1b2148;
+    --indigo-ink: #b0bcff;
+    --grid-line: rgb(129 140 248 / 3.2%);
+    --glow: rgb(103 232 249 / 7%);
+    color-scheme: dark;
 }
 
 * {
@@ -45,9 +105,9 @@ body {
     font-family: var(--font-sans);
     color: var(--ink);
     background:
-        linear-gradient(rgb(79 70 229 / 1.8%) 1px, transparent 1px),
-        linear-gradient(90deg, rgb(79 70 229 / 1.8%) 1px, transparent 1px),
-        radial-gradient(circle at 88% 2%, rgb(103 232 249 / 14%), transparent 28rem),
+        linear-gradient(var(--grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+        radial-gradient(circle at 88% 2%, var(--glow), transparent 28rem),
         radial-gradient(circle at 58% 22%, rgb(124 58 237 / 5.5%), transparent 24rem),
         var(--canvas);
     background-size: 32px 32px, 32px 32px, auto, auto, auto;
@@ -163,11 +223,51 @@ body {
     opacity: 0.58;
 }
 
+.theme-switch {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3px;
+    margin-top: auto;
+    margin-bottom: 12px;
+    padding: 3px;
+    border: 1px solid rgb(129 140 248 / 16%);
+    border-radius: 11px;
+    background: rgb(255 255 255 / 3.5%);
+}
+
+.theme-switch button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 30px;
+    border-radius: 8px;
+    color: #8f9ab6;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: color 150ms ease, background 150ms ease;
+}
+
+.theme-switch button:hover {
+    color: #e6e9f3;
+}
+
+.theme-switch button[aria-pressed='true'] {
+    color: #ffffff;
+    background: rgb(99 102 241 / 28%);
+    box-shadow: inset 0 0 0 1px rgb(129 140 248 / 30%);
+}
+
+.theme-switch button:focus-visible {
+    outline: 2px solid #67e8f9;
+    outline-offset: 1px;
+}
+
 .sidebar-note {
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    margin-top: auto;
     padding: 14px;
     border: 1px solid rgb(129 140 248 / 20%);
     border-radius: 12px;
@@ -225,7 +325,7 @@ body {
     border: 1px solid var(--line);
     border-radius: 999px;
     color: var(--muted);
-    background: #fff;
+    background: var(--surface);
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -270,13 +370,13 @@ body {
 }
 
 .schema-badge-legacy {
-    border-color: #ccd9f5;
-    color: #526584;
-    background: #f1f5fb;
+    border-color: var(--slate-line);
+    color: var(--slate-ink);
+    background: var(--slate-soft);
 }
 
 .schema-badge-extended {
-    border-color: #d7ccff;
+    border-color: var(--violet-line);
     color: var(--violet);
     background: var(--violet-soft);
 }
@@ -289,13 +389,13 @@ body {
 }
 
 .status-pass {
-    border-color: #b9ead8;
+    border-color: var(--success-line);
     color: var(--success);
     background: var(--success-soft);
 }
 
 .status-fail {
-    border-color: #f2c9cf;
+    border-color: var(--red-line);
     color: var(--red);
     background: var(--red-soft);
 }
@@ -350,7 +450,7 @@ body {
     padding: 20px;
     border: 1px solid var(--line);
     border-radius: 16px;
-    background: #fff;
+    background: var(--surface);
     box-shadow: 0 12px 38px rgb(26 32 65 / 5.5%);
 }
 
@@ -422,7 +522,7 @@ body {
 
 .run-card:hover {
     transform: translateY(-4px);
-    border-color: #cfd3ff;
+    border-color: var(--indigo-line);
     box-shadow: 0 20px 55px rgb(26 32 65 / 10%);
 }
 
@@ -475,7 +575,7 @@ body {
     background:
         linear-gradient(rgb(99 102 241 / 3%) 1px, transparent 1px),
         linear-gradient(90deg, rgb(99 102 241 / 3%) 1px, transparent 1px),
-        #e9edf5;
+        var(--surface-sunken);
     background-size: 20px 20px;
 }
 
@@ -484,7 +584,7 @@ body {
     width: 100%;
     min-height: 590px;
     overflow: hidden;
-    border: 1px solid rgb(15 23 42 / 10%);
+    border: 1px solid var(--line);
     border-radius: 10px;
     background: #fff;
     box-shadow: 0 12px 30px rgb(15 23 42 / 12%);
@@ -499,7 +599,7 @@ body {
 }
 
 .status-unknown {
-    border-color: #f1d7a5;
+    border-color: var(--amber-line);
     color: var(--amber);
     background: var(--amber-soft);
 }
@@ -511,9 +611,9 @@ body {
 }
 
 .status-running {
-    border-color: #c7d2fe;
+    border-color: var(--indigo-line);
     color: var(--forest);
-    background: #eef2ff;
+    background: var(--indigo-soft);
 }
 
 .status-running .status-dot {
@@ -546,11 +646,11 @@ body {
 }
 
 .preflight-check-pass {
-    border-color: #b9ead8;
+    border-color: var(--success-line);
 }
 
 .preflight-check-fail {
-    border-color: #f2c9cf;
+    border-color: var(--red-line);
     background: var(--red-soft);
 }
 
@@ -569,7 +669,7 @@ body {
 
 .preflight-check-fail .preflight-mark {
     color: var(--red);
-    background: #fff;
+    background: var(--surface);
 }
 
 @keyframes runner-pulse {
@@ -661,6 +761,12 @@ body {
         display: none;
     }
 
+    .theme-switch {
+        width: 100%;
+        max-width: 320px;
+        margin: 0;
+    }
+
     .main-content {
         padding: 26px 18px 48px;
     }
@@ -708,13 +814,13 @@ body {
 }
 
 .condition-isolated-v1 {
-    color: #3730a3;
-    background: #eef2ff;
+    color: var(--indigo-ink);
+    background: var(--indigo-soft);
 }
 
 .condition-legacy {
-    color: #526584;
-    background: #f1f5fb;
+    color: var(--slate-ink);
+    background: var(--slate-soft);
 }
 
 .condition-manual {
@@ -728,7 +834,7 @@ body {
 }
 
 .result-some {
-    color: #a15c07;
+    color: var(--amber-ink);
     background: var(--amber-soft);
 }
 
@@ -808,13 +914,13 @@ body {
 }
 
 .stage-cell-provider {
-    color: #a15c07;
+    color: var(--amber-ink);
     background: var(--amber-soft);
-    box-shadow: inset 0 0 0 1px #f3c97a;
+    box-shadow: inset 0 0 0 1px var(--amber-line);
 }
 
 .stage-cell-unknown {
-    color: #a15c07;
+    color: var(--amber-ink);
     background: var(--amber-soft);
 }
 
@@ -858,7 +964,7 @@ body {
 .run-stats > div {
     min-width: 0;
     padding: 6px 14px 7px;
-    background: #ffffff;
+    background: var(--surface);
 }
 
 .run-stats dt {
@@ -879,8 +985,8 @@ body {
 
 .run-note {
     padding: 7px 16px;
-    border-bottom: 1px solid #f1d7a5;
-    color: #8b5a16;
+    border-bottom: 1px solid var(--amber-line);
+    color: var(--amber-ink);
     background: var(--amber-soft);
     font-size: 12.5px;
     line-height: 1.5;
@@ -942,7 +1048,7 @@ body {
 }
 
 .results-table tfoot .result-stage.is-complete {
-    color: #0f7a5a;
+    color: var(--success-ink);
 }
 
 .results-table .result-empty {
@@ -1028,7 +1134,7 @@ body {
 
 .sort-indicator::after {
     color: var(--line-strong);
-    content: "↕";
+    content: "\2195\FE0E";
 }
 
 [data-sort-direction="ascending"] > .sort-indicator::after {
@@ -1098,7 +1204,7 @@ body {
 }
 
 .results-table .stage-mark-unknown {
-    color: #8b5a16;
+    color: var(--amber-ink);
 }
 
 .results-table a.stage-mark:hover {
@@ -1116,7 +1222,7 @@ body {
     align-items: baseline;
     gap: 1px;
     padding: 4px 9px;
-    border: 1px solid #d7ccff;
+    border: 1px solid var(--violet-line);
     border-radius: 8px;
     color: var(--violet);
     background: var(--violet-soft);
@@ -1308,7 +1414,7 @@ body {
 
 .btn-primary {
     color: #ffffff;
-    background: var(--violet);
+    background: var(--violet-strong);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -1316,9 +1422,9 @@ body {
 }
 
 .btn-secondary {
-    border-color: #8dd9bd;
+    border-color: var(--success-line);
     color: var(--success);
-    background: #ffffff;
+    background: var(--surface);
 }
 
 .btn-secondary:hover:not(:disabled) {
@@ -1326,7 +1432,7 @@ body {
 }
 
 .btn-soft {
-    border-color: #d7ccff;
+    border-color: var(--violet-line);
     color: var(--violet);
     background: var(--violet-soft);
 }
@@ -1338,7 +1444,7 @@ body {
 .btn-ghost {
     border-color: var(--line);
     color: var(--ink);
-    background: #ffffff;
+    background: var(--surface);
 }
 
 .btn-ghost:hover {
@@ -1347,9 +1453,9 @@ body {
 }
 
 .btn-danger {
-    border-color: #efbcc4;
+    border-color: var(--red-line);
     color: var(--red);
-    background: #ffffff;
+    background: var(--surface);
 }
 
 .btn-danger:hover {
@@ -1378,7 +1484,7 @@ body {
     display: inline-flex;
     align-items: center;
     padding: 4px 10px;
-    border: 1px solid #efbcc4;
+    border: 1px solid var(--red-line);
     border-radius: 8px;
     color: var(--red);
     background: var(--red-soft);
@@ -1442,7 +1548,7 @@ a.log-pill:hover {
     left: -22px;
     width: 14px;
     height: 14px;
-    border: 3px solid #ffffff;
+    border: 3px solid var(--surface);
     border-radius: 999px;
     box-shadow: 0 0 0 1px var(--line-strong);
     background: var(--line-strong);
@@ -1474,7 +1580,7 @@ a.log-pill:hover {
     border: 1px solid var(--line);
     border-radius: 20px;
     color: var(--ink);
-    background: #ffffff;
+    background: var(--surface);
     box-shadow: 0 30px 80px -20px rgb(17 24 39 / 0.45);
 }
 

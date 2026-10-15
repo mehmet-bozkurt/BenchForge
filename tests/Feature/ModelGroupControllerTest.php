@@ -94,7 +94,7 @@ test('it refuses invalid groups without touching existing files', function (arra
     'bad name' => [['name' => '../evil', 'models' => 'openrouter/acme/x'], 'Grup adı'],
     'model without provider' => [['name' => 'yeni', 'models' => 'nova'], 'Geçersiz model kimliği'],
     'model with separator' => [['name' => 'yeni', 'models' => 'openrouter/acme|x'], 'Geçersiz model kimliği'],
-    'too many models' => [['name' => 'yeni', 'models' => implode("\n", array_map(fn (int $i): string => "openrouter/acme/m{$i}", range(1, 11)))], '1–10'],
+    'too many models' => [['name' => 'yeni', 'models' => implode("\n", array_map(fn (int $i): string => "openrouter/acme/m{$i}", range(1, BenchmarkRunner::CUSTOM_MODEL_LIMIT + 1)))], '1–'.BenchmarkRunner::CUSTOM_MODEL_LIMIT],
 ]);
 
 test('deleting a group moves it to the trash and hides it from the runner', function () {

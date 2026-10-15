@@ -7,6 +7,7 @@
 
         <title>{{ $title ?? 'BenchForge Studio' }}</title>
         <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+        <x-theme-script />
 
         @fonts
         @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -48,6 +49,12 @@
                         Sistem ve Kurulum
                     </a>
                 </nav>
+
+                <div class="theme-switch" role="group" aria-label="Görünüm">
+                    <button type="button" data-theme-choice="light" aria-pressed="false" title="Açık tema"><span aria-hidden="true">&#x2600;&#xFE0E;</span>Açık</button>
+                    <button type="button" data-theme-choice="dark" aria-pressed="false" title="Koyu tema"><span aria-hidden="true">☾</span>Koyu</button>
+                    <button type="button" data-theme-choice="system" aria-pressed="false" title="Sistem ayarını izle"><span aria-hidden="true">◐</span>Sistem</button>
+                </div>
 
                 <div class="sidebar-note">
                     <span class="live-dot" aria-hidden="true"></span>

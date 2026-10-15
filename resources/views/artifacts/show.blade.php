@@ -37,7 +37,7 @@
     </header>
 
     @if ($preview['truncated'])
-        <aside class="mt-5 rounded-xl border border-[#f1d7a5] bg-[var(--amber-soft)] px-4 py-3 text-xs font-semibold text-[#8b5a16]">
+        <aside class="mt-5 rounded-xl border border-[var(--amber-line)] bg-[var(--amber-soft)] px-4 py-3 text-xs font-semibold text-[var(--amber-ink)]">
             Önizleme kısaltıldı. Dosyanın başlangıç ve son bölümü gösteriliyor.
         </aside>
     @endif

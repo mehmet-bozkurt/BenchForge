@@ -7,6 +7,7 @@
 
         <title>{{ str($modelRun->model)->after('/') }} · {{ $run->name }} · BenchForge</title>
         <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+        <x-theme-script />
 
         @fonts
         @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -105,9 +106,9 @@
                 </p>
             @endif
 
-            <div class="relative min-h-0 flex-1 bg-[#e9edf5] p-2 sm:p-3">
+            <div class="relative min-h-0 flex-1 bg-[var(--surface-sunken)] p-2 sm:p-3">
                 <iframe
-                    class="h-full w-full rounded-lg border border-black/10 bg-white shadow-[0_18px_50px_rgb(15_23_42/0.18)]"
+                    class="h-full w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] shadow-[0_18px_50px_rgb(15_23_42/0.18)]"
                     src="{{ $previewUrl }}"
                     title="{{ str($modelRun->model)->after('/') }} {{ $showingRecovered ? 'kurtarılmış çıktı' : 'ilk teslim' }} önizlemesi"
                     referrerpolicy="no-referrer"
@@ -118,30 +119,30 @@
                 <button class="absolute inset-0 z-10 hidden cursor-default bg-[#0b1020]/35 backdrop-blur-[1px]" type="button" data-evaluation-overlay aria-label="Değerlendirme panelini kapat"></button>
 
                 <aside
-                    class="absolute inset-y-0 right-0 z-20 hidden w-full max-w-[440px] flex-col overflow-y-auto border-l border-white/10 bg-[#f8f9fd] shadow-[-20px_0_60px_rgb(15_23_42/0.24)]"
+                    class="absolute inset-y-0 right-0 z-20 hidden w-full max-w-[440px] flex-col overflow-y-auto border-l border-white/10 bg-[var(--surface-subtle)] shadow-[-20px_0_60px_rgb(15_23_42/0.24)]"
                     id="evaluation-panel"
                     data-evaluation-panel
                     data-evaluation-open="{{ $openEvaluationPanel ? 'true' : 'false' }}"
                     aria-label="Manuel değerlendirme"
                 >
-                    <header class="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--line)] bg-white/95 px-5 py-4 backdrop-blur">
+                    <header class="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--line)] bg-[var(--surface)]/95 px-5 py-4 backdrop-blur">
                         <div>
                             <p class="eyebrow">Manuel değerlendirme</p>
                             <h2 class="mt-1 text-base font-black">{{ str($modelRun->model)->after('/') }}</h2>
                             <p class="mt-1 text-[10px] text-[var(--muted)]">İlk teslim çıktısını her ölçütte 1–10 arasında puanlayın.</p>
                         </div>
-                        <button class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--line)] bg-white text-sm font-black text-[var(--muted)] transition hover:border-[var(--forest)] hover:text-[var(--forest)]" type="button" data-evaluation-close aria-label="Değerlendirme panelini kapat">×</button>
+                        <button class="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-sm font-black text-[var(--muted)] transition hover:border-[var(--forest)] hover:text-[var(--forest)]" type="button" data-evaluation-close aria-label="Değerlendirme panelini kapat">×</button>
                     </header>
 
                     <div class="p-5">
                         @if (session('status'))
-                            <div class="mb-4 rounded-xl border border-[#b9ead8] bg-[var(--success-soft)] px-4 py-3 text-xs font-bold text-[var(--success)]" role="status">
+                            <div class="mb-4 rounded-xl border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3 text-xs font-bold text-[var(--success)]" role="status">
                                 {{ session('status') }}
                             </div>
                         @endif
 
                         @if ($errors->any())
-                            <div class="mb-4 rounded-xl border border-[#f2c9cf] bg-[var(--red-soft)] px-4 py-3 text-xs text-[var(--red)]" role="alert">
+                            <div class="mb-4 rounded-xl border border-[var(--red-line)] bg-[var(--red-soft)] px-4 py-3 text-xs text-[var(--red)]" role="alert">
                                 <strong class="font-black">Değerlendirme kaydedilemedi.</strong>
                                 <ul class="mt-2 grid gap-1 pl-4">
                                     @foreach ($errors->all() as $error)
@@ -156,7 +157,7 @@
                             @method('PUT')
                             <input type="hidden" name="return_path" value="{{ $selectedRoute }}">
 
-                            <div class="flex items-center justify-between rounded-xl border border-[#d7ccff] bg-[var(--violet-soft)] px-4 py-3">
+                            <div class="flex items-center justify-between rounded-xl border border-[var(--violet-line)] bg-[var(--violet-soft)] px-4 py-3">
                                 <div>
                                     <p class="text-[10px] font-extrabold tracking-[0.1em] text-[var(--violet)] uppercase">Kriter ortalaması</p>
                                     <p class="mt-1 text-[10px] text-[var(--muted)]">Yedi ölçütün canlı ortalaması</p>
@@ -166,7 +167,7 @@
 
                             @foreach ($evaluationCriteria as $field => $criterion)
                                 @php($score = (int) old($field, $evaluation?->{$field} ?? 5))
-                                <label class="block rounded-xl border border-[var(--line)] bg-white p-4" for="{{ $field }}">
+                                <label class="block rounded-xl border border-[var(--line)] bg-[var(--surface)] p-4" for="{{ $field }}">
                                     <span class="flex items-start justify-between gap-4">
                                         <span>
                                             <strong class="block text-xs">{{ $criterion['label'] }}</strong>
@@ -180,7 +181,7 @@
                             @endforeach
 
                             @php($overallScore = (int) old('overall_score', $evaluation?->overall_score ?? 5))
-                            <label class="block rounded-xl border border-[#c7d2fe] bg-[#eef2ff] p-4" for="overall_score">
+                            <label class="block rounded-xl border border-[var(--indigo-line)] bg-[var(--indigo-soft)] p-4" for="overall_score">
                                 <span class="flex items-start justify-between gap-4">
                                     <span>
                                         <strong class="block text-xs">Genel değerlendirme</strong>
@@ -193,7 +194,7 @@
 
                             <label class="grid gap-2 text-[10px] font-extrabold tracking-[0.08em] text-[var(--muted)] uppercase" for="issue_severity">
                                 Hata şiddeti
-                                <select class="h-11 rounded-lg border border-[var(--line)] bg-white px-3 text-xs font-bold tracking-normal text-[var(--ink)] normal-case outline-none focus:border-[var(--forest)]" id="issue_severity" name="issue_severity">
+                                <select class="h-11 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold tracking-normal text-[var(--ink)] normal-case outline-none focus:border-[var(--forest)]" id="issue_severity" name="issue_severity">
                                     @foreach (['none' => 'Hata gözlenmedi', 'minor' => 'Küçük hata', 'major' => 'Önemli hata', 'critical' => 'Kritik hata'] as $value => $label)
                                         <option value="{{ $value }}" @selected(old('issue_severity', $evaluation?->issue_severity ?? 'none') === $value)>{{ $label }}</option>
                                     @endforeach
@@ -202,10 +203,10 @@
 
                             <label class="grid gap-2 text-[10px] font-extrabold tracking-[0.08em] text-[var(--muted)] uppercase" for="notes">
                                 İnceleme notları
-                                <textarea class="min-h-28 resize-y rounded-lg border border-[var(--line)] bg-white px-3 py-3 text-xs font-medium leading-5 tracking-normal text-[var(--ink)] normal-case outline-none placeholder:text-[#98a2b3] focus:border-[var(--forest)]" id="notes" name="notes" maxlength="5000" placeholder="Güçlü yönler, eksikler ve dikkat çeken davranışlar…">{{ old('notes', $evaluation?->notes) }}</textarea>
+                                <textarea class="min-h-28 resize-y rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-3 text-xs font-medium leading-5 tracking-normal text-[var(--ink)] normal-case outline-none placeholder:text-[var(--muted)] focus:border-[var(--forest)]" id="notes" name="notes" maxlength="5000" placeholder="Güçlü yönler, eksikler ve dikkat çeken davranışlar…">{{ old('notes', $evaluation?->notes) }}</textarea>
                             </label>
 
-                            <div class="sticky bottom-0 -mx-5 -mb-5 mt-1 border-t border-[var(--line)] bg-white/95 px-5 py-4 backdrop-blur">
+                            <div class="sticky bottom-0 -mx-5 -mb-5 mt-1 border-t border-[var(--line)] bg-[var(--surface)]/95 px-5 py-4 backdrop-blur">
                                 <button class="w-full rounded-lg bg-[var(--forest)] px-4 py-3 text-xs font-extrabold text-white shadow-[0_12px_26px_rgb(79_70_229/0.22)] transition hover:bg-[#4338ca]" type="submit">
                                     {{ $evaluation ? 'Değerlendirmeyi güncelle' : 'Değerlendirmeyi kaydet' }}
                                 </button>

@@ -19,17 +19,17 @@
                 BenchForge'un ihtiyaç duyduğu araçları ve bilgisayarınıza özel yolları tek yerden kontrol edin.
             </p>
         </div>
-        <a class="inline-flex shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('system.index') }}">Durumu yenile</a>
+        <a class="inline-flex shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('system.index') }}">Durumu yenile</a>
     </header>
 
     @if (session('status'))
-        <div class="mt-6 rounded-xl border border-[#a9dec9] bg-[var(--success-soft)] px-4 py-3 text-sm text-[var(--success)]" role="status">
+        <div class="mt-6 rounded-xl border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3 text-sm text-[var(--success)]" role="status">
             {{ session('status') }}
         </div>
     @endif
 
     @if ($errors->any())
-        <div class="mt-6 rounded-xl border border-[#f2c9cf] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
+        <div class="mt-6 rounded-xl border border-[var(--red-line)] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
             <strong class="font-extrabold">Ayarlar kaydedilemedi.</strong>
             <ul class="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">
                 @foreach ($errors->all() as $error)
@@ -39,7 +39,7 @@
         </div>
     @endif
 
-    <section class="mt-7 overflow-hidden rounded-2xl border border-[var(--line)] bg-white" aria-labelledby="system-readiness-title">
+    <section class="mt-7 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]" aria-labelledby="system-readiness-title">
         <div class="flex flex-col gap-4 border-b border-[var(--line)] p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div>
                 <p class="eyebrow">Kurulum ön kontrolü</p>
@@ -68,7 +68,7 @@
                     </div>
                     <p class="mt-2 text-xs leading-5 text-[var(--muted)]">{{ $check['message'] }}</p>
                     @if (! empty($check['detail']))
-                        <code class="mt-2 block whitespace-pre-wrap break-all rounded-lg bg-white px-3 py-2 text-[11px] leading-5 text-[var(--ink)]">{{ $check['detail'] }}</code>
+                        <code class="mt-2 block whitespace-pre-wrap break-all rounded-lg bg-[var(--surface)] px-3 py-2 text-[11px] leading-5 text-[var(--ink)]">{{ $check['detail'] }}</code>
                     @endif
                 </article>
             @endforeach
@@ -76,13 +76,13 @@
     </section>
 
     <div class="mt-6 grid items-start gap-6 2xl:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.75fr)]">
-        <section class="min-w-0 rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" aria-labelledby="system-settings-title">
+        <section class="min-w-0 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" aria-labelledby="system-settings-title">
             <p class="eyebrow">Bilgisayara özel ayarlar</p>
             <h2 id="system-settings-title" class="mt-1 text-xl font-black tracking-[-0.035em]">Çalışma yolları</h2>
             <p class="mt-2 text-xs leading-5 text-[var(--muted)]">Kaydetmek araç yüklemez, servis başlatmaz veya dosya taşımaz. Yeni ayarlar sonraki işlemlerde kullanılır; mevcut koşular ve sonuçlar taşınmaz.</p>
 
             @if ($busy)
-                <div class="mt-5 rounded-xl border border-[#f0d9a6] bg-[var(--amber-soft)] px-4 py-3 text-xs leading-5 text-[#815d0c]" role="status">
+                <div class="mt-5 rounded-xl border border-[var(--amber-line)] bg-[var(--amber-soft)] px-4 py-3 text-xs leading-5 text-[var(--amber-ink)]" role="status">
                     <strong>Ayar değişikliği şu anda kilitli.</strong> Çalışan benchmark, kurtarma veya hazırlık tamamlanmadan ve çalışma kayıtları okunabilir olmadan yollar değiştirilemez. Kontrolleri görüntüleyebilirsiniz.
                 </div>
             @endif
@@ -95,7 +95,7 @@
 
                     <label class="grid min-w-0 gap-2 text-xs font-extrabold" for="system-root-path">
                         Benchmark araçları klasörü
-                        <input class="h-11 min-w-0 w-full rounded-xl border border-[var(--line)] bg-white px-3.5 font-mono text-xs font-medium outline-none focus:border-[var(--forest)]" id="system-root-path" type="text" name="root_path" value="{{ old('root_path', $settings['root_path']) }}" maxlength="4096" required aria-describedby="system-root-help" @error('root_path') aria-invalid="true" @enderror>
+                        <input class="h-11 min-w-0 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 font-mono text-xs font-medium outline-none focus:border-[var(--forest)]" id="system-root-path" type="text" name="root_path" value="{{ old('root_path', $settings['root_path']) }}" maxlength="4096" required aria-describedby="system-root-help" @error('root_path') aria-invalid="true" @enderror>
                         <span id="system-root-help" class="text-[11px] font-normal leading-5 text-[var(--muted)]">tools, prompts, config ve sablon klasörlerini içeren tam yol. Geçmiş kayıtlar varsa bu kök değiştirilemez; kayıtları başka bilgisayara taşıma bu sürüme dahil değildir.</span>
                     </label>
 
@@ -107,25 +107,25 @@
 
                     <label class="grid min-w-0 gap-2 text-xs font-extrabold" for="system-node-binary">
                         Node.js çalıştırıcısı
-                        <input class="h-11 min-w-0 w-full rounded-xl border border-[var(--line)] bg-white px-3.5 font-mono text-xs font-medium outline-none focus:border-[var(--forest)]" id="system-node-binary" type="text" name="node_binary" value="{{ old('node_binary', $settings['node_binary']) }}" maxlength="4096" required aria-describedby="system-node-help" @error('node_binary') aria-invalid="true" @enderror>
+                        <input class="h-11 min-w-0 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 font-mono text-xs font-medium outline-none focus:border-[var(--forest)]" id="system-node-binary" type="text" name="node_binary" value="{{ old('node_binary', $settings['node_binary']) }}" maxlength="4096" required aria-describedby="system-node-help" @error('node_binary') aria-invalid="true" @enderror>
                         <span id="system-node-help" class="text-[11px] font-normal leading-5 text-[var(--muted)]">Node.js dosyasının tam yolu. Seçilen dosyanın klasörü komut arama yolunun başına eklenir; alt işlemler aynı Node.js kurulumunu kullanır.</span>
                     </label>
 
                     <label class="grid min-w-0 gap-2 text-xs font-extrabold" for="system-shell-binary">
                         zsh çalıştırıcısı
-                        <input class="h-11 min-w-0 w-full rounded-xl border border-[var(--line)] bg-white px-3.5 font-mono text-xs font-medium outline-none focus:border-[var(--forest)]" id="system-shell-binary" type="text" name="shell_binary" value="{{ old('shell_binary', $settings['shell_binary']) }}" maxlength="4096" required aria-describedby="system-shell-help" @error('shell_binary') aria-invalid="true" @enderror>
+                        <input class="h-11 min-w-0 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 font-mono text-xs font-medium outline-none focus:border-[var(--forest)]" id="system-shell-binary" type="text" name="shell_binary" value="{{ old('shell_binary', $settings['shell_binary']) }}" maxlength="4096" required aria-describedby="system-shell-help" @error('shell_binary') aria-invalid="true" @enderror>
                         <span id="system-shell-help" class="text-[11px] font-normal leading-5 text-[var(--muted)]">zsh dosyasının tam yolu. Mevcut koşucu zsh ve POSIX süreç araçlarına ihtiyaç duyar; Windows desteği bu sürümde yoktur.</span>
                     </label>
 
                     <label class="grid min-w-0 gap-2 text-xs font-extrabold" for="system-command-path">
                         Komut arama yolu (PATH)
-                        <textarea class="min-h-24 min-w-0 w-full resize-y rounded-xl border border-[var(--line)] bg-white px-3.5 py-3 font-mono text-xs font-medium leading-5 outline-none focus:border-[var(--forest)]" id="system-command-path" name="command_path" maxlength="8192" required aria-describedby="system-command-help" @error('command_path') aria-invalid="true" @enderror>{{ old('command_path', $settings['command_path']) }}</textarea>
+                        <textarea class="min-h-24 min-w-0 w-full resize-y rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 py-3 font-mono text-xs font-medium leading-5 outline-none focus:border-[var(--forest)]" id="system-command-path" name="command_path" maxlength="8192" required aria-describedby="system-command-help" @error('command_path') aria-invalid="true" @enderror>{{ old('command_path', $settings['command_path']) }}</textarea>
                         <span id="system-command-help" class="text-[11px] font-normal leading-5 text-[var(--muted)]">npm, opencode, rsync, curl, python3 ve shasum araçlarının bulunduğu klasörler. Tam yolları iki nokta üst üste (:) ile ayırın; çalıştırılacak bir komut yazmayın.</span>
                     </label>
 
                     <label class="grid min-w-0 gap-2 text-xs font-extrabold" for="system-home-path">
                         OpenCode kullanıcı klasörü (HOME)
-                        <input class="h-11 min-w-0 w-full rounded-xl border border-[var(--line)] bg-white px-3.5 font-mono text-xs font-medium outline-none focus:border-[var(--forest)]" id="system-home-path" type="text" name="home_path" value="{{ old('home_path', $settings['home_path']) }}" maxlength="4096" required aria-describedby="system-home-help" @error('home_path') aria-invalid="true" @enderror>
+                        <input class="h-11 min-w-0 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 font-mono text-xs font-medium outline-none focus:border-[var(--forest)]" id="system-home-path" type="text" name="home_path" value="{{ old('home_path', $settings['home_path']) }}" maxlength="4096" required aria-describedby="system-home-help" @error('home_path') aria-invalid="true" @enderror>
                         <span id="system-home-help" class="text-[11px] font-normal leading-5 text-[var(--muted)]">OpenCode bağlantılarının ve oturum verilerinin bulunduğu kullanıcı klasörünün tam yolu. Bu alan API anahtarı değildir; bağlantı kurmaz veya kimlik bilgilerini taşımaz.</span>
                     </label>
 
@@ -135,14 +135,14 @@
         </section>
 
         <aside class="grid min-w-0 gap-5" aria-label="Kurulum ve güvenlik sınırları">
-            <section class="rounded-2xl border border-[#f0d9a6] bg-[var(--amber-soft)] p-5 sm:p-6" aria-labelledby="system-isolation-title">
+            <section class="rounded-2xl border border-[var(--amber-line)] bg-[var(--amber-soft)] p-5 sm:p-6" aria-labelledby="system-isolation-title">
                 <p class="eyebrow text-[var(--amber)]">Önemli güvenlik sınırı</p>
                 <h2 id="system-isolation-title" class="mt-2 text-lg font-black tracking-[-0.03em]">İşletim sistemi izolasyonu yok</h2>
-                <p class="mt-3 text-xs leading-6 text-[#815d0c]">Mevcut model izinleri ve klasör sınırları bir işletim sistemi veya container sandbox'ı değildir. Üretilen projelerin npm, lint ve build işlemleri bilgisayardaki kullanıcı hesabının yetkileriyle çalışır.</p>
-                <p class="mt-3 text-xs leading-6 text-[#815d0c]">Bu ekran kurulum hazırlığını gösterir; güvenli izolasyon, her platformda uyumluluk veya tarayıcı testlerinin çalışacağı garantisini vermez.</p>
+                <p class="mt-3 text-xs leading-6 text-[var(--amber-ink)]">Mevcut model izinleri ve klasör sınırları bir işletim sistemi veya container sandbox'ı değildir. Üretilen projelerin npm, lint ve build işlemleri bilgisayardaki kullanıcı hesabının yetkileriyle çalışır.</p>
+                <p class="mt-3 text-xs leading-6 text-[var(--amber-ink)]">Bu ekran kurulum hazırlığını gösterir; güvenli izolasyon, her platformda uyumluluk veya tarayıcı testlerinin çalışacağı garantisini vermez.</p>
             </section>
 
-            <section class="rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" aria-labelledby="system-setup-title">
+            <section class="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" aria-labelledby="system-setup-title">
                 <p class="eyebrow">Eksik araç varsa</p>
                 <h2 id="system-setup-title" class="mt-2 text-lg font-black tracking-[-0.03em]">Önce kurulum, sonra kontrol</h2>
                 <ol class="mt-4 grid gap-3 text-xs leading-5 text-[var(--muted)]">

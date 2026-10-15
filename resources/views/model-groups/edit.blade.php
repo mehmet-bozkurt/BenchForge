@@ -10,11 +10,11 @@
                 Değişiklikler yalnızca bundan sonra başlatılan koşuları etkiler. Ad değişirse eski dosya <code>config/.silinen</code> klasörüne taşınır.
             </p>
         </div>
-        <a class="inline-flex shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('model-groups.index') }}">Gruplara dön</a>
+        <a class="inline-flex shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('model-groups.index') }}">Gruplara dön</a>
     </header>
 
     @if ($errors->any())
-        <div class="mt-6 rounded-xl border border-[#f2c9cf] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
+        <div class="mt-6 rounded-xl border border-[var(--red-line)] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
             <strong class="font-extrabold">Grup kaydedilemedi.</strong>
             <ul class="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">
                 @foreach ($errors->all() as $error)
@@ -28,7 +28,7 @@
         <p class="mt-6 rounded-xl bg-[var(--amber-soft)] px-4 py-3 text-xs text-[var(--amber)]">{{ $group['error'] }} Kaydettiğinizde dosya geçerli biçimde yeniden yazılır.</p>
     @endif
 
-    <section class="mt-7 max-w-2xl rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" aria-label="Grup düzenleme">
+    <section class="mt-7 max-w-2xl rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" aria-label="Grup düzenleme">
         <form class="grid gap-4" method="POST" action="{{ route('model-groups.update', $group['name']) }}">
             @csrf
             @method('PUT')

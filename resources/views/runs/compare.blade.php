@@ -65,14 +65,14 @@
     </header>
 
     @if ($models->isEmpty())
-        <section class="data-panel mt-6 rounded-2xl border border-dashed border-[var(--line-strong)] bg-white px-6 py-16 text-center">
+        <section class="data-panel mt-6 rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--surface)] px-6 py-16 text-center">
             <span class="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--violet-soft)] text-xl text-[var(--violet)]" aria-hidden="true">◇</span>
             <h2 class="mt-5 text-xl font-black tracking-[-0.035em]">Karşılaştırılacak model bulunamadı</h2>
             <p class="mx-auto mt-2 max-w-xl text-sm leading-6 text-[var(--muted)]">Bu koşuda henüz model sonucu kayıtlı değil.</p>
             <a class="mt-6 inline-flex rounded-lg bg-[var(--forest)] px-4 py-2.5 text-xs font-extrabold text-white" href="{{ route('runs.show', $run) }}">Teknik rapora dön</a>
         </section>
     @else
-        <form class="data-panel mt-6 grid gap-4 rounded-2xl border border-[var(--line)] bg-white p-5 lg:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,0.8fr)_minmax(170px,0.7fr)_auto] lg:items-end" method="GET" action="{{ route('runs.compare', $run) }}">
+        <form class="data-panel mt-6 grid gap-4 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 lg:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,0.8fr)_minmax(170px,0.7fr)_auto] lg:items-end" method="GET" action="{{ route('runs.compare', $run) }}">
             <label class="grid gap-2 text-[10px] font-extrabold tracking-[0.1em] text-[var(--muted)] uppercase">
                 Sol model
                 <select class="h-11 rounded-lg border border-[var(--line)] bg-[var(--surface-subtle)] px-3 text-xs font-bold tracking-normal text-[var(--ink)] normal-case outline-none focus:border-[var(--forest)]" name="left">
@@ -120,7 +120,7 @@
                     $modelRun = $preview['model'];
                     $hasPreview = $previewableModelIds->contains($modelRun->id);
                 @endphp
-                <article class="preview-panel overflow-hidden rounded-2xl border border-[var(--line)] bg-white">
+                <article class="preview-panel overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
                     <header class="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3">
                         <div class="min-w-0">
                             <div class="flex items-center gap-2">
@@ -138,7 +138,7 @@
                             @endif
                             @if ($hasPreview)
                                 <a class="rounded-lg bg-[var(--forest)] px-3 py-2 text-[10px] font-extrabold text-white transition hover:bg-[#4338ca]" href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'path' => $selectedRoute]) }}" target="_blank" rel="noopener noreferrer">Yeni sekmede aç ↗</a>
-                                <a class="rounded-lg border border-[#d7ccff] bg-[var(--violet-soft)] px-3 py-2 text-[10px] font-extrabold text-[var(--violet)] transition hover:border-[var(--violet)]" href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'path' => $selectedRoute, 'review' => 1]) }}" target="_blank" rel="noopener noreferrer">{{ $modelRun->evaluation ? 'Puanı düzenle' : 'Puanla' }}</a>
+                                <a class="rounded-lg border border-[var(--violet-line)] bg-[var(--violet-soft)] px-3 py-2 text-[10px] font-extrabold text-[var(--violet)] transition hover:border-[var(--violet)]" href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'path' => $selectedRoute, 'review' => 1]) }}" target="_blank" rel="noopener noreferrer">{{ $modelRun->evaluation ? 'Puanı düzenle' : 'Puanla' }}</a>
                             @endif
                         </div>
                     </header>
@@ -168,7 +168,7 @@
                                 <p class="text-sm font-black text-[var(--ink)]">Görüntülenebilir çıktı yok</p>
                                 <p class="mt-2 max-w-sm text-xs leading-5 text-[var(--muted)]">İlk teslimde geçerli bir static export yok; bu yüzden manuel puan verilemez. Aşağıdaki aşama sonuçları yine karşılaştırılabilir.</p>
                                 @if ($recoveredPreviewModelIds->contains($modelRun->id))
-                                    <a class="mt-3 inline-flex rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[10px] font-extrabold text-[var(--forest)] transition hover:border-[var(--forest)]" href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'path' => $selectedRoute, 'version' => 'recovered']) }}" target="_blank" rel="noopener noreferrer">Kurtarılmış çıktıyı incele (puanlanmaz) ↗</a>
+                                    <a class="mt-3 inline-flex rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[10px] font-extrabold text-[var(--forest)] transition hover:border-[var(--forest)]" href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'path' => $selectedRoute, 'version' => 'recovered']) }}" target="_blank" rel="noopener noreferrer">Kurtarılmış çıktıyı incele (puanlanmaz) ↗</a>
                                 @endif
                             </div>
                         </div>
@@ -178,7 +178,7 @@
         </div>
 
         @if ($hasRecoveryAttempts)
-            <section class="data-panel mt-6 rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" aria-labelledby="recovery-comparison-title">
+            <section class="data-panel mt-6 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" aria-labelledby="recovery-comparison-title">
                 <p class="eyebrow">Kurtarma karşılaştırması</p>
                 <h2 id="recovery-comparison-title" class="mt-1 text-xl font-black tracking-[-0.035em]">İlk teslim ve son tamamlanan deneme</h2>
                 <p class="mt-2 max-w-3xl text-xs leading-5 text-[var(--muted)]">Aşama sonuçları yan yana gösterilir. İlk teslimin puanı ve ana sonuç kaydı korunur; yukarıdaki görsel alan her zaman ilk teslim çıktısını gösterir. Kurtarılmış çıktı ayrı sayfada yalnız incelenir, puanlanmaz.</p>
@@ -192,7 +192,7 @@
                             $attempt = $comparison['attempt'];
                         @endphp
                         <article class="min-w-0 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)]">
-                            <div class="flex flex-wrap items-start justify-between gap-2 border-b border-[var(--line)] bg-white px-4 py-3">
+                            <div class="flex flex-wrap items-start justify-between gap-2 border-b border-[var(--line)] bg-[var(--surface)] px-4 py-3">
                                 <div>
                                     <p class="text-[9px] font-black tracking-[0.1em] text-[var(--forest)] uppercase">{{ $selection['side'] }} model</p>
                                     <h3 class="mt-1 text-sm font-black">{{ str($modelRun->model)->after('/') }}</h3>
@@ -235,7 +235,7 @@
             </section>
         @endif
 
-        <aside class="mt-4 flex items-start gap-3 rounded-xl border border-[#d7ccff] bg-[var(--violet-soft)] px-4 py-3 text-xs leading-5 text-[#5b35ad]">
+        <aside class="mt-4 flex items-start gap-3 rounded-xl border border-[var(--violet-line)] bg-[var(--violet-soft)] px-4 py-3 text-xs leading-5 text-[var(--violet-ink)]">
             <span class="font-black" aria-hidden="true">i</span>
             <p><strong>Güvenli önizleme:</strong> Model çıktıları kısıtlı bir çerçevede çalışır. Harici pencere, form gönderimi ve BenchForge sayfasına erişim kapalıdır.</p>
         </aside>

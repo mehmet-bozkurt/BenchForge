@@ -34,22 +34,22 @@
             <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">Aynı kaynak şartnameyle hazırlanan belgeleri bölüm bölüm okuyun, indirin ve kendi değerlendirmenizi kaydedin.</p>
         </div>
         <div class="flex flex-wrap gap-2">
-            <a class="rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('preparations.index') }}">Geçmişe dön</a>
-            <a class="rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('preparations.create') }}">Yeni hazırlık</a>
+            <a class="rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('preparations.index') }}">Geçmişe dön</a>
+            <a class="rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('preparations.create') }}">Yeni hazırlık</a>
         </div>
     </header>
 
     @if (session('status'))
-        <div class="mt-6 rounded-xl border border-[#b9ead8] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success)]" role="status">{{ session('status') }}</div>
+        <div class="mt-6 rounded-xl border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success)]" role="status">{{ session('status') }}</div>
     @endif
     @if ($errors->any())
-        <div class="mt-6 rounded-xl border border-[#f2c9cf] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
+        <div class="mt-6 rounded-xl border border-[var(--red-line)] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
             <strong class="font-extrabold">İnceleme kaydedilemedi.</strong>
             <ul class="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
         </div>
     @endif
 
-    <section class="runner-card mt-7 rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" aria-labelledby="preparation-progress-title">
+    <section class="runner-card mt-7 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" aria-labelledby="preparation-progress-title">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
                 <p class="eyebrow">Üretim durumu</p>
@@ -66,36 +66,36 @@
             <span>Modeller sırayla çalışır</span>
             @if ($comparison->started_at)<span>· Başlangıç {{ $comparison->started_at->locale('tr')->translatedFormat('j M Y · H:i') }}</span>@endif
         </div>
-        <div class="mt-4 hidden rounded-xl border border-[#c7d2fe] bg-[#eef2ff] p-3 text-xs leading-5 text-[var(--forest)]" role="status" data-preparation-refresh-notice>
+        <div class="mt-4 hidden rounded-xl border border-[var(--indigo-line)] bg-[var(--indigo-soft)] p-3 text-xs leading-5 text-[var(--forest)]" role="status" data-preparation-refresh-notice>
             Yeni sonuçlar geldi. Belgeleri güncellemek için <a class="font-extrabold underline" href="{{ route('preparations.show', $comparison) }}">Sonuçları yenile</a>. Sayfa, yazdığınız inceleme notlarını korumak için kendiliğinden yenilenmez.
         </div>
         @if ($comparison->isActive())
             <form class="mt-5" method="POST" action="{{ route('preparations.stop', $comparison) }}" data-preparation-stop>
                 @csrf
                 @method('DELETE')
-                <button class="rounded-lg border border-[#f2c9cf] bg-[var(--red-soft)] px-3 py-2.5 text-xs font-extrabold text-[var(--red)] disabled:opacity-50" type="submit" @disabled($comparison->status === 'stopping')>Üretimi durdur</button>
+                <button class="rounded-lg border border-[var(--red-line)] bg-[var(--red-soft)] px-3 py-2.5 text-xs font-extrabold text-[var(--red)] disabled:opacity-50" type="submit" @disabled($comparison->status === 'stopping')>Üretimi durdur</button>
             </form>
         @endif
     </section>
 
     <section class="mt-6 grid gap-4 lg:grid-cols-2" aria-label="Karşılaştırma kaynağı">
-        <details class="rounded-2xl border border-[var(--line)] bg-white p-5">
+        <details class="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5">
             <summary class="cursor-pointer text-sm font-black">Kaynak proje şartnamesi</summary>
             <p class="mt-3 text-[10px] text-[var(--muted)]">SHA-256: <code class="break-all">{{ $comparison->source_hash }}</code></p>
             <pre class="mt-4 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[var(--surface-subtle)] p-4 font-mono text-[11px] leading-5">{{ $comparison->specification }}</pre>
         </details>
-        <details class="rounded-2xl border border-[var(--line)] bg-white p-5">
+        <details class="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5">
             <summary class="cursor-pointer text-sm font-black">Teknoloji ve kapsam sınırları</summary>
             <pre class="mt-4 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[var(--surface-subtle)] p-4 font-mono text-[11px] leading-5">{{ $comparison->technologies }}</pre>
         </details>
     </section>
 
-    <section class="mt-6 rounded-2xl border border-[#d8d1f5] bg-[var(--violet-soft)] px-5 py-4 text-xs leading-5 text-[var(--muted)]" aria-label="Değerlendirme sınırları">
+    <section class="mt-6 rounded-2xl border border-[var(--violet-line)] bg-[var(--violet-soft)] px-5 py-4 text-xs leading-5 text-[var(--muted)]" aria-label="Değerlendirme sınırları">
         <strong class="text-[var(--violet)]">Bu bir hazırlık karşılaştırmasıdır.</strong> Biçim kontrolü içerik doğruluğunu ölçmez. Gerçek geliştirme, kod kalitesi, build, rota ve çalışma zamanı <strong>henüz test edilmedi</strong>. Bu sürümde otomatik ücretli hakem modeli kullanılmaz; içerik puanlarını siz verirsiniz.
     </section>
 
     @if ($packages->isNotEmpty())
-        <section class="runner-card mt-7 rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" aria-labelledby="preparation-compare-title" data-preparation-compare>
+        <section class="runner-card mt-7 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" aria-labelledby="preparation-compare-title" data-preparation-compare>
             <div>
                 <p class="eyebrow">Aynı bölüm, farklı model</p>
                 <h2 id="preparation-compare-title" class="mt-1 text-xl font-black tracking-[-0.03em]">Yan yana incele</h2>
@@ -103,18 +103,18 @@
             </div>
             <div class="mt-5 grid gap-3 sm:grid-cols-3">
                 <label class="grid gap-1 text-xs font-extrabold" for="preparation-left">Sol model
-                    <select class="h-11 min-w-0 rounded-lg border border-[var(--line)] bg-white px-3 text-xs" id="preparation-left" data-preparation-left>
+                    <select class="h-11 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-xs" id="preparation-left" data-preparation-left>
                         @foreach ($packages as $package)<option value="{{ $package->id }}" @selected($firstPackage?->is($package))>{{ $package->model_name ?: $package->model_id }}</option>@endforeach
                     </select>
                 </label>
                 <label class="grid gap-1 text-xs font-extrabold" for="preparation-right">Sağ model
-                    <select class="h-11 min-w-0 rounded-lg border border-[var(--line)] bg-white px-3 text-xs" id="preparation-right" data-preparation-right>
+                    <select class="h-11 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-xs" id="preparation-right" data-preparation-right>
                         <option value="">Tekli görünüm</option>
                         @foreach ($packages as $package)<option value="{{ $package->id }}" @selected($secondPackage?->is($package))>{{ $package->model_name ?: $package->model_id }}</option>@endforeach
                     </select>
                 </label>
                 <label class="grid gap-1 text-xs font-extrabold" for="preparation-section">Bölüm
-                    <select class="h-11 min-w-0 rounded-lg border border-[var(--line)] bg-white px-3 text-xs" id="preparation-section" data-preparation-section>
+                    <select class="h-11 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-xs" id="preparation-section" data-preparation-section>
                         @foreach ($sections as $key => $label)<option value="{{ $key }}">{{ $label }}</option>@endforeach
                     </select>
                 </label>
@@ -130,11 +130,11 @@
                                 <p class="mt-1 text-[10px] text-[var(--muted)]" data-preparation-side-status>{{ $statusLabels[$selectedPackage?->status] ?? 'Bekliyor' }}</p>
                             </div>
                             <div class="flex flex-wrap gap-2">
-                                <button class="rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-[10px] font-extrabold text-[var(--forest)]" type="button" data-preparation-copy="{{ $selection['side'] }}">Metni kopyala</button>
-                                <a class="rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-[10px] font-extrabold text-[var(--forest)] {{ $selectedPackage?->status === 'completed' ? '' : 'hidden' }}" href="{{ $selectedPackage ? route('preparations.packages.download', [$comparison, $selectedPackage, 'section' => 'startup_prompt']) : '#' }}" data-preparation-side-download>Bölümü indir</a>
+                                <button class="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-[10px] font-extrabold text-[var(--forest)]" type="button" data-preparation-copy="{{ $selection['side'] }}">Metni kopyala</button>
+                                <a class="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-[10px] font-extrabold text-[var(--forest)] {{ $selectedPackage?->status === 'completed' ? '' : 'hidden' }}" href="{{ $selectedPackage ? route('preparations.packages.download', [$comparison, $selectedPackage, 'section' => 'startup_prompt']) : '#' }}" data-preparation-side-download>Bölümü indir</a>
                             </div>
                         </div>
-                        <pre class="mt-4 max-h-[42rem] min-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--line)] bg-white p-4 font-mono text-[11px] leading-5" data-preparation-side-content>{{ $selectedPackage?->status === 'completed' ? ($selectedPackage->startup_prompt ?: 'Bu bölüm boş.') : 'Paket henüz hazır değil.' }}</pre>
+                        <pre class="mt-4 max-h-[42rem] min-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--line)] bg-[var(--surface)] p-4 font-mono text-[11px] leading-5" data-preparation-side-content>{{ $selectedPackage?->status === 'completed' ? ($selectedPackage->startup_prompt ?: 'Bu bölüm boş.') : 'Paket henüz hazır değil.' }}</pre>
                     </article>
                 @endforeach
             </div>
@@ -153,7 +153,7 @@
                         $reviewNotes = $restoringReview ? (is_string(old('review_notes')) ? old('review_notes') : '') : $package->review_notes;
                         $issueSeverity = $restoringReview && is_string(old('issue_severity')) ? old('issue_severity') : ($package->issue_severity ?? 'none');
                     @endphp
-                    <article class="runner-card min-w-0 rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" data-preparation-package="{{ $package->id }}" data-preparation-package-status="{{ $package->status }}" data-preparation-document-ready="{{ $package->status === 'completed' ? 'true' : 'false' }}" data-preparation-package-name="{{ $package->model_name ?: $package->model_id }}" data-preparation-download-base="{{ route('preparations.packages.download', [$comparison, $package]) }}">
+                    <article class="runner-card min-w-0 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" data-preparation-package="{{ $package->id }}" data-preparation-package-status="{{ $package->status }}" data-preparation-document-ready="{{ $package->status === 'completed' ? 'true' : 'false' }}" data-preparation-package-name="{{ $package->model_name ?: $package->model_id }}" data-preparation-download-base="{{ route('preparations.packages.download', [$comparison, $package]) }}">
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="text-[9px] font-black tracking-[0.1em] text-[var(--forest)] uppercase">Model hazırlık paketi</p>
@@ -183,13 +183,13 @@
                                     @if ($package->status === 'completed')
                                         <a class="mt-3 inline-flex text-[10px] font-extrabold text-[var(--forest)] underline" href="{{ route('preparations.packages.download', [$comparison, $package, 'section' => $key]) }}">Bu bölümü Markdown indir ↓</a>
                                     @endif
-                                    <pre class="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--line)] bg-white p-4 font-mono text-[11px] leading-5" data-preparation-source-section="{{ $key }}">{{ $package->{$key} ?: 'Henüz üretilmedi.' }}</pre>
+                                    <pre class="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--line)] bg-[var(--surface)] p-4 font-mono text-[11px] leading-5" data-preparation-source-section="{{ $key }}">{{ $package->{$key} ?: 'Henüz üretilmedi.' }}</pre>
                                 </details>
                             @endforeach
                         </div>
 
                         @if ($package->structural_checks)
-                            <div class="mt-5 rounded-xl border border-[var(--line)] bg-white p-4">
+                            <div class="mt-5 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-4">
                                 <h4 class="text-xs font-black">Biçim kontrolleri</h4>
                                 <p class="mt-1 text-[10px] leading-4 text-[var(--muted)]">Bu kontroller belge yapısını inceler; içeriğin doğru veya uygulanabilir olduğunu kanıtlamaz.</p>
                                 <ul class="mt-3 grid gap-2 sm:grid-cols-2">
@@ -204,7 +204,7 @@
                         @endif
 
                         @if ($package->status === 'completed')
-                            <form class="mt-5 rounded-xl border border-[#d8d1f5] bg-[var(--violet-soft)] p-4 sm:p-5" method="POST" action="{{ route('preparations.packages.evaluation.update', [$comparison, $package]) }}">
+                            <form class="mt-5 rounded-xl border border-[var(--violet-line)] bg-[var(--violet-soft)] p-4 sm:p-5" method="POST" action="{{ route('preparations.packages.evaluation.update', [$comparison, $package]) }}">
                                 @csrf
                                 @method('PUT')
                                 <div class="flex flex-wrap items-start justify-between gap-2">
@@ -218,7 +218,7 @@
                                     @foreach ($scoreLabels as $key => $label)
                                         @php $scoreValue = $restoringReview && is_scalar(old($key)) ? old($key) : ($evaluation[$key] ?? null); @endphp
                                         <label class="grid gap-1 text-[10px] font-extrabold" for="review-{{ $package->id }}-{{ $key }}">{{ $label }}
-                                            <select class="h-10 rounded-lg border border-[#d8d1f5] bg-white px-2.5 text-xs" id="review-{{ $package->id }}-{{ $key }}" name="{{ $key }}" required>
+                                            <select class="h-10 rounded-lg border border-[var(--violet-line)] bg-[var(--surface)] px-2.5 text-xs" id="review-{{ $package->id }}-{{ $key }}" name="{{ $key }}" required>
                                                 <option value="">Seçin</option>
                                                 @for ($score = 1; $score <= 10; $score++)<option value="{{ $score }}" @selected($scoreValue == $score)>{{ $score }}/10</option>@endfor
                                             </select>
@@ -227,12 +227,12 @@
                                 </div>
                                 <div class="mt-4 grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
                                     <label class="grid gap-1 text-[10px] font-extrabold" for="review-{{ $package->id }}-severity">Sorun düzeyi
-                                        <select class="h-10 rounded-lg border border-[#d8d1f5] bg-white px-2.5 text-xs" id="review-{{ $package->id }}-severity" name="issue_severity" required>
+                                        <select class="h-10 rounded-lg border border-[var(--violet-line)] bg-[var(--surface)] px-2.5 text-xs" id="review-{{ $package->id }}-severity" name="issue_severity" required>
                                             @foreach (['none' => 'Sorun yok', 'minor' => 'Küçük', 'major' => 'Önemli', 'critical' => 'Kritik'] as $key => $label)<option value="{{ $key }}" @selected($issueSeverity === $key)>{{ $label }}</option>@endforeach
                                         </select>
                                     </label>
                                     <label class="grid gap-1 text-[10px] font-extrabold" for="review-{{ $package->id }}-notes">İnceleme notları · isteğe bağlı
-                                        <textarea class="min-h-24 resize-y rounded-lg border border-[#d8d1f5] bg-white px-3 py-2 text-xs leading-5" id="review-{{ $package->id }}-notes" name="review_notes" maxlength="5000" placeholder="Güçlü yanlar, eksikler, düzeltme önerileri…">{{ $reviewNotes }}</textarea>
+                                        <textarea class="min-h-24 resize-y rounded-lg border border-[var(--violet-line)] bg-[var(--surface)] px-3 py-2 text-xs leading-5" id="review-{{ $package->id }}-notes" name="review_notes" maxlength="5000" placeholder="Güçlü yanlar, eksikler, düzeltme önerileri…">{{ $reviewNotes }}</textarea>
                                     </label>
                                 </div>
                                 <button class="mt-4 rounded-lg bg-[var(--forest)] px-4 py-2.5 text-xs font-extrabold text-white" type="submit">Değerlendirmeyi kaydet</button>
@@ -243,7 +243,7 @@
             </div>
         </section>
     @else
-        <section class="mt-7 rounded-2xl border border-dashed border-[var(--line-strong)] bg-white p-8 text-center">
+        <section class="mt-7 rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--surface)] p-8 text-center">
             <h2 class="text-lg font-black">Henüz model paketi yok</h2>
             <p class="mt-2 text-xs text-[var(--muted)]">Üretim başladığında seçilen modeller burada görünecek.</p>
         </section>
