@@ -106,18 +106,19 @@ test('it builds an OpenCode Go preflight from the selected catalog models', func
         ->toBe($result);
 });
 
-test('it accepts up to ten catalog models and rejects more', function () {
-    $models = OpenCodeGoModel::factory()->count(11)->sequence(fn ($sequence): array => ['model_id' => 'model-'.$sequence->index])->create();
+test('it accepts catalog models up to the model limit and rejects more', function () {
+    $limit = BenchmarkRunner::CUSTOM_MODEL_LIMIT;
+    $models = OpenCodeGoModel::factory()->count($limit + 1)->sequence(fn ($sequence): array => ['model_id' => 'model-'.$sequence->index])->create();
     $preflight = mock(BenchmarkPreflight::class);
     $preflight->shouldReceive('inspect')
         ->once()
-        ->with(range(3251, 3260), ['opencode-go'])
+        ->with(range(3251, 3250 + $limit), ['opencode-go'])
         ->andReturn(['ready' => true, 'checkedAt' => '2026-10-14T10:00:00+03:00', 'summary' => 'Kontroller geçti.', 'checks' => []]);
 
-    app(BenchmarkRunner::class)->preflight(null, $models->take(10)->pluck('model_id')->all(), 'opencode_go');
+    app(BenchmarkRunner::class)->preflight(null, $models->take($limit)->pluck('model_id')->all(), 'opencode_go');
 
     expect(fn () => app(BenchmarkRunner::class)->preflight(null, $models->pluck('model_id')->all(), 'opencode_go'))
-        ->toThrow(BenchmarkRunnerException::class, 'OpenCode Go kataloğundan 1–10 model seçin.');
+        ->toThrow(BenchmarkRunnerException::class, 'OpenCode Go kataloğundan 1–'.$limit.' model seçin.');
 });
 
 test('it snapshots fixed OpenRouter routing in the generated run configuration', function () {

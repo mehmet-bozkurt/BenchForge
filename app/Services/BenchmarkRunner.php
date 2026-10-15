@@ -24,7 +24,7 @@ class BenchmarkRunner
 
     private const ROUTE_PATTERN = "/^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%\/]*$/";
 
-    public const CUSTOM_MODEL_LIMIT = 10;
+    public const CUSTOM_MODEL_LIMIT = 16;
 
     private const CUSTOM_MODEL_PORT_START = 3251;
 
