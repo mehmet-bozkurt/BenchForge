@@ -6,6 +6,7 @@
         <meta name="description" content="Yerel yapay zekâ kodlama modeli değerlendirme merkezi">
 
         <title>{{ $title ?? 'BenchForge Studio' }}</title>
+        <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
 
         @fonts
         @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -14,7 +15,7 @@
         <div class="app-shell">
             <aside class="sidebar">
                 <a class="brand" href="{{ route('dashboard') }}" aria-label="BenchForge Studio ana sayfası">
-                    <span class="brand-mark" aria-hidden="true">BF</span>
+                    <img class="brand-mark" src="{{ asset('brand/benchforge-mark.svg') }}" alt="" width="38" height="38">
                     <span>
                         <strong>BenchForge</strong>
                         <small>Evaluation Lab</small>

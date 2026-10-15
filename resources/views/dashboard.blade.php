@@ -66,7 +66,7 @@
 
         @if ($latestRun === null)
             <section class="rounded-3xl border border-dashed border-[var(--line-strong)] bg-white px-6 py-20 text-center">
-                <span class="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--mint-soft)] font-black text-[var(--forest)]">BF</span>
+                <img class="mx-auto h-12 w-12 rounded-2xl" src="{{ asset('brand/benchforge-mark.svg') }}" alt="" width="48" height="48">
                 <h2 class="mt-5 text-xl font-black text-[var(--ink)]">Henüz benchmark bulunamadı</h2>
                 <p class="mx-auto mt-2 max-w-lg text-sm leading-6 text-[var(--muted)]">
                     Yapılandırılan runs klasöründe okunabilir bir sonuç özeti oluştuğunda burada görünecek.
