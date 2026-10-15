@@ -6,6 +6,7 @@
         <meta name="description" content="{{ str($modelRun->model)->after('/') }} benchmark önizlemesi">
 
         <title>{{ str($modelRun->model)->after('/') }} · {{ $run->name }} · BenchForge</title>
+        <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
 
         @fonts
         @vite(['resources/css/app.css', 'resources/js/app.js'])

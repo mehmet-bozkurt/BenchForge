@@ -1034,6 +1034,76 @@ function scrollLogsToEnd(root, previous = new Map()) {
  * While a recovery attempt runs, re-renders only the live parts of the page (results and recovery) from a
  * background fetch. Scroll position, open panels, open dialogs and focused fields are left untouched.
  */
+let resultSort = { key: null, direction: 'none' };
+const appliedLiveMarkup = new Map();
+
+/** Orders result rows by a numeric data-sort-* value; rows without a value always go last. */
+export function sortResultRows(rows, key, direction) {
+    const indexOf = (row) => Number(row.dataset.sortIndex ?? 0);
+    if (!key || direction === 'none') return [...rows].sort((a, b) => indexOf(a) - indexOf(b));
+
+    const valueOf = (row) => {
+        const raw = row.dataset[`sort${key.charAt(0).toUpperCase()}${key.slice(1)}`];
+        return raw === undefined || raw === '' ? null : Number(raw);
+    };
+    const factor = direction === 'descending' ? -1 : 1;
+
+    return [...rows].sort((a, b) => {
+        const left = valueOf(a);
+        const right = valueOf(b);
+        if (left === null || right === null) return left === right ? indexOf(a) - indexOf(b) : (left === null ? 1 : -1);
+
+        return (left - right) * factor || indexOf(a) - indexOf(b);
+    });
+}
+
+function applyResultSort(root = document) {
+    root.querySelectorAll('[data-sort-column]').forEach((header) => {
+        header.setAttribute('aria-sort', header.dataset.sortColumn === resultSort.key ? resultSort.direction : 'none');
+    });
+    document.querySelectorAll('[data-sort-key]').forEach((button) => {
+        button.dataset.sortDirection = button.dataset.sortKey === resultSort.key ? resultSort.direction : 'none';
+    });
+    root.querySelectorAll('tbody[data-sortable-rows]').forEach((body) => {
+        const rows = [...body.querySelectorAll(':scope > tr[data-sort-index]')];
+        if (rows.length < 2) return;
+        sortResultRows(rows, resultSort.key, resultSort.direction).forEach((row) => body.append(row));
+    });
+}
+
+function initializeResultSorting() {
+    if (!document.querySelector('[data-sort-key]')) return;
+
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-sort-key]');
+        if (!button) return;
+
+        const key = button.dataset.sortKey;
+        const next = { none: 'ascending', ascending: 'descending', descending: 'none' };
+        resultSort = { key, direction: resultSort.key === key ? next[resultSort.direction] : 'ascending' };
+        applyResultSort();
+    });
+}
+
+/** Finds the focused control inside a live region again after its markup is replaced. */
+function liveFocusSelector(region) {
+    const focused = document.activeElement;
+    if (!focused || focused === region || !region.contains(focused)) return null;
+
+    const escape = (value) => (window.CSS?.escape ? window.CSS.escape(value) : value.replace(/["\\]/g, '\\$&'));
+    if (focused.id) return `#${escape(focused.id)}`;
+    if (focused.dataset.openDetails) return `[data-open-details="${escape(focused.dataset.openDetails)}"]`;
+    if (focused.dataset.dialogOpen) return `[data-dialog-open="${escape(focused.dataset.dialogOpen)}"]`;
+    if (focused.dataset.sortKey) return `[data-sort-key="${escape(focused.dataset.sortKey)}"]`;
+    if (focused.dataset.focusKey) return `[data-focus-key="${escape(focused.dataset.focusKey)}"]`;
+    if (focused.dataset.logId) return `pre[data-log-id="${escape(focused.dataset.logId)}"]`;
+    if (focused.tagName === 'SUMMARY' && focused.parentElement?.dataset.logId) return `details[data-log-id="${escape(focused.parentElement.dataset.logId)}"] > summary`;
+    if (focused.tagName === 'SUMMARY' && focused.parentElement?.id) return `#${escape(focused.parentElement.id)} > summary`;
+    if (focused.getAttribute('href')) return `a[href="${escape(focused.getAttribute('href'))}"]`;
+
+    return null;
+}
+
 async function refreshLiveRegions() {
     attemptRefreshTimeout = undefined;
     if (document.querySelector('[data-destructive-form][data-submitting]')) return;
@@ -1063,12 +1133,18 @@ async function refreshLiveRegions() {
         const current = document.querySelector(`[data-live-region="${fresh.dataset.liveRegion}"]`);
         if (!current) return;
 
+        // Re-rendering identical markup would reset hover, selection and screen reader position for nothing.
+        const markup = fresh.innerHTML;
+        if (appliedLiveMarkup.get(fresh.dataset.liveRegion) === markup) return;
+        appliedLiveMarkup.set(fresh.dataset.liveRegion, markup);
+
         const openPanels = new Map([...current.querySelectorAll('details[id], details[data-log-id]')]
             .map((panel) => [panel.id || panel.dataset.logId, panel.open]));
         const logs = new Map([...current.querySelectorAll('pre[data-log-id]')].map((log) => [log.dataset.logId, {
             scrollTop: log.scrollTop,
             atEnd: log.scrollTop + log.clientHeight >= log.scrollHeight - 8,
         }]));
+        const focusSelector = liveFocusSelector(current);
 
         current.innerHTML = fresh.innerHTML;
         current.querySelectorAll('details[id], details[data-log-id]').forEach((panel) => {
@@ -1076,6 +1152,8 @@ async function refreshLiveRegions() {
             if (wasOpen !== undefined) panel.open = wasOpen;
         });
         scrollLogsToEnd(current, logs);
+        applyResultSort(current);
+        if (focusSelector) current.querySelector(focusSelector)?.focus({ preventScroll: true });
     });
 
     if (next.querySelector('[data-attempt-refresh]')) scheduleAttemptRefresh();
@@ -1203,4 +1281,5 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeEvaluationPanel();
     initializeDestructiveForms();
     initializeAttemptRefresh();
+    initializeResultSorting();
 });

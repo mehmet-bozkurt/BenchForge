@@ -93,14 +93,8 @@ body {
 .brand-mark {
     width: 38px;
     height: 38px;
-    display: grid;
-    place-items: center;
-    border-radius: 12px 12px 12px 4px;
-    color: #fff;
-    background: linear-gradient(135deg, #6366f1 5%, #22d3ee 100%);
-    font-size: 12px;
-    font-weight: 900;
-    box-shadow: 0 8px 24px rgb(34 211 238 / 20%), inset 0 0 0 1px rgb(255 255 255 / 26%);
+    flex-shrink: 0;
+    border-radius: 25%;
 }
 
 .brand strong,
@@ -440,13 +434,6 @@ body {
     content: '';
     position: absolute;
     inset: 0;
-}
-
-.detail-hero {
-    background:
-        radial-gradient(circle at 90% 20%, rgb(103 232 249 / 15%), transparent 25rem),
-        linear-gradient(135deg, #fff 0%, #fafaff 68%, #f2f6ff 100%);
-    box-shadow: 0 20px 60px rgb(26 32 65 / 7%);
 }
 
 .comparison-hero {
@@ -855,28 +842,449 @@ body {
 
 /* ---------- Run page ---------- */
 
-.run-page .stage-chip {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
+/* The page is its own size container, so the results adapt to the width beside the sidebar. */
+.run-page {
+    container-type: inline-size;
 }
 
-.run-page .stage-chip-label {
+.run-stats {
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--line);
+}
+
+.run-stats > div {
+    min-width: 0;
+    padding: 6px 14px 7px;
+    background: #ffffff;
+}
+
+.run-stats dt {
     color: var(--muted);
-    letter-spacing: 0;
-    text-transform: none;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.run-stats dd {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.run-note {
+    padding: 7px 16px;
+    border-bottom: 1px solid #f1d7a5;
+    color: #8b5a16;
+    background: var(--amber-soft);
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+/* Results scoreboard: one row per model, one column per stage, stage names only in the header. */
+.results-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    text-align: left;
+}
+
+.results-table th,
+.results-table td {
+    padding: 8px;
+    vertical-align: middle;
+}
+
+.results-table thead th {
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    background: var(--surface-subtle);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.results-table tr > :first-child {
+    padding-left: 16px;
+}
+
+.results-table tr > :last-child {
+    padding-right: 16px;
+}
+
+.results-table tbody > tr > * {
+    border-bottom: 1px solid var(--line);
+}
+
+.results-table tbody > tr:last-child > * {
+    border-bottom: 0;
+}
+
+.results-table tfoot th,
+.results-table tfoot td {
+    padding-block: 7px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    background: var(--surface-subtle);
     font-size: 11px;
     font-weight: 700;
 }
 
-.run-page .result-row {
-    transition: border-color 150ms ease, box-shadow 150ms ease;
+.results-table tfoot .result-stage {
+    color: var(--ink);
 }
 
-.run-page .result-row:hover {
-    border-color: var(--line-strong);
-    box-shadow: 0 12px 30px -24px rgb(17 24 39 / 0.45);
+.results-table tfoot .result-stage.is-complete {
+    color: #0f7a5a;
+}
+
+.results-table .result-empty {
+    padding-block: 24px;
+}
+
+.result-row {
+    --row-tone: var(--line-strong);
+    transition: background 150ms ease;
+}
+
+.result-row:hover {
+    background: var(--surface-subtle);
+}
+
+.result-row-pass {
+    --row-tone: var(--success);
+}
+
+.result-row-fail {
+    --row-tone: var(--red);
+}
+
+.result-row-provider,
+.result-row-warning {
+    --row-tone: var(--amber);
+}
+
+.result-row .result-model {
+    box-shadow: inset 3px 0 0 var(--row-tone);
+}
+
+.result-stage,
+.result-numbers,
+.result-score,
+.result-actions {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.results-table .result-stage {
+    padding-inline: 4px;
+    text-align: center;
+}
+
+.results-table .result-score {
+    text-align: center;
+}
+
+.result-stage-label,
+.result-numbers-inline {
+    display: none;
+}
+
+.result-numbers {
+    text-align: right;
+}
+
+.sort-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px;
+    margin: -2px -4px;
+    border-radius: 6px;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+}
+
+.sort-button:hover,
+.sort-button[data-sort-direction="ascending"],
+.sort-button[data-sort-direction="descending"] {
+    color: var(--forest);
+}
+
+.sort-button:focus-visible {
+    outline: 2px solid var(--forest);
+    outline-offset: 1px;
+}
+
+.sort-indicator::after {
+    color: var(--line-strong);
+    content: "↕";
+}
+
+[data-sort-direction="ascending"] > .sort-indicator::after {
+    color: currentColor;
+    content: "↑";
+}
+
+[data-sort-direction="descending"] > .sort-indicator::after {
+    color: currentColor;
+    content: "↓";
+}
+
+.result-outcome-detail {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 16px;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+}
+
+.result-outcome-more > summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.result-outcome-more > summary::-webkit-details-marker {
+    display: none;
+}
+
+.result-outcome-more > summary:hover {
+    color: var(--ink);
+}
+
+.result-outcome-more > summary:focus-visible {
+    border-radius: 4px;
+    outline: 2px solid var(--forest);
+    outline-offset: 2px;
+}
+
+.result-outcome-more[open] > summary {
+    display: block;
+    white-space: pre-wrap;
+    -webkit-line-clamp: unset;
+}
+
+.result-sort-bar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* Quiet passes, loud failures: the eye lands on the stage that broke. */
+.results-table .stage-mark-pass {
+    background: transparent;
+}
+
+.results-table .stage-mark-fail {
+    color: #ffffff;
+    background: var(--red);
+}
+
+.results-table .stage-mark-unknown {
+    color: #8b5a16;
+}
+
+.results-table a.stage-mark:hover {
+    box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.results-table a.stage-mark:focus-visible {
+    outline: 2px solid var(--forest);
+    outline-offset: 2px;
+}
+
+.score-chip {
+    min-height: 28px;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 1px;
+    padding: 4px 9px;
+    border: 1px solid #d7ccff;
+    border-radius: 8px;
+    color: var(--violet);
+    background: var(--violet-soft);
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.score-chip strong {
+    font-size: 14px;
+    font-weight: 900;
+}
+
+.score-chip:hover {
+    border-color: var(--violet);
+}
+
+.btn-count {
+    min-width: 18px;
+    height: 18px;
+    display: inline-grid;
+    place-items: center;
+    padding-inline: 5px;
+    border-radius: 999px;
+    color: var(--muted);
+    background: var(--surface-subtle);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+@container (min-width: 56rem) {
+    .results-table .result-model {
+        width: 12rem;
+    }
+}
+
+@container (min-width: 80rem) {
+    .results-table .result-model {
+        width: 15rem;
+    }
+}
+
+/* Medium: duration and cost fold under the model name to give the outcome room. */
+@container (min-width: 56rem) and (max-width: 63.999rem) {
+    .results-table .result-numbers {
+        display: none;
+    }
+
+    .result-numbers-inline {
+        display: block;
+    }
+
+    .result-sort-bar {
+        display: flex;
+    }
+}
+
+/* Narrow: every row becomes a compact card; stage names appear under each mark. */
+@container (max-width: 55.999rem) {
+    .results-table,
+    .results-table tbody {
+        display: block;
+    }
+
+    .results-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
+    .results-table tfoot {
+        display: none;
+    }
+
+    .result-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 6px;
+        padding: 10px 14px 12px 16px;
+        border-bottom: 1px solid var(--line);
+        box-shadow: inset 3px 0 0 var(--row-tone);
+    }
+
+    .result-row:last-child {
+        border-bottom: 0;
+    }
+
+    .results-table tbody .result-row > * {
+        width: auto;
+        padding: 0;
+        border: 0;
+        box-shadow: none;
+    }
+
+    .result-model {
+        order: 1;
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .results-table .result-numbers {
+        display: none;
+    }
+
+    .result-numbers-inline {
+        display: block;
+    }
+
+    .result-sort-bar {
+        display: flex;
+    }
+
+    .results-table .result-stage {
+        order: 3;
+        min-width: 2.6rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .result-stage-label {
+        display: block;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 700;
+    }
+
+    .result-outcome {
+        order: 4;
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .result-score {
+        order: 5;
+    }
+
+    .result-actions {
+        order: 6;
+        margin-left: auto;
+    }
+
+    .result-outcome-detail {
+        -webkit-line-clamp: 3;
+    }
+
+    .result-row .btn-xs,
+    .result-row .score-chip {
+        min-height: 36px;
+    }
+
+    .result-row .btn-icon {
+        width: 36px;
+    }
+}
+
+/* Recovery and technical sections: one bordered list, rows divided by lines. */
+.fold-list > details + details {
+    border-top: 1px solid var(--line);
+}
+
+.fold-list > details[open] > summary {
+    background: var(--surface-subtle);
 }
 
 .btn-primary,
@@ -954,6 +1362,18 @@ body {
     opacity: 0.45;
 }
 
+.btn-xs {
+    min-height: 28px;
+    padding: 3px 9px;
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+.btn-icon {
+    width: 28px;
+    padding-inline: 0;
+}
+
 .log-pill {
     display: inline-flex;
     align-items: center;
@@ -970,11 +1390,6 @@ a.log-pill:hover {
     border-color: var(--red);
 }
 
-.recovery-card[open] {
-    border-color: var(--line-strong);
-    box-shadow: 0 18px 40px -30px rgb(17 24 39 / 0.5);
-}
-
 .recovery-chevron,
 .detail-fold > summary::after {
     display: inline-block;
@@ -983,6 +1398,20 @@ a.log-pill:hover {
 
 .recovery-card[open] .recovery-chevron {
     transform: rotate(180deg);
+}
+
+.detail-fold > summary::after {
+    color: var(--muted);
+    content: "⌄";
+    content: "⌄" / "";
+}
+
+.detail-fold[open] > summary::after {
+    transform: rotate(180deg);
+}
+
+.detail-fold > summary > :last-child {
+    margin-left: auto;
 }
 
 .timeline {
@@ -1057,5 +1486,9 @@ a.log-pill:hover {
 @media (prefers-reduced-motion: reduce) {
     .timeline-dot-running {
         animation: none;
+    }
+
+    .result-row {
+        transition: none;
     }
 }

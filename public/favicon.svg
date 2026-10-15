@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BenchForge">
+  <rect width="64" height="64" rx="16" fill="#4f46e5"/>
+  <rect x="21" y="28" width="6" height="8" rx="1.5" fill="#c7d2fe"/>
+  <rect x="29" y="23" width="6" height="13" rx="1.5" fill="#e0e7ff"/>
+  <rect x="37" y="17" width="6" height="19" rx="1.5" fill="#fbbf24"/>
+  <path d="M10 38H52Q55 38 55 41V43L46 46L42 52H47V56H19V52H24L20 46L15 44.5Q10 42.5 10 38Z" fill="#ffffff"/>
+  <path d="M49 5L50.6 9.4L55 11L50.6 12.6L49 17L47.4 12.6L43 11L47.4 9.4Z" fill="#fbbf24"/>
+</svg>
