@@ -28,11 +28,11 @@
     </header>
 
     @if (session('status'))
-        <div class="mt-6 rounded-xl border border-[#b9ead8] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success)]" role="status">{{ session('status') }}</div>
+        <div class="mt-6 rounded-xl border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success)]" role="status">{{ session('status') }}</div>
     @endif
 
     @if ($activeComparison)
-        <section class="mt-7 flex flex-col gap-3 rounded-2xl border border-[#c7d2fe] bg-[#eef2ff] p-5 sm:flex-row sm:items-center sm:justify-between" aria-label="Etkin hazırlık karşılaştırması">
+        <section class="mt-7 flex flex-col gap-3 rounded-2xl border border-[var(--indigo-line)] bg-[var(--indigo-soft)] p-5 sm:flex-row sm:items-center sm:justify-between" aria-label="Etkin hazırlık karşılaştırması">
             <div>
                 <p class="text-[10px] font-black tracking-[0.1em] text-[var(--forest)] uppercase">Şu anda hazırlanıyor</p>
                 <h2 class="mt-1 text-base font-black">{{ $activeComparison->title }}</h2>
@@ -52,7 +52,7 @@
         </div>
 
         @if ($comparisons->isEmpty())
-            <div class="rounded-2xl border border-dashed border-[var(--line-strong)] bg-white px-6 py-14 text-center">
+            <div class="rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--surface)] px-6 py-14 text-center">
                 <h3 class="text-lg font-black">Henüz hazırlık paketi yok</h3>
                 <p class="mx-auto mt-2 max-w-xl text-sm leading-6 text-[var(--muted)]">İlk karşılaştırmayı oluşturduğunuzda model belgeleri ve manuel notlar burada saklanır.</p>
                 <a class="mt-5 inline-flex rounded-lg bg-[var(--forest)] px-4 py-2.5 text-xs font-extrabold text-white" href="{{ route('preparations.create') }}">İlk hazırlığı oluştur</a>
@@ -64,7 +64,7 @@
                         $completedCount = $comparison->packages->where('status', 'completed')->count();
                         $modelCount = count((array) $comparison->selected_models);
                     @endphp
-                    <article class="runner-card flex min-w-0 flex-col rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6">
+                    <article class="runner-card flex min-w-0 flex-col rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6">
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="text-[9px] font-black tracking-[0.1em] text-[var(--forest)] uppercase">{{ $comparison->provider === 'opencode-go' ? 'OpenCode Go' : 'OpenRouter' }} · {{ $comparison->created_at?->locale('tr')->translatedFormat('j M Y · H:i') }}</p>

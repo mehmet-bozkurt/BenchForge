@@ -283,11 +283,11 @@ function initializeRunner() {
             const message = document.createElement('p');
             const selectedSlug = providerSelections.get(model.id) || '';
 
-            row.className = 'grid gap-1.5 rounded-lg border border-[var(--line)] bg-white p-3';
+            row.className = 'grid gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3';
             label.className = 'grid gap-1.5 text-[11px] font-extrabold';
             heading.className = 'break-words';
             heading.textContent = `${model.name} · ${model.id}`;
-            select.className = 'h-10 w-full min-w-0 rounded-lg border border-[var(--line)] bg-white px-2.5 text-xs font-semibold outline-none focus:border-[var(--forest)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]';
+            select.className = 'h-10 w-full min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-xs font-semibold outline-none focus:border-[var(--forest)] disabled:cursor-not-allowed disabled:bg-[var(--surface-subtle)]';
             select.id = `fixed-provider-${index}`;
             select.name = `fixed_providers[${model.id}]`;
             select.dataset.modelId = model.id;
@@ -653,9 +653,9 @@ function initializeRunner() {
             + `${parallel} model aynı anda çalışırsa en kötü durumda yaklaşık ${worstHours} saat sürer (model başına 60 dk sınır).`
             + (heavy ? ' Model sayısı arttıkça maliyet de doğrusal artar.' : '');
         estimate.classList.remove('hidden');
-        estimate.classList.toggle('bg-[#fff9eb]', heavy);
-        estimate.classList.toggle('text-[#815d0c]', heavy);
-        estimate.classList.toggle('bg-white', !heavy);
+        estimate.classList.toggle('bg-[var(--amber-soft)]', heavy);
+        estimate.classList.toggle('text-[var(--amber-ink)]', heavy);
+        estimate.classList.toggle('bg-[var(--surface)]', !heavy);
         estimate.classList.toggle('text-[var(--muted)]', !heavy);
     }
 
@@ -1166,6 +1166,43 @@ function initializeAttemptRefresh() {
     scheduleAttemptRefresh();
 }
 
+const THEME_STORAGE_KEY = 'benchforge-theme';
+
+/** Resolves a stored preference (light, dark or system) to the theme that should be shown. */
+export function resolveTheme(preference, prefersDark) {
+    if (preference === 'light' || preference === 'dark') return preference;
+    return prefersDark ? 'dark' : 'light';
+}
+
+function initializeThemeSwitch() {
+    const root = document.documentElement;
+    if (!root?.dataset) return;
+    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const buttons = [...document.querySelectorAll('[data-theme-choice]')];
+
+    const apply = (preference) => {
+        root.dataset.themePreference = preference;
+        root.dataset.theme = resolveTheme(preference, media?.matches ?? false);
+        buttons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.themeChoice === preference)));
+    };
+
+    apply(root.dataset.themePreference || 'system');
+
+    buttons.forEach((button) => button.addEventListener('click', () => {
+        const preference = button.dataset.themeChoice;
+        try {
+            localStorage.setItem(THEME_STORAGE_KEY, preference);
+        } catch {
+            // Private windows can refuse storage; the choice still applies to this page.
+        }
+        apply(preference);
+    }));
+
+    media?.addEventListener?.('change', () => {
+        if ((root.dataset.themePreference || 'system') === 'system') apply('system');
+    });
+}
+
 /** Mirrors Str::slug for group names, so the runner can show the file name before saving. */
 export function groupFileName(value) {
     const turkish = { ç: 'c', ğ: 'g', ı: 'i', i̇: 'i', ö: 'o', ş: 's', ü: 'u' };
@@ -1282,4 +1319,5 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeDestructiveForms();
     initializeAttemptRefresh();
     initializeResultSorting();
+    initializeThemeSwitch();
 });

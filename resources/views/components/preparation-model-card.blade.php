@@ -6,7 +6,7 @@
 @endphp
 
 <div @class([
-    'min-w-0 rounded-xl border border-[var(--line)] bg-white p-3 text-xs',
+    'min-w-0 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 text-xs',
     'has-checked:border-[var(--violet)] has-checked:bg-[var(--violet-soft)]' => $isGo,
     'has-checked:border-[var(--forest)] has-checked:bg-[var(--mint-soft)]' => ! $isGo,
 ]) data-preparation-model-card="{{ $provider }}" data-preparation-search-text="{{ Str::lower($model->name.' '.$model->model_id) }}">
@@ -39,7 +39,7 @@
                     <a class="font-bold text-[var(--forest)] underline" href="https://opencode.ai/docs/go/#usage-limits" target="_blank" rel="noopener noreferrer">Go resmî kullanım ve fiyat tablosu ↗</a>
                 @endif
                 @unless ($details['hasRawMetadata'])
-                    <p class="mt-2 text-[#815d0c]">Bu kayıt eski katalogdan geliyor; yalnız önceden kaydedilmiş alanlar gösteriliyor. Tüm özgün verileri almak için kataloğu yenileyin.</p>
+                    <p class="mt-2 text-[var(--amber-ink)]">Bu kayıt eski katalogdan geliyor; yalnız önceden kaydedilmiş alanlar gösteriliyor. Tüm özgün verileri almak için kataloğu yenileyin.</p>
                 @endunless
             </div>
 

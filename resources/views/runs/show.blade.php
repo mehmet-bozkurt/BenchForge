@@ -78,8 +78,8 @@
     $toneStyles = [
         'pass' => ['label' => 'Başarılı', 'row' => 'result-row-pass', 'dot' => 'bg-[var(--success)]', 'text' => 'text-[var(--success)]'],
         'fail' => ['label' => 'Sorunlu', 'row' => 'result-row-fail', 'dot' => 'bg-[var(--red)]', 'text' => 'text-[var(--red)]'],
-        'provider' => ['label' => 'Puanlanmaz', 'row' => 'result-row-provider', 'dot' => 'bg-[var(--amber)]', 'text' => 'text-[#8b5a16]'],
-        'warning' => ['label' => 'Puanlandı', 'row' => 'result-row-warning', 'dot' => 'bg-[var(--amber)]', 'text' => 'text-[#8b5a16]'],
+        'provider' => ['label' => 'Puanlanmaz', 'row' => 'result-row-provider', 'dot' => 'bg-[var(--amber)]', 'text' => 'text-[var(--amber-ink)]'],
+        'warning' => ['label' => 'Puanlandı', 'row' => 'result-row-warning', 'dot' => 'bg-[var(--amber)]', 'text' => 'text-[var(--amber-ink)]'],
         'unknown' => ['label' => 'Veri yok', 'row' => 'result-row-unknown', 'dot' => 'bg-[var(--line-strong)]', 'text' => 'text-[var(--muted)]'],
     ];
     $usageOf = static fn ($subject): ?array => is_array($subject->usage) && ($subject->usage['source'] ?? null) === 'opencode_session' ? $subject->usage : null;
@@ -106,13 +106,13 @@
 
 <div class="content-frame run-page" @if ($activeAttemptCount > 0) data-attempt-refresh @endif>
     @if (session('status'))
-        <div class="mb-4 rounded-xl border border-[#b9ead8] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success)]" role="status">
+        <div class="mb-4 rounded-xl border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success)]" role="status">
             {{ session('status') }}
         </div>
     @endif
 
     @if ($errors->has('storage') || $errors->has('confirmation') || $errors->has('continuation') || $errors->has('acknowledge_cost') || $errors->has('mode'))
-        <div class="mb-4 rounded-xl border border-[#f2c9cf] bg-[var(--red-soft)] px-4 py-3 text-sm font-semibold text-[var(--red)]" role="alert">
+        <div class="mb-4 rounded-xl border border-[var(--red-line)] bg-[var(--red-soft)] px-4 py-3 text-sm font-semibold text-[var(--red)]" role="alert">
             {{ $errors->first('storage') ?: $errors->first('confirmation') ?: $errors->first('continuation') ?: $errors->first('acknowledge_cost') ?: $errors->first('mode') }}
         </div>
     @endif
@@ -139,9 +139,9 @@
         <dl class="run-stats order-last grid w-full grid-cols-3 @xl:grid-cols-6 @7xl:order-none @7xl:w-auto @7xl:grid-cols-[repeat(6,auto)]">
             @foreach ([
                 ['Modeller', $run->model_count, 'Koşudaki model sayısı', ''],
-                ['Başarılı', $run->passed_count, 'Tüm aşamalar geçti', 'text-[#0f7a5a]'],
+                ['Başarılı', $run->passed_count, 'Tüm aşamalar geçti', 'text-[var(--success-ink)]'],
                 ['Sorunlu', $run->failed_count, 'En az bir aşama başarısız', $run->failed_count > 0 ? 'text-[var(--red)]' : ''],
-                ['Puanlanamaz', $unscoredCount, 'Sağlayıcı veya hesap hatası', $unscoredCount > 0 ? 'text-[#8b5a16]' : ''],
+                ['Puanlanamaz', $unscoredCount, 'Sağlayıcı veya hesap hatası', $unscoredCount > 0 ? 'text-[var(--amber-ink)]' : ''],
                 ['Toplam süre', $formatDuration($run->total_duration_seconds), 'Modellerin toplamı', ''],
                 ['Toplam maliyet', $hasUsage ? '$'.number_format($totalCost, 4, ',', '.') : '—', 'OpenCode kaydı', ''],
             ] as [$label, $value, $hint, $color])
@@ -161,7 +161,7 @@
     </header>
 
     {{-- Results: one scoreboard row per model, stage names only in the header --}}
-    <section class="results-panel mt-5 overflow-clip rounded-2xl border border-[var(--line)] bg-white shadow-[0_12px_38px_rgb(26_32_65/0.05)]" aria-labelledby="results-title">
+    <section class="results-panel mt-5 overflow-clip rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[0_12px_38px_rgb(26_32_65/0.05)]" aria-labelledby="results-title">
         <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-[var(--line)] px-4 py-2.5">
             <h2 id="results-title" class="text-base font-black tracking-[-0.02em]">Model sonuçları <span class="font-bold text-[var(--muted)]">· {{ $modelRunCount }}</span></h2>
             <p class="text-xs text-[var(--muted)]">Aşama işaretleri ilk teslimi gösterir ve logu açar. Maliyet OpenCode kaydıdır; OpenRouter faturası değildir.</p>
@@ -343,14 +343,14 @@
         <section class="mt-8" aria-labelledby="diagnostics-title" data-live-region="recovery">
             <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <h2 id="diagnostics-title" class="text-base font-black tracking-[-0.02em]">Kurtarma</h2>
-                <span class="rounded-full border border-[var(--line)] bg-white px-2.5 py-0.5 text-xs font-bold text-[var(--ink)]">Aktif kurtarma: {{ $activeAttemptCount }}/{{ $maxParallelAttempts }}</span>
+                <span class="rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-0.5 text-xs font-bold text-[var(--ink)]">Aktif kurtarma: {{ $activeAttemptCount }}/{{ $maxParallelAttempts }}</span>
                 <span class="text-xs text-[var(--muted)]">İki farklı model aynı anda devam edebilir; aynı modelin denemeleri sırayla çalışır.</span>
             </div>
             <p class="mt-1 text-xs leading-5 text-[var(--muted)]">
                 Kurtarma denemeleri ilk teslimin sonucunu ve puanını değiştirmez. Her deneme ayrı kaydedilir; başarılı bir denemenin çıktısı “kurtarılmış” görünümde incelenir ve puanlanmaz.
             </p>
 
-            <div class="fold-list mt-3 overflow-clip rounded-2xl border border-[var(--line)] bg-white">
+            <div class="fold-list mt-3 overflow-clip rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
                 @foreach ($recoverableModels as $modelRun)
                     @php
                         $outcome = $outcomes[$modelRun->id] ?? ['tone' => 'unknown', 'title' => 'Sonuç okunamadı', 'detail' => null];
@@ -472,22 +472,22 @@
                             <aside class="h-fit rounded-2xl border border-[var(--line)] bg-[var(--surface-subtle)] p-3" aria-label="{{ str($modelRun->model)->after('/') }} için kurtarma eylemleri">
                                 <h4 class="text-sm font-black text-[var(--ink)]">Ne yapmak istersiniz?</h4>
                                 @if (! $canContinue && ! $canValidate && $unavailableReason)
-                                    <p class="mt-2 rounded-lg border border-[#f1d7a5] bg-[var(--amber-soft)] px-3 py-2 text-xs leading-5 text-[#8b5a16]">{{ $unavailableReason }}</p>
+                                    <p class="mt-2 rounded-lg border border-[var(--amber-line)] bg-[var(--amber-soft)] px-3 py-2 text-xs leading-5 text-[var(--amber-ink)]">{{ $unavailableReason }}</p>
                                 @endif
 
                                 <div class="mt-2 grid gap-2">
-                                    <div class="rounded-xl border border-[#d8d1f5] bg-white p-3">
+                                    <div class="rounded-xl border border-[var(--violet-line)] bg-[var(--surface)] p-3">
                                         <p class="text-sm font-bold text-[var(--violet)]">Kaldığı yerden devam ettir</p>
                                         <p class="mt-1 text-xs leading-5 text-[var(--muted)]">Aynı çalışma alanı ve OpenCode oturumunun ayrılmış bir kopyasıyla model yeniden çağrılır. Token harcanır.</p>
                                         @if (! $canContinue && $canValidate)
-                                            <p class="mt-1 text-xs font-semibold text-[#8b5a16]">Bu model için devam ettirilebilir bir OpenCode oturumu bulunamadı.</p>
+                                            <p class="mt-1 text-xs font-semibold text-[var(--amber-ink)]">Bu model için devam ettirilebilir bir OpenCode oturumu bulunamadı.</p>
                                         @endif
                                         <button class="btn-primary mt-3 w-full" type="button" data-dialog-open="continue-{{ $modelRun->slug }}" @disabled(! $canContinue)>
                                             {{ $canContinue ? 'Devam denemesi başlat' : 'Devam kullanılamıyor' }}
                                         </button>
                                     </div>
 
-                                    <form class="rounded-xl border border-[#b9ead8] bg-white p-3" method="POST" action="{{ route('runs.models.attempts.store', ['benchmarkRun' => $run, 'modelRun' => $modelRun]) }}">
+                                    <form class="rounded-xl border border-[var(--success-line)] bg-[var(--surface)] p-3" method="POST" action="{{ route('runs.models.attempts.store', ['benchmarkRun' => $run, 'modelRun' => $modelRun]) }}">
                                         @csrf
                                         <input type="hidden" name="mode" value="validate">
                                         <p class="text-sm font-bold text-[var(--success)]">Değişiklik yapmadan yeniden doğrula</p>
@@ -511,8 +511,8 @@
                         <p class="eyebrow">Kurtarma denemesi</p>
                         <h4 id="continue-{{ $modelRun->slug }}-title" class="mt-1 text-lg font-black">{{ str($modelRun->model)->after('/') }} kaldığı yerden devam etsin mi?</h4>
                         <p class="mt-2 text-sm leading-6 text-[var(--muted)]">Model, kendi hata özeti ve zorunlu rotalarla aynı oturumun ayrılmış bir kopyasında yeniden çağrılır. İlk teslimin sonucu ve puanı değişmez.</p>
-                        <label class="mt-4 flex items-start gap-2.5 rounded-xl border border-[#d8d1f5] bg-[var(--violet-soft)] p-3 text-sm font-semibold text-[var(--violet)]">
-                            <input class="mt-0.5 rounded border-[#c8baf8]" type="checkbox" name="acknowledge_cost" value="1" required>
+                        <label class="mt-4 flex items-start gap-2.5 rounded-xl border border-[var(--violet-line)] bg-[var(--violet-soft)] p-3 text-sm font-semibold text-[var(--violet)]">
+                            <input class="mt-0.5 rounded border-[var(--violet-line)]" type="checkbox" name="acknowledge_cost" value="1" required>
                             <span>Yeni token veya sağlayıcı kredisi harcanabileceğini anlıyorum.</span>
                         </label>
                         <div class="mt-5 flex flex-wrap justify-end gap-2">
@@ -529,7 +529,7 @@
     <section class="mt-8" aria-labelledby="details-title">
         <h2 id="details-title" class="text-base font-black tracking-[-0.02em]">Teknik ayrıntılar</h2>
 
-        <div class="fold-list mt-3 overflow-clip rounded-2xl border border-[var(--line)] bg-white">
+        <div class="fold-list mt-3 overflow-clip rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
             <details class="detail-fold" @if ($boundaryTotals['observed'] > 0) open @endif>
                 <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 marker:content-none">
                     <span class="min-w-0">
@@ -537,7 +537,7 @@
                         <span class="hidden text-xs text-[var(--muted)] md:inline">· Modellerin kendi klasörü dışına erişim denetimi</span>
                     </span>
                     <span class="flex gap-2">
-                        <span class="rounded-full bg-[var(--surface-subtle)] px-2.5 py-0.5 text-xs font-bold {{ $boundaryTotals['blocked'] > 0 ? 'text-[#8b5a16]' : 'text-[var(--muted)]' }}">{{ $boundaryTotals['blocked'] }} engellenen erişim</span>
+                        <span class="rounded-full bg-[var(--surface-subtle)] px-2.5 py-0.5 text-xs font-bold {{ $boundaryTotals['blocked'] > 0 ? 'text-[var(--amber-ink)]' : 'text-[var(--muted)]' }}">{{ $boundaryTotals['blocked'] }} engellenen erişim</span>
                         @if ($boundaryTotals['observed'] > 0)
                             <span class="rounded-full bg-[var(--red-soft)] px-2.5 py-0.5 text-xs font-bold text-[var(--red)]">Bağımsızlık uyarısı</span>
                         @endif
@@ -560,7 +560,7 @@
                                 <p class="mt-0.5 text-xs text-[var(--muted)]">{{ $hasCurrentPolicy ? 'Yeni sınır politikası kaydı var' : 'Eski koşu · yeni sınır politikası kaydı yok' }}</p>
                                 <p class="mt-1.5 text-sm font-bold {{ $blockedCount > 0 ? 'text-[var(--amber)]' : 'text-[var(--muted)]' }}">Engellenen erişim: {{ $blockedCount }}</p>
                                 @if ($observedReadCount > 0)
-                                    <p class="mt-2 rounded-lg border border-[#f2c9cf] bg-[var(--red-soft)] p-2 text-xs leading-5 font-bold text-[var(--red)]">Karşılaştırma uyarısı: {{ $observedReadCount }} araç çıktısında başka modele ait kayıt görüldü. Engellenmiş girişimden farklıdır; bu denemeyi bağımsız kabul etmeden inceleyin.</p>
+                                    <p class="mt-2 rounded-lg border border-[var(--red-line)] bg-[var(--red-soft)] p-2 text-xs leading-5 font-bold text-[var(--red)]">Karşılaştırma uyarısı: {{ $observedReadCount }} araç çıktısında başka modele ait kayıt görüldü. Engellenmiş girişimden farklıdır; bu denemeyi bağımsız kabul etmeden inceleyin.</p>
                                 @endif
                                 @include('runs.boundary-report', ['report' => $modelBoundaryReports[$modelRun->id] ?? []])
                             </article>
@@ -635,7 +635,7 @@
 
     {{-- Storage and destructive actions live at the very end, closed by default --}}
     <section class="mt-3 mb-4" aria-labelledby="storage-title">
-        <details class="detail-fold rounded-2xl border border-[#f2c9cf] bg-white">
+        <details class="detail-fold rounded-2xl border border-[var(--red-line)] bg-[var(--surface)]">
             <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 marker:content-none">
                 <span class="min-w-0">
                     <span class="eyebrow">Depolama kullanımı</span>
@@ -648,17 +648,17 @@
             </summary>
             <div class="border-t border-[var(--line)] p-4">
                 <dl class="grid gap-px overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--line)] sm:grid-cols-3">
-                    <div class="bg-white px-4 py-2.5">
+                    <div class="bg-[var(--surface)] px-4 py-2.5">
                         <dt class="text-xs font-bold text-[var(--muted)]">Toplam alan</dt>
                         <dd class="mt-0.5 text-lg font-black">{{ $formatFileSize($run->total_bytes) }}</dd>
                         <dd class="font-mono text-[11px] text-[var(--muted)]">{{ $formatExactBytes($run->total_bytes) }}</dd>
                     </div>
-                    <div class="bg-white px-4 py-2.5">
+                    <div class="bg-[var(--surface)] px-4 py-2.5">
                         <dt class="text-xs font-bold text-[var(--violet)]">Çalışma alanları</dt>
                         <dd class="mt-0.5 text-lg font-black">{{ $formatFileSize($run->workspace_bytes) }}</dd>
                         <dd class="font-mono text-[11px] text-[var(--muted)]">{{ $formatExactBytes($run->workspace_bytes) }} · {{ $run->workspace_count }} klasör</dd>
                     </div>
-                    <div class="bg-white px-4 py-2.5">
+                    <div class="bg-[var(--surface)] px-4 py-2.5">
                         <dt class="text-xs font-bold text-[var(--success)]">Sonuç ve çıktılar</dt>
                         <dd class="mt-0.5 text-lg font-black">{{ $formatFileSize($run->result_bytes) }}</dd>
                         <dd class="font-mono text-[11px] text-[var(--muted)]">{{ $formatExactBytes($run->result_bytes) }}</dd>
@@ -667,29 +667,29 @@
                 <p class="mt-2 text-xs leading-5 text-[var(--muted)]">Ölçüm: {{ $run->storage_scanned_at?->locale('tr')->translatedFormat('j M Y · H:i') ?? 'henüz ölçülmedi' }}. Değerler diskteki dosyaların mantıksal byte toplamıdır.</p>
 
                 <div class="mt-4 grid gap-3 border-t border-[var(--line)] pt-4 xl:grid-cols-3">
-                    <form class="rounded-xl border border-[#f1d7a5] bg-[var(--amber-soft)] p-3" method="POST" action="{{ route('runs.workspace.destroy', $run) }}" data-destructive-form data-confirm-message="Model çalışma alanları (kaynak kod dahil) kalıcı olarak silinsin mi? Önizlemeler önce arşive kopyalanır; sonuçlar, loglar ve puanlar korunur. Bu koşuda kurtarma denemesi artık yapılamaz.">
+                    <form class="rounded-xl border border-[var(--amber-line)] bg-[var(--amber-soft)] p-3" method="POST" action="{{ route('runs.workspace.destroy', $run) }}" data-destructive-form data-confirm-message="Model çalışma alanları (kaynak kod dahil) kalıcı olarak silinsin mi? Önizlemeler önce arşive kopyalanır; sonuçlar, loglar ve puanlar korunur. Bu koşuda kurtarma denemesi artık yapılamaz.">
                         @csrf
                         @method('DELETE')
                         <input type="hidden" name="confirmation" value="">
-                        <h3 class="text-sm font-black text-[#8b5a16]">Yalnızca çalışma alanlarını sil</h3>
-                        <p class="mt-1.5 text-xs leading-5 text-[#8b5a16]">Modellerin kaynak kodunu da siler. Önizlemeler önce arşive kopyalanır; sonuç özeti, loglar ve puanlar korunur. Sonrasında bu koşuda kurtarma denemesi yapılamaz. Bağımlılıklar (node_modules) her koşudan sonra zaten otomatik silinir.</p>
-                        <button class="mt-3 rounded-lg border border-[#d9b968] bg-white px-3.5 py-2 text-sm font-extrabold text-[#8b5a16] transition hover:border-[#8b5a16] disabled:cursor-not-allowed disabled:opacity-45" type="submit" @disabled($run->workspace_count === 0)>
+                        <h3 class="text-sm font-black text-[var(--amber-ink)]">Yalnızca çalışma alanlarını sil</h3>
+                        <p class="mt-1.5 text-xs leading-5 text-[var(--amber-ink)]">Modellerin kaynak kodunu da siler. Önizlemeler önce arşive kopyalanır; sonuç özeti, loglar ve puanlar korunur. Sonrasında bu koşuda kurtarma denemesi yapılamaz. Bağımlılıklar (node_modules) her koşudan sonra zaten otomatik silinir.</p>
+                        <button class="mt-3 rounded-lg border border-[var(--amber-line)] bg-[var(--surface)] px-3.5 py-2 text-sm font-extrabold text-[var(--amber-ink)] transition hover:border-[var(--amber-ink)] disabled:cursor-not-allowed disabled:opacity-45" type="submit" @disabled($run->workspace_count === 0)>
                             {{ $run->workspace_count === 0 ? 'Çalışma alanı zaten yok' : 'Çalışma alanlarını sil · '.$formatFileSize($run->workspace_bytes) }}
                         </button>
                     </form>
 
-                    <form class="rounded-xl border border-[#d8d1f5] bg-[var(--violet-soft)] p-3" method="POST" action="{{ route('runs.results.destroy', $run) }}" data-destructive-form data-confirm-message="Sonuç özeti, loglar, önizlemeler ve puanlar kalıcı olarak silinsin mi? Model çalışma alanları korunacak.">
+                    <form class="rounded-xl border border-[var(--violet-line)] bg-[var(--violet-soft)] p-3" method="POST" action="{{ route('runs.results.destroy', $run) }}" data-destructive-form data-confirm-message="Sonuç özeti, loglar, önizlemeler ve puanlar kalıcı olarak silinsin mi? Model çalışma alanları korunacak.">
                         @csrf
                         @method('DELETE')
                         <input type="hidden" name="confirmation" value="">
                         <h3 class="text-sm font-black text-[var(--violet)]">Yalnızca sonuç arşivini sil</h3>
                         <p class="mt-1.5 text-xs leading-5 text-[var(--violet)]">Sonuç özetini, logları, önizlemeleri ve puanları siler. Model proje klasörleri korunur.</p>
-                        <button class="mt-3 rounded-lg border border-[#c8baf8] bg-white px-3.5 py-2 text-sm font-extrabold text-[var(--violet)] transition hover:border-[var(--violet)] disabled:cursor-not-allowed disabled:opacity-45" type="submit" @disabled(($run->result_bytes ?? 0) === 0)>
+                        <button class="mt-3 rounded-lg border border-[var(--violet-line)] bg-[var(--surface)] px-3.5 py-2 text-sm font-extrabold text-[var(--violet)] transition hover:border-[var(--violet)] disabled:cursor-not-allowed disabled:opacity-45" type="submit" @disabled(($run->result_bytes ?? 0) === 0)>
                             {{ ($run->result_bytes ?? 0) === 0 ? 'Sonuç arşivi zaten yok' : 'Sonuç arşivini sil' }}
                         </button>
                     </form>
 
-                    <form class="rounded-xl border border-[#f2c9cf] bg-[var(--red-soft)] p-3" method="POST" action="{{ route('runs.destroy', $run) }}" data-destructive-form data-confirm-message="Bu benchmark sonucu, tüm dosyaları ve değerlendirmeleri kalıcı olarak silinsin mi?">
+                    <form class="rounded-xl border border-[var(--red-line)] bg-[var(--red-soft)] p-3" method="POST" action="{{ route('runs.destroy', $run) }}" data-destructive-form data-confirm-message="Bu benchmark sonucu, tüm dosyaları ve değerlendirmeleri kalıcı olarak silinsin mi?">
                         @csrf
                         @method('DELETE')
                         <input type="hidden" name="confirmation" value="">

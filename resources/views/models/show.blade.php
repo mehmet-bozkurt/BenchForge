@@ -48,7 +48,7 @@
     </section>
 
     <div class="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <section class="data-panel rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" aria-labelledby="criteria-title">
+        <section class="data-panel rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" aria-labelledby="criteria-title">
             <p class="eyebrow">Kalite profili</p>
             <h2 id="criteria-title" class="mt-1 text-xl font-black tracking-[-0.035em]">Manuel puanlar</h2>
             @if ($model['manual']['count'] === 0)
@@ -65,7 +65,7 @@
             @endif
         </section>
 
-        <section class="data-panel rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" aria-labelledby="stages-title">
+        <section class="data-panel rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" aria-labelledby="stages-title">
             <p class="eyebrow">Teknik profil</p>
             <h2 id="stages-title" class="mt-1 text-xl font-black tracking-[-0.035em]">Aşama güvenilirliği</h2>
             <div class="mt-5 divide-y divide-[var(--line)]">
@@ -81,7 +81,7 @@
         </section>
     </div>
 
-    <section class="data-panel mt-8 overflow-hidden rounded-2xl border border-[var(--line)] bg-white" aria-labelledby="history-title">
+    <section class="data-panel mt-8 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]" aria-labelledby="history-title">
         <div class="border-b border-[var(--line)] px-5 py-5 sm:px-6"><p class="eyebrow">Geçmiş performans</p><h2 id="history-title" class="mt-1 text-xl font-black tracking-[-0.035em]">Benchmark koşuları</h2></div>
         <div class="overflow-x-auto">
             <table class="w-full min-w-[860px] border-collapse text-left">
@@ -109,11 +109,11 @@
     </section>
 
     <div class="mt-8 grid gap-6 xl:grid-cols-[0.65fr_1.35fr]">
-        <section class="data-panel rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6">
+        <section class="data-panel rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6">
             <p class="eyebrow">Sorun dağılımı</p><h2 class="mt-1 text-lg font-black">Manuel önem seviyeleri</h2>
             <dl class="mt-4 divide-y divide-[var(--line)]">@foreach ($model['manual']['severity'] as $severity => $count)<div class="flex items-center justify-between py-3 text-xs"><dt class="font-bold text-[var(--muted)]">{{ $severityLabels[$severity] }}</dt><dd class="font-black">{{ $count }}</dd></div>@endforeach</dl>
         </section>
-        <section class="data-panel rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6">
+        <section class="data-panel rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6">
             <p class="eyebrow">İnceleme notları</p><h2 class="mt-1 text-lg font-black">Değerlendirici gözlemleri</h2>
             <div class="mt-4 space-y-3">
                 @forelse ($model['manual']['notes'] as $note)

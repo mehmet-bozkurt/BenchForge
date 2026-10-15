@@ -18,7 +18,7 @@
             <p class="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
                 Aynı çalışma koşulundaki benchmark koşularının teknik güvenilirliğini, hızını ve manuel kalite değerlendirmelerini birlikte görün. Farklı koşullar tek tabloda karıştırılmaz.
             </p>
-            <nav class="mt-4 inline-flex overflow-hidden rounded-lg border border-[var(--line)] bg-white text-[11px] font-extrabold" aria-label="Çalışma koşulu">
+            <nav class="mt-4 inline-flex overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[11px] font-extrabold" aria-label="Çalışma koşulu">
                 @foreach ($environmentProfiles as $profile => $profileLabel)
                     <a
                         class="px-3 py-2 transition {{ $profile === $environmentProfile ? 'bg-[var(--forest)] text-white' : 'text-[var(--muted)] hover:text-[var(--forest)]' }} {{ $loop->first ? '' : 'border-l border-[var(--line)]' }}"
@@ -57,13 +57,13 @@
         </article>
     </section>
 
-    <section class="mt-8 overflow-hidden rounded-[26px] border border-[var(--line)] bg-white shadow-[0_20px_60px_rgb(26_32_65/7%)]" aria-labelledby="ranking-title">
+    <section class="mt-8 overflow-hidden rounded-[26px] border border-[var(--line)] bg-[var(--surface)] shadow-[0_20px_60px_rgb(26_32_65/7%)]" aria-labelledby="ranking-title">
         <div class="flex flex-col gap-4 border-b border-[var(--line)] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
             <div>
                 <p class="eyebrow">Genel sıralama</p>
                 <h2 id="ranking-title" class="mt-1 text-xl font-black tracking-[-0.035em]">Modellerin birleşik performansı</h2>
             </div>
-            <div class="max-w-xl rounded-xl border border-[#d7ccff] bg-[var(--violet-soft)] px-4 py-3 text-[11px] leading-5 text-[var(--muted)]">
+            <div class="max-w-xl rounded-xl border border-[var(--violet-line)] bg-[var(--violet-soft)] px-4 py-3 text-[11px] leading-5 text-[var(--muted)]">
                 <strong class="text-[var(--violet)]">Puan formülü:</strong> %60 teknik başarı + %40 manuel ilk teslim puanı. Teknik başarı, her koşunun kendi aşama oranının eşit ağırlıklı ortalamasıdır; model adımı başarısız olan koşu 0 sayılır. Manuel değerlendirmesi olmayan modeller sıralamaya alınmaz. Koşular farklı görev ve aşama setleri içerebildiği için bu tablo evrensel ve tam adil bir sıralama değildir.
             </div>
         </div>

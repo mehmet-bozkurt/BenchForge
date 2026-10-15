@@ -23,11 +23,11 @@
             <h1 class="mt-2 text-3xl font-black tracking-[-0.05em] sm:text-[38px]">Yeni Hazırlık Karşılaştırması</h1>
             <p class="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">Bir proje şartnamesi ve teknoloji seçimi verin. Seçilen modeller sırayla beş bölümlük bağımsız hazırlık paketi üretsin.</p>
         </div>
-        <a class="inline-flex rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('preparations.index') }}">Geçmiş hazırlıklar →</a>
+        <a class="inline-flex rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('preparations.index') }}">Geçmiş hazırlıklar →</a>
     </header>
 
     @if ($errors->any())
-        <div class="mt-6 rounded-xl border border-[#f2c9cf] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
+        <div class="mt-6 rounded-xl border border-[var(--red-line)] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
             <strong class="font-extrabold">Hazırlık başlatılamadı.</strong>
             <ul class="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">
                 @foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach
@@ -36,21 +36,21 @@
     @endif
 
     @if ($activeComparison)
-        <div class="mt-6 rounded-xl border border-[#c7d2fe] bg-[#eef2ff] px-4 py-3 text-xs leading-5 text-[var(--forest)]" role="status">
+        <div class="mt-6 rounded-xl border border-[var(--indigo-line)] bg-[var(--indigo-soft)] px-4 py-3 text-xs leading-5 text-[var(--forest)]" role="status">
             <strong>Başka bir hazırlık sürüyor:</strong> {{ $activeComparison->title }}. Aynı anda yalnızca bir karşılaştırma çalışır.
             <a class="ml-1 underline" href="{{ route('preparations.show', $activeComparison) }}">Canlı durumu aç</a>
         </div>
     @endif
 
     <div class="mt-7 grid gap-6 2xl:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
-        <form class="runner-card min-w-0 rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-7" method="POST" action="{{ route('preparations.store') }}" enctype="multipart/form-data" data-preparation-create>
+        <form class="runner-card min-w-0 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-7" method="POST" action="{{ route('preparations.store') }}" enctype="multipart/form-data" data-preparation-create>
             @csrf
             <fieldset class="grid gap-6" @disabled($activeComparison)>
                 <legend class="sr-only">Hazırlık karşılaştırması bilgileri</legend>
 
                 <label class="grid gap-2 text-xs font-extrabold" for="preparation-title">
                     Karşılaştırma adı
-                    <input class="h-11 rounded-xl border border-[var(--line)] bg-white px-3.5 text-sm font-medium outline-none focus:border-[var(--forest)]" id="preparation-title" type="text" name="title" maxlength="120" value="{{ old('title') }}" placeholder="Örneğin: Incident Ops hazırlık turu" required>
+                    <input class="h-11 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-sm font-medium outline-none focus:border-[var(--forest)]" id="preparation-title" type="text" name="title" maxlength="120" value="{{ old('title') }}" placeholder="Örneğin: Incident Ops hazırlık turu" required>
                 </label>
 
                 <section class="grid gap-3" aria-labelledby="preparation-source-title">
@@ -60,7 +60,7 @@
                     </div>
                     <label class="grid gap-2 text-[11px] font-bold" for="preparation-specification">
                         Şartname metni · 50–100.000 karakter
-                        <textarea class="min-h-64 resize-y rounded-xl border border-[var(--line)] bg-white px-3.5 py-3 font-mono text-xs leading-5 outline-none focus:border-[var(--forest)]" id="preparation-specification" name="specification" minlength="50" maxlength="100000" placeholder="Projenin amacı, kullanıcıları, özellikleri ve kabul kriterleri…" data-preparation-specification>{{ old('specification') }}</textarea>
+                        <textarea class="min-h-64 resize-y rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 py-3 font-mono text-xs leading-5 outline-none focus:border-[var(--forest)]" id="preparation-specification" name="specification" minlength="50" maxlength="100000" placeholder="Projenin amacı, kullanıcıları, özellikleri ve kabul kriterleri…" data-preparation-specification>{{ old('specification') }}</textarea>
                     </label>
                     <label class="grid gap-2 text-[11px] font-bold" for="preparation-specification-file">
                         Veya TXT dosyası · en fazla 1 MB
@@ -71,7 +71,7 @@
 
                 <label class="grid gap-2 text-xs font-extrabold" for="preparation-technologies">
                     Teknolojiler ve sınırlar
-                    <textarea class="min-h-32 resize-y rounded-xl border border-[var(--line)] bg-white px-3.5 py-3 text-sm leading-6 outline-none focus:border-[var(--forest)]" id="preparation-technologies" name="technologies" minlength="5" maxlength="5000" placeholder="Örneğin: Laravel, SQLite, Tailwind CSS; harici SaaS bağımlılığı yok." required>{{ old('technologies') }}</textarea>
+                    <textarea class="min-h-32 resize-y rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 py-3 text-sm leading-6 outline-none focus:border-[var(--forest)]" id="preparation-technologies" name="technologies" minlength="5" maxlength="5000" placeholder="Örneğin: Laravel, SQLite, Tailwind CSS; harici SaaS bağımlılığı yok." required>{{ old('technologies') }}</textarea>
                     <span class="text-[10px] font-normal leading-4 text-[var(--muted)]">Tüm modellere aynı teknoloji ve kapsam sınırları gönderilir.</span>
                 </label>
 
@@ -90,14 +90,14 @@
                             <span>OpenCode Go <small class="block font-medium text-[var(--muted)]">{{ $goCatalog['count'] ?? $goModels->count() }} katalog modeli</small></span>
                         </label>
                     </div>
-                    <div class="rounded-xl border border-[#d8d1f5] bg-[var(--violet-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--muted)]">
+                    <div class="rounded-xl border border-[var(--violet-line)] bg-[var(--violet-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--muted)]">
                         OpenRouter bu ilk sürümde otomatik sağlayıcı yönlendirmesi kullanır. Katalog güncel değilse <a class="font-extrabold text-[var(--forest)] underline" href="{{ route('runner.create') }}">Yeni Benchmark ekranından yenileyin</a>.
                         <span class="mt-1 block">Fiyatlar koşu tahmini değil, kaynaktan alınan birim değerlerdir. Model kartındaki kaynak ve son eşitleme zamanını kontrol edin; yayımlanmayan değerler sıfır sayılmaz.</span>
                     </div>
 
                     <div @class(['grid gap-2', 'hidden' => $selectedProvider !== 'openrouter']) data-preparation-catalog="openrouter">
                         <p class="text-[10px] font-bold text-[var(--muted)]">OpenRouter kataloğu · <span data-preparation-count="openrouter">{{ $selectedProvider === 'openrouter' ? count($selectedModels) : 0 }}</span>/5 seçili</p>
-                        <input class="h-10 rounded-lg border border-[var(--line)] bg-white px-3 text-xs outline-none focus:border-[var(--forest)]" type="search" placeholder="Model adı veya kimliği ara…" aria-label="OpenRouter model ara" data-preparation-search="openrouter">
+                        <input class="h-10 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-xs outline-none focus:border-[var(--forest)]" type="search" placeholder="Model adı veya kimliği ara…" aria-label="OpenRouter model ara" data-preparation-search="openrouter">
                         <div class="max-h-[36rem] space-y-3 overflow-y-auto pr-1">
                             @forelse ($openRouterModels as $model)
                                 <x-preparation-model-card :model="$model" :details="$modelDetails['openrouter'][$model->model_id]" provider="openrouter" :selected="$selectedProvider === 'openrouter' && in_array($model->model_id, $selectedModels, true)" :disabled="$selectedProvider !== 'openrouter'" />
@@ -110,7 +110,7 @@
 
                     <div @class(['grid gap-2', 'hidden' => $selectedProvider !== 'opencode-go']) data-preparation-catalog="opencode-go">
                         <p class="text-[10px] font-bold text-[var(--muted)]">OpenCode Go kataloğu · <span data-preparation-count="opencode-go">{{ $selectedProvider === 'opencode-go' ? count($selectedModels) : 0 }}</span>/5 seçili</p>
-                        <input class="h-10 rounded-lg border border-[var(--line)] bg-white px-3 text-xs outline-none focus:border-[var(--violet)]" type="search" placeholder="Model adı veya kimliği ara…" aria-label="OpenCode Go model ara" data-preparation-search="opencode-go">
+                        <input class="h-10 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-xs outline-none focus:border-[var(--violet)]" type="search" placeholder="Model adı veya kimliği ara…" aria-label="OpenCode Go model ara" data-preparation-search="opencode-go">
                         <div class="max-h-[36rem] space-y-3 overflow-y-auto pr-1">
                             @forelse ($goModels as $model)
                                 <x-preparation-model-card :model="$model" :details="$modelDetails['opencode-go'][$model->model_id]" provider="opencode-go" :selected="$selectedProvider === 'opencode-go' && in_array($model->model_id, $selectedModels, true)" :disabled="$selectedProvider !== 'opencode-go'" />
@@ -123,7 +123,7 @@
                     <p class="text-xs font-semibold text-[var(--red)]" role="status" aria-live="polite" data-preparation-model-error></p>
                 </section>
 
-                <label class="flex items-start gap-3 rounded-xl border border-[#f0d9a6] bg-[#fff9eb] p-4 text-xs leading-5 text-[#815d0c]">
+                <label class="flex items-start gap-3 rounded-xl border border-[var(--amber-line)] bg-[var(--amber-soft)] p-4 text-xs leading-5 text-[var(--amber-ink)]">
                     <input class="mt-1" type="checkbox" name="confirmed_external" value="1" required @checked(old('confirmed_external'))>
                     <span><strong>Harici model çağrısını ve ücret oluşabileceğini onaylıyorum.</strong> Proje şartnamesi ve teknoloji notları seçilen sağlayıcı üzerinden modellere gönderilir. Modeller sırayla çalışır; her biri ek maliyet oluşturabilir.</span>
                 </label>
@@ -132,7 +132,7 @@
             </fieldset>
         </form>
 
-        <aside class="self-start rounded-2xl border border-[var(--line)] bg-white p-5 sm:p-6" aria-labelledby="preparation-scope-title">
+        <aside class="self-start rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" aria-labelledby="preparation-scope-title">
             <p class="eyebrow">Bu aşamanın sınırı</p>
             <h2 id="preparation-scope-title" class="mt-2 text-xl font-black tracking-[-0.03em]">Ne üretilecek?</h2>
             <ol class="mt-5 grid gap-3 text-xs leading-5">
@@ -140,7 +140,7 @@
                     <li class="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] p-3"><span class="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[var(--violet-soft)] font-mono font-black text-[var(--violet)]">{{ $number + 1 }}</span><span class="font-bold">{{ $label }}</span></li>
                 @endforeach
             </ol>
-            <div class="mt-5 rounded-xl border border-[#d8d1f5] bg-[var(--violet-soft)] p-4 text-[11px] leading-5 text-[var(--muted)]">
+            <div class="mt-5 rounded-xl border border-[var(--violet-line)] bg-[var(--violet-soft)] p-4 text-[11px] leading-5 text-[var(--muted)]">
                 Modeller soru sormadan bağımsız taslaklar hazırlar. Biçim kontrolü yapılır; içerik doğruluğu ve uygulanabilirlik sizin manuel değerlendirmenize bırakılır. Henüz proje açılmaz, kod yazılmaz, build veya rota testi yapılmaz.
             </div>
         </aside>

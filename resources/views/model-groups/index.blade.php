@@ -14,17 +14,17 @@
                 Sık kullandığınız model setlerini kaydedin, düzenleyin veya silin. Gruplar veri kökündeki <code>config/</code> klasöründe dosya olarak durur; geçmiş koşular kendi kopyalarını sakladığı için değişikliklerden etkilenmez.
             </p>
         </div>
-        <a class="inline-flex shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('runner.create') }}">Yeni Benchmark'a dön</a>
+        <a class="inline-flex shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-xs font-extrabold text-[var(--forest)]" href="{{ route('runner.create') }}">Yeni Benchmark'a dön</a>
     </header>
 
     @if (session('status'))
-        <div class="mt-6 rounded-xl border border-[#a9dec9] bg-[var(--success-soft)] px-4 py-3 text-sm text-[var(--success)]" role="status">
+        <div class="mt-6 rounded-xl border border-[var(--success-line)] bg-[var(--success-soft)] px-4 py-3 text-sm text-[var(--success)]" role="status">
             {{ session('status') }}
         </div>
     @endif
 
     @if ($errors->any() || $directoryError)
-        <div class="mt-6 rounded-xl border border-[#f2c9cf] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
+        <div class="mt-6 rounded-xl border border-[var(--red-line)] bg-[var(--red-soft)] px-4 py-3 text-sm text-[var(--red)]" role="alert">
             <ul class="list-disc space-y-1 pl-5 text-xs leading-5">
                 @if ($directoryError)<li>{{ $directoryError }}</li>@endif
                 @foreach ($errors->all() as $error)
@@ -39,7 +39,7 @@
             <h2 id="groups-title" class="text-sm font-black text-[var(--ink)]">Kayıtlı gruplar · {{ count($groups) }}</h2>
 
             @forelse ($groups as $group)
-                <article class="rounded-2xl border border-[var(--line)] bg-white p-5" aria-labelledby="group-{{ $loop->index }}">
+                <article class="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5" aria-labelledby="group-{{ $loop->index }}">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="min-w-0">
                             <h3 id="group-{{ $loop->index }}" class="text-base font-black tracking-[-0.02em]">{{ $group['label'] }}</h3>
@@ -50,7 +50,7 @@
                             <form method="POST" action="{{ route('model-groups.destroy', $group['name']) }}" data-confirm="“{{ $group['label'] }}” grubu silinsin mi? Dosya config/.silinen klasörüne taşınır; geçmiş koşular etkilenmez.">
                                 @csrf
                                 @method('DELETE')
-                                <button class="rounded-lg border border-[#f2c9cf] bg-[var(--red-soft)] px-3 py-2 text-[11px] font-extrabold text-[var(--red)]" type="submit">Sil</button>
+                                <button class="rounded-lg border border-[var(--red-line)] bg-[var(--red-soft)] px-3 py-2 text-[11px] font-extrabold text-[var(--red)]" type="submit">Sil</button>
                             </form>
                         </div>
                     </div>
@@ -79,7 +79,7 @@
             @endforelse
         </section>
 
-        <section class="h-fit rounded-2xl border border-[var(--line)] bg-white p-5" aria-labelledby="new-group-title">
+        <section class="h-fit rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5" aria-labelledby="new-group-title">
             <p class="eyebrow">Yeni grup</p>
             <h2 id="new-group-title" class="mt-1 text-lg font-black tracking-[-0.03em]">Grup oluştur</h2>
             <form class="mt-4 grid gap-4" method="POST" action="{{ route('model-groups.store') }}">
