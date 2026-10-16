@@ -156,6 +156,8 @@ for (const mode of ['continue', 'validate']) {
             assert.equal(signal, null);
             assert.equal(state.status, 'completed');
             assert.equal(state.exitCode, 0);
+            // The default safety net leaves room for the model time added back for provider stalls.
+            assert.equal(state.timeoutSeconds, 7200 + 45 * 60);
             if (mode === 'continue') {
                 assert.match(state.message, /Tekrarlanan çalışma alanı dışı erişim reddi/);
             } else {
