@@ -15,7 +15,7 @@ const POLICY_VERSION = "workspace-boundary-v1";
 const STALL_MINIMUM_SECONDS = 120;
 const STOP_AFTER_STALLS = 3;
 /** At most this much stalled time is added back to a model's time limit. */
-const STALL_COMPENSATION_CAP_SECONDS = 45 * 60;
+export const STALL_COMPENSATION_CAP_SECONDS = 45 * 60;
 
 /**
  * Provider stalls: OpenCode starts a step, the provider keeps the stream open without sending tokens,
@@ -500,11 +500,12 @@ export async function runMonitoredModel(args) {
       timeoutTimer = setTimeout(() => {
         timedOut = true;
         requestStop("SIGTERM");
-      }, Math.max(0, deadline - Date.now()));
+      }, Math.max(0, deadline - performance.now()));
     };
     if (timeoutSeconds !== null) {
       // A model that never finishes would otherwise hold the run's only slot and keep spending tokens.
-      deadline = Date.now() + timeoutSeconds * 1000;
+      // The monotonic clock stops while the computer sleeps, so a sleeping Mac does not use up the model's time.
+      deadline = performance.now() + timeoutSeconds * 1000;
       scheduleTimeout();
     }
     const trackStalls = (chunk) => {

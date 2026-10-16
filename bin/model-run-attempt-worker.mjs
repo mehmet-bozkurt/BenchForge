@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { STALL_COMPENSATION_CAP_SECONDS } from "./model-boundary-monitor.mjs";
 import { runnerControls, subprocessEnvironment } from "./process-environment.mjs";
 
 const boundaryMonitorPath = fileURLToPath(new URL("./model-boundary-monitor.mjs", import.meta.url));
@@ -14,8 +15,8 @@ if (!jobPath || process.env.BENCHFORGE_RUNNER !== "1") {
 
 const job = JSON.parse(await readFile(jobPath, "utf8"));
 // Safety net for the whole attempt (model call, npm and validation). The model call itself
-// is limited separately by the boundary monitor.
-const DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 7200;
+// is limited separately by the boundary monitor, which can extend it by the provider stall time.
+const DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 7200 + STALL_COMPENSATION_CAP_SECONDS;
 const configuredTimeoutSeconds = Number(process.env.BENCHFORGE_ATTEMPT_TIMEOUT_SECONDS);
 const timeoutSeconds = Number.isInteger(configuredTimeoutSeconds)
   && configuredTimeoutSeconds >= 60
@@ -174,10 +175,13 @@ try {
   await writeState({ processPid: child.pid ?? null });
 
   if (timeoutSeconds !== null && !finished) {
+    // Time before this worker started is measured on the wall clock; after that a monotonic clock is used,
+    // which stops while the computer sleeps (when the attempt cannot make progress either).
     const recordedStart = Date.parse(job.startedAt);
-    const deadline = (Number.isFinite(recordedStart) ? recordedStart : Date.now()) + timeoutSeconds * 1000;
+    const elapsedBeforeStart = Number.isFinite(recordedStart) ? Math.max(0, Date.now() - recordedStart) : 0;
+    const deadline = performance.now() - elapsedBeforeStart + timeoutSeconds * 1000;
     const checkDeadline = () => {
-      if (Date.now() >= deadline) void requestStop("timeout");
+      if (performance.now() >= deadline) void requestStop("timeout");
     };
     timeoutHandle = setInterval(checkDeadline, 5000);
     checkDeadline();

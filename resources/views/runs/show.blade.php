@@ -86,7 +86,8 @@
     $money = static fn (array $usage): string => '$'.number_format((float) ($usage['costUsd'] ?? 0), 6, ',', '.');
     $tokens = static fn (array $usage): string => 'Girdi '.number_format((int) ($usage['inputTokens'] ?? 0), 0, ',', '.').' · Çıktı '.number_format((int) ($usage['outputTokens'] ?? 0), 0, ',', '.');
     $totalCost = $run->modelRuns->sum(fn ($modelRun) => (float) ($usageOf($modelRun)['costUsd'] ?? 0));
-    $unscoredCount = $run->modelRuns->filter(fn ($modelRun) => ($outcomes[$modelRun->id]['tone'] ?? null) === 'provider')->count();
+    $ownFailureCount = $run->modelRuns->filter(fn ($modelRun) => ($outcomes[$modelRun->id]['tone'] ?? null) === 'fail')->count();
+    $outsideCauseCount = $run->modelRuns->filter(fn ($modelRun) => in_array($outcomes[$modelRun->id]['tone'] ?? null, ['provider', 'warning'], true))->count();
     $viewableModelCount = $previewableModelIds->merge($recoveredPreviewModelIds)->unique()->count();
     $recoverableModels = $run->modelRuns->filter(fn ($modelRun) => $modelRun->status === 'fail' || $modelRun->modelRunAttempts->isNotEmpty());
     $boundaryTotals = $run->modelRuns->reduce(function (array $carry, $modelRun) use ($modelBoundaryReports, $attemptBoundaryReports) {
@@ -140,8 +141,8 @@
             @foreach ([
                 ['Modeller', $run->model_count, 'Koşudaki model sayısı', ''],
                 ['Başarılı', $run->passed_count, 'Tüm aşamalar geçti', 'text-[var(--success-ink)]'],
-                ['Sorunlu', $run->failed_count, 'En az bir aşama başarısız', $run->failed_count > 0 ? 'text-[var(--red)]' : ''],
-                ['Puanlanamaz', $unscoredCount, 'Sağlayıcı veya hesap hatası', $unscoredCount > 0 ? 'text-[var(--amber-ink)]' : ''],
+                ['Sorunlu', $ownFailureCount, 'Modelin kendi hatasıyla kalan', $ownFailureCount > 0 ? 'text-[var(--red)]' : ''],
+                ['Dış etken', $outsideCauseCount, 'Sağlayıcı, hesap veya ölçüm sorunu', $outsideCauseCount > 0 ? 'text-[var(--amber-ink)]' : ''],
                 ['Toplam süre', $formatDuration($run->total_duration_seconds), 'Modellerin toplamı', ''],
                 ['Toplam maliyet', $hasUsage ? '$'.number_format($totalCost, 4, ',', '.') : '—', 'OpenCode kaydı', ''],
             ] as [$label, $value, $hint, $color])
@@ -164,7 +165,7 @@
     <section class="results-panel mt-5 overflow-clip rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[0_12px_38px_rgb(26_32_65/0.05)]" aria-labelledby="results-title">
         <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-[var(--line)] px-4 py-2.5">
             <h2 id="results-title" class="text-base font-black tracking-[-0.02em]">Model sonuçları <span class="font-bold text-[var(--muted)]">· {{ $modelRunCount }}</span></h2>
-            <p class="text-xs text-[var(--muted)]">Aşama işaretleri ilk teslimi gösterir ve logu açar. Maliyet OpenCode kaydıdır; OpenRouter faturası değildir.</p>
+            <p class="text-xs text-[var(--muted)]">Aşama işaretleri ilk teslimi gösterir ve logu açar; turuncu işaret sorunun modelden değil sağlayıcıdan veya ölçümden geldiğini söyler. Maliyet OpenCode kaydıdır; OpenRouter faturası değildir.</p>
             @if ($modelRunCount > 1)
                 <div class="result-sort-bar" role="group" aria-label="Sonuçları sırala">
                     <span>Sırala:</span>
@@ -206,7 +207,8 @@
                 <tbody role="rowgroup" data-sortable-rows>
                     @forelse ($run->modelRuns as $modelRun)
                         @php
-                            $outcome = $outcomes[$modelRun->id] ?? ['tone' => 'unknown', 'title' => 'Sonuç okunamadı', 'detail' => null, 'autoContinued' => false];
+                            $outcome = $outcomes[$modelRun->id] ?? ['tone' => 'unknown', 'title' => 'Sonuç okunamadı', 'detail' => null, 'autoContinued' => false, 'stageMarks' => [], 'recovery' => null];
+                            $recovery = $outcome['recovery'];
                             $tone = $toneStyles[$outcome['tone']] ?? $toneStyles['unknown'];
                             $stageResults = $modelRun->stageResults->keyBy('stage');
                             $usage = $usageOf($modelRun);
@@ -236,20 +238,30 @@
                                     $status = $stageResults->get($stage)?->status ?? 'unknown';
                                     $artifact = $artifactsByKey->get('model:'.$modelRun->slug.':log:'.$stage);
                                     $mark = match ($status) { 'pass' => '✓', 'fail' => '×', 'skip' => '—', default => '?' };
-                                    $stageTitle = ($stageLabels[$stage] ?? $stage).': '.($statusLabels[$status] ?? 'Veri yok');
+                                    $stageMark = $outcome['stageMarks'][$stage] ?? null;
+                                    $markVariant = $stageMark['variant'] ?? $status;
+                                    $stageTitle = ($stageLabels[$stage] ?? $stage).': '.($statusLabels[$status] ?? 'Veri yok').($stageMark ? ' · '.$stageMark['note'] : '');
                                 @endphp
                                 <td class="result-stage" role="cell">
                                     @if ($artifact?->kind === 'file')
-                                        <a class="stage-mark stage-mark-{{ $status }}" href="{{ route('runs.artifacts.show', [$run, $artifact]) }}" title="{{ $stageTitle }} · logu aç" aria-label="{{ $stageTitle }}, {{ $stageLabels[$stage] ?? $stage }} logu">{{ $mark }}</a>
+                                        <a class="stage-mark stage-mark-{{ $markVariant }}" href="{{ route('runs.artifacts.show', [$run, $artifact]) }}" title="{{ $stageTitle }} · logu aç" aria-label="{{ $stageTitle }}, {{ $stageLabels[$stage] ?? $stage }} logu">{{ $mark }}</a>
                                     @else
-                                        <span class="stage-mark stage-mark-{{ $status }}" role="img" title="{{ $stageTitle }}" aria-label="{{ $stageTitle }}">{{ $mark }}</span>
+                                        <span class="stage-mark stage-mark-{{ $markVariant }}" role="img" title="{{ $stageTitle }}" aria-label="{{ $stageTitle }}">{{ $mark }}</span>
                                     @endif
                                     <span class="result-stage-label" aria-hidden="true">{{ $stageLabels[$stage] ?? $stage }}</span>
                                 </td>
                             @endforeach
 
                             <td class="result-outcome" role="cell">
-                                <p class="text-[13px] leading-5 font-bold {{ $tone['text'] }}"><span class="sr-only">{{ $tone['label'] }}: </span>{{ $outcome['title'] }}</p>
+                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <p class="text-[13px] leading-5 font-bold {{ $tone['text'] }}"><span class="sr-only">{{ $tone['label'] }}: </span>{{ $outcome['title'] }}</p>
+                                    @if ($recovery)
+                                        <a class="recovery-chip recovery-chip-{{ $recovery['tone'] }}" href="#recovery-{{ $modelRun->slug }}" data-open-details="recovery-{{ $modelRun->slug }}" title="Kurtarma denemeleri ilk teslimin sonucunu ve puanını değiştirmez">
+                                            <span aria-hidden="true">{{ $recovery['tone'] === 'pass' ? '✓' : ($recovery['tone'] === 'fail' ? '×' : '–') }}</span>
+                                            {{ $recovery['label'] }} · {{ $recovery['title'] }}
+                                        </a>
+                                    @endif
+                                </div>
                                 @if ($outcome['detail'] || $evaluationNotes !== '' || $isRecoverable)
                                     <div class="mt-0.5 flex items-center gap-3">
                                         @if ($outcome['detail'])
@@ -353,7 +365,7 @@
             <div class="fold-list mt-3 overflow-clip rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
                 @foreach ($recoverableModels as $modelRun)
                     @php
-                        $outcome = $outcomes[$modelRun->id] ?? ['tone' => 'unknown', 'title' => 'Sonuç okunamadı', 'detail' => null];
+                        $outcome = $outcomes[$modelRun->id] ?? ['tone' => 'unknown', 'title' => 'Sonuç okunamadı', 'detail' => null, 'recovery' => null];
                         $tone = $toneStyles[$outcome['tone']] ?? $toneStyles['unknown'];
                         $availability = $continuationAvailability[$modelRun->id] ?? [];
                         $canContinue = (bool) ($availability['canContinue'] ?? false);
@@ -373,7 +385,7 @@
                             </h3>
                             <span class="hidden shrink-0 rounded-full bg-[var(--surface-subtle)] px-2.5 py-0.5 text-xs font-bold text-[var(--muted)] sm:inline">{{ $attempts->count() + 1 }} kayıt</span>
                             @if ($latest)
-                                <span class="status-badge shrink-0 {{ in_array($latest->status, $activeAttemptStatuses, true) ? 'status-running' : ($latest->status === 'completed' && ($latest->result['overallStatus'] ?? null) === 'pass' ? 'status-pass' : 'status-unknown') }}">Son: {{ $attemptStatusLabels[$latest->status] ?? $latest->status }}</span>
+                                <span class="status-badge shrink-0 {{ in_array($latest->status, $activeAttemptStatuses, true) ? 'status-running' : ($latest->status === 'completed' && (($latest->result['overallStatus'] ?? null) === 'pass' || ($outcome['recovery']['tone'] ?? null) === 'pass') ? 'status-pass' : 'status-unknown') }}">Son: {{ $attemptStatusLabels[$latest->status] ?? $latest->status }}</span>
                             @endif
                             <span class="recovery-chevron shrink-0 text-[var(--muted)]" aria-hidden="true">⌄</span>
                         </summary>

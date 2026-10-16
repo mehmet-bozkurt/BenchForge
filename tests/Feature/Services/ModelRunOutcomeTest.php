@@ -2,6 +2,7 @@
 
 use App\Models\BenchmarkRun;
 use App\Models\ModelRun;
+use App\Models\ModelRunAttempt;
 use App\Models\StageResult;
 use App\Services\ModelRunOutcome;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -97,4 +98,89 @@ test('it says when the provider stalled instead of blaming the model', function 
     'not scored' => [StageResult::PROVIDER_ERROR_CODE, 'provider', 'Sağlayıcı yanıt vermedi · puanlanmaz'],
     'scored submission' => [StageResult::INTERRUPTED_AFTER_SUBMISSION_CODE, 'warning', 'Bağlantı sonda koptu · teslim puanlandı'],
     'still timed out' => [124, 'fail', 'Süre sınırı doldu'],
+]);
+
+test('it finds provider stalls in the event stream of runs from before the monitor counted them', function (int $minutesAfterStall, string $tone, string $title) {
+    $start = 1792000000000;
+    $events = collect([
+        ['type' => 'step_start', 'timestamp' => $start],
+        ['type' => 'step_finish', 'timestamp' => $start + 60_000],
+        ['type' => 'step_start', 'timestamp' => $start + 61_000],
+        ['type' => 'step_start', 'timestamp' => $start + 61_000 + 30 * 60_000],
+        ['type' => 'step_finish', 'timestamp' => $start + 61_000 + (30 + $minutesAfterStall) * 60_000],
+    ])->map(fn (array $event): string => json_encode($event))->implode("\n");
+    [$run, $model] = outcomeFixture(['opencode' => ['fail', 124], 'lint' => ['pass', 0]], ['opencode.events.jsonl' => $events."\n"]);
+
+    $outcome = app(ModelRunOutcome::class)->describe($run, $model);
+
+    expect($outcome)->toMatchArray(['tone' => $tone, 'title' => $title])
+        ->and($outcome['detail'])->toContain('Sağlayıcı 1 kez yanıt vermedi (toplam 30 dk).');
+})->with([
+    'mostly stalled' => [20, 'warning', 'Sağlayıcı takıldı, süre doldu'],
+    'mostly working' => [40, 'fail', 'Süre sınırı doldu'],
+]);
+
+test('it marks outside causes instead of red and mutes an unscored model', function () {
+    [$run, $model] = outcomeFixture(['opencode' => ['fail', StageResult::PROVIDER_ERROR_CODE], 'lint' => ['pass', 0], 'build' => ['fail', 1]]);
+
+    expect(app(ModelRunOutcome::class)->describe($run, $model)['stageMarks'])->toEqual([
+        'opencode' => ['variant' => 'provider', 'note' => 'sağlayıcı kaynaklı'],
+        'lint' => ['variant' => 'muted', 'note' => 'puanlanmaz'],
+        'build' => ['variant' => 'muted', 'note' => 'puanlanmaz'],
+    ]);
+});
+
+test('a check that passes when the same code is validated again is a measurement failure', function () {
+    [$run, $model] = outcomeFixture(['opencode' => ['pass', 0], 'lint' => ['pass', 0], 'runtime' => ['fail', 1]], ['runtime.log' => "CONSOLE ERROR: No WebGPU adapter found\n"]);
+    $run->update(['stage_names' => ['opencode', 'lint', 'runtime']]);
+    ModelRunAttempt::factory()->for($model)->create([
+        'mode' => 'validate',
+        'result' => ['mode' => 'validate', 'stages' => ['lint' => ['status' => 'pass'], 'runtime' => ['status' => 'pass']]],
+    ]);
+
+    $outcome = app(ModelRunOutcome::class)->describe($run, $model->fresh(['stageResults', 'modelRunAttempts']));
+
+    expect($outcome)->toMatchArray([
+        'tone' => 'warning',
+        'title' => 'Ölçüm hatası · yeniden doğrulamada geçti',
+        'stageMarks' => ['runtime' => ['variant' => 'provider', 'note' => 'yeniden doğrulamada geçti']],
+        'recovery' => ['tone' => 'pass', 'label' => 'Yeniden doğrulama 1', 'title' => 'Tüm kontroller geçti'],
+    ]);
+});
+
+test('a validation after the model continued says nothing about the first submission', function () {
+    [$run, $model] = outcomeFixture(['opencode' => ['pass', 0], 'runtime' => ['fail', 1]], ['runtime.log' => "PAGE ERROR: boom\n"]);
+    $run->update(['stage_names' => ['opencode', 'runtime']]);
+    ModelRunAttempt::factory()->for($model)->create(['attempt_number' => 1, 'mode' => 'continue']);
+    ModelRunAttempt::factory()->for($model)->create([
+        'attempt_number' => 2,
+        'mode' => 'validate',
+        'result' => ['mode' => 'validate', 'stages' => ['runtime' => ['status' => 'pass']]],
+    ]);
+
+    $outcome = app(ModelRunOutcome::class)->describe($run, $model->fresh(['stageResults', 'modelRunAttempts']));
+
+    expect($outcome)->toMatchArray(['tone' => 'fail', 'title' => 'Sayfa tarayıcıda hata verdi', 'stageMarks' => []]);
+});
+
+test('it summarises the latest finished recovery attempt', function (array $attempt, array $recovery) {
+    [$run, $model] = outcomeFixture(['opencode' => ['fail', 124], 'lint' => ['pass', 0], 'build' => ['fail', 1]]);
+    ModelRunAttempt::factory()->for($model)->create(['attempt_number' => 1, 'status' => 'stopped', 'result' => null]);
+    ModelRunAttempt::factory()->for($model)->create(['attempt_number' => 2] + $attempt);
+    ModelRunAttempt::factory()->for($model)->create(['attempt_number' => 3, 'status' => 'running', 'result' => null]);
+
+    expect(app(ModelRunOutcome::class)->describe($run, $model->fresh(['stageResults', 'modelRunAttempts']))['recovery'])->toBe($recovery);
+})->with([
+    'checks pass after another timeout' => [
+        ['result' => ['mode' => 'continue', 'stages' => ['opencode' => ['status' => 'fail', 'code' => 124], 'lint' => ['status' => 'pass'], 'build' => ['status' => 'pass']]]],
+        ['tone' => 'pass', 'label' => 'Kurtarma 2', 'title' => 'Tüm kontroller geçti; model süresi yine doldu'],
+    ],
+    'a check still fails' => [
+        ['result' => ['mode' => 'continue', 'stages' => ['opencode' => ['status' => 'pass', 'code' => 0], 'lint' => ['status' => 'fail'], 'build' => ['status' => 'pass']]]],
+        ['tone' => 'fail', 'label' => 'Kurtarma 2', 'title' => 'Lint kontrolü başarısız'],
+    ],
+    'stopped without a result' => [
+        ['status' => 'stopped', 'result' => null],
+        ['tone' => 'unknown', 'label' => 'Kurtarma 2', 'title' => 'Durduruldu'],
+    ],
 ]);

@@ -578,6 +578,42 @@ test('it keeps a stopped attempt stopped even when a result file was written', f
     }
 });
 
+test('it keeps the reason a finished worker recorded for stopping', function (array $state, string $message) {
+    $root = storage_path('framework/testing/continuation-'.Str::uuid());
+    $runPath = $root.'/runs/stop-reason-test';
+    $attemptPath = $runPath.'/_attempts/model-a/attempt-1';
+    File::ensureDirectoryExists($runPath.'/model-a');
+    File::ensureDirectoryExists($attemptPath);
+    File::put($runPath.'/_modeller.conf', "model-a|openrouter/vendor/model-a|49153\n");
+    File::put($attemptPath.'/state.json', json_encode(['version' => 1, 'runnerPid' => 999999] + $state, JSON_THROW_ON_ERROR));
+    config()->set('benchforge.root_path', $root);
+    config()->set('benchforge.runs_path', $root.'/runs');
+    config()->set('benchforge.runner_path', $root.'/runner');
+    $run = BenchmarkRun::factory()->create(['slug' => 'stop-reason-test']);
+    $modelRun = ModelRun::factory()->for($run)->create(['slug' => 'model-a', 'model' => 'openrouter/vendor/model-a', 'status' => 'fail']);
+    $attempt = ModelRunAttempt::factory()->for($modelRun)->create([
+        'mode' => 'continue',
+        'status' => 'running',
+        'result' => null,
+        'state_path' => $attemptPath.'/state.json',
+        'log_path' => $attemptPath.'/runner.log',
+        'attempt_path' => $attemptPath,
+        'synced_at' => now(),
+    ]);
+
+    try {
+        $reconciled = app(ModelRunContinuationRunner::class)->reconcile($attempt);
+
+        expect($reconciled->status)->toBe('stopped')
+            ->and($reconciled->message)->toBe($message);
+    } finally {
+        File::deleteDirectory($root);
+    }
+})->with([
+    'safety timeout' => [['status' => 'stopped', 'message' => 'Güvenlik süresi dolduğu için deneme durduruldu.'], 'Güvenlik süresi dolduğu için deneme durduruldu.'],
+    'worker gone while stopping' => [['status' => 'stopping', 'message' => 'Kurtarma denemesi ve ona bağlı süreçler durduruluyor.'], 'Deneme durduruldu.'],
+]);
+
 test('it refuses an attempts symlink before writing outside the run directory', function () {
     $root = storage_path('framework/testing/continuation-'.Str::uuid());
     $outside = storage_path('framework/testing/continuation-outside-'.Str::uuid());

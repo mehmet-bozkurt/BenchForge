@@ -139,12 +139,14 @@ class ModelRunContinuationRunner
                 $hasResult => 'completed',
                 default => 'failed',
             };
+            // A worker that finished on its own already wrote why (for example its safety timeout); keep that.
+            $workerMessage = ($state['status'] ?? null) === $status && is_string($state['message'] ?? null) ? $state['message'] : null;
             $state = array_merge($state ?? [], [
                 'status' => $status,
                 'finishedAt' => $state['finishedAt'] ?? now()->toIso8601String(),
-                'message' => match ($status) {
+                'message' => $workerMessage ?? match ($status) {
                     'completed' => 'Deneme tamamlandı ve doğrulama sonuçları kaydedildi.',
-                    'stopped' => 'Deneme kullanıcı tarafından durduruldu.',
+                    'stopped' => 'Deneme durduruldu.',
                     default => $state['message'] ?? 'Kurtarma koşucusu beklenmedik biçimde kapandı; çalışma günlüğünü inceleyin.',
                 },
             ]);
