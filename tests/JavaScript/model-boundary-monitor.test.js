@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { ModelBoundaryMonitor } from '../../bin/model-boundary-monitor.mjs';
+import { ModelBoundaryMonitor, ProviderStallTracker } from '../../bin/model-boundary-monitor.mjs';
 
 const monitorPath = join(dirname(fileURLToPath(import.meta.url)), '../../bin/model-boundary-monitor.mjs');
 const benchmarkWorkerPath = join(dirname(fileURLToPath(import.meta.url)), '../../bin/benchmark-worker.mjs');
@@ -530,4 +530,38 @@ test('supplies the boundary helper to initial benchmark scripts without changing
     } finally {
         await rm(fixtureRoot, { recursive: true, force: true });
     }
+});
+
+test('treats a step that OpenCode restarts without finishing as a provider stall and gives the time back', () => {
+    const tracker = new ProviderStallTracker({ minimumSeconds: 120, stopAfter: 3, compensationCapSeconds: 2700 });
+    const at = (minutes) => Date.UTC(2026, 9, 15, 18, 0, 0) + minutes * 60_000;
+
+    // A slow but working step finishes before the next one starts: never a stall, however long it took.
+    assert.equal(tracker.consume({ type: 'step_start', timestamp: at(0) }), 0);
+    assert.equal(tracker.consume({ type: 'step_finish', timestamp: at(21) }), 0);
+    assert.equal(tracker.consume({ type: 'step_start', timestamp: at(22) }), 0);
+    assert.equal(tracker.count, 0);
+
+    // The provider never answers: OpenCode starts the same step again 29 minutes later.
+    assert.equal(tracker.consume({ type: 'step_start', timestamp: at(51) }), 29 * 60);
+    assert.equal(tracker.count, 1);
+    assert.equal(tracker.shouldStop, false);
+
+    // Compensation is capped (45 min by default; 2700 s here), stalls keep being counted.
+    assert.equal(tracker.consume({ type: 'step_start', timestamp: at(78) }), 16 * 60);
+    assert.equal(tracker.consume({ type: 'step_start', timestamp: at(100) }), 0);
+    assert.equal(tracker.count, 3);
+    assert.equal(tracker.seconds, (29 + 27 + 22) * 60);
+    assert.equal(tracker.shouldStop, true);
+    assert.equal(tracker.summary(), `BENCHFORGE_STALLS count=3 seconds=${78 * 60} compensated=2700`);
+});
+
+test('ignores quick step restarts and events without a timestamp', () => {
+    const tracker = new ProviderStallTracker();
+    const start = Date.UTC(2026, 9, 15, 18, 0, 0);
+    tracker.consume({ type: 'step_start', timestamp: start });
+    assert.equal(tracker.consume({ type: 'step_start', timestamp: start + 60_000 }), 0);
+    assert.equal(tracker.consume({ type: 'step_start' }), 0);
+    assert.equal(tracker.consume({ type: 'tool_use', timestamp: start + 999_000 }), 0);
+    assert.equal(tracker.count, 0);
 });

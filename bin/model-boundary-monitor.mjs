@@ -11,6 +11,62 @@ const MAX_PENDING_DENIALS = 20;
 const DENIAL_PAIR_WINDOW_MS = 10000;
 const STOP_AFTER_DENIALS = 3;
 const POLICY_VERSION = "workspace-boundary-v1";
+/** A step abandoned for longer than this before OpenCode retried it is a provider stall. */
+const STALL_MINIMUM_SECONDS = 120;
+const STOP_AFTER_STALLS = 3;
+/** At most this much stalled time is added back to a model's time limit. */
+const STALL_COMPENSATION_CAP_SECONDS = 45 * 60;
+
+/**
+ * Provider stalls: OpenCode starts a step, the provider keeps the stream open without sending tokens,
+ * and only much later OpenCode gives up and starts the same step again. A step that is followed by a new
+ * step without ever finishing is that retry — a slow but working model always finishes its step first.
+ * The stalled time is not the model's fault, so it is added back to the time limit, and a provider that
+ * keeps stalling ends the call.
+ */
+export class ProviderStallTracker {
+  constructor({ minimumSeconds = STALL_MINIMUM_SECONDS, stopAfter = STOP_AFTER_STALLS, compensationCapSeconds = STALL_COMPENSATION_CAP_SECONDS } = {}) {
+    this.minimumSeconds = minimumSeconds;
+    this.stopAfter = stopAfter;
+    this.compensationCapSeconds = compensationCapSeconds;
+    this.openStepStartedAt = null;
+    this.count = 0;
+    this.seconds = 0;
+    this.compensatedSeconds = 0;
+  }
+
+  /** Returns the seconds to add to the time limit when this event confirms a stall, otherwise 0. */
+  consume(event) {
+    const timestamp = Number(event?.timestamp);
+    if (!Number.isFinite(timestamp)) return 0;
+    if (event.type === "step_finish") {
+      this.openStepStartedAt = null;
+      return 0;
+    }
+    if (event.type !== "step_start") return 0;
+
+    let compensation = 0;
+    if (this.openStepStartedAt !== null) {
+      const stalledSeconds = Math.round((timestamp - this.openStepStartedAt) / 1000);
+      if (stalledSeconds >= this.minimumSeconds) {
+        this.count++;
+        this.seconds += stalledSeconds;
+        compensation = Math.max(0, Math.min(stalledSeconds, this.compensationCapSeconds - this.compensatedSeconds));
+        this.compensatedSeconds += compensation;
+      }
+    }
+    this.openStepStartedAt = timestamp;
+    return compensation;
+  }
+
+  get shouldStop() {
+    return this.count >= this.stopAfter;
+  }
+
+  summary() {
+    return `BENCHFORGE_STALLS count=${this.count} seconds=${this.seconds} compensated=${this.compensatedSeconds}`;
+  }
+}
 
 function safeText(value, limit = 240) {
   return String(value ?? "")
@@ -358,6 +414,10 @@ export async function runMonitoredModel(args) {
   let forceStopTimer;
   let timeoutTimer;
   let timedOut = false;
+  let deadline = null;
+  let stalledOut = false;
+  let pendingLine = "";
+  const stalls = new ProviderStallTracker();
   let eventFd;
   let stderrFd;
   let modelClosed = false;
@@ -434,13 +494,43 @@ export async function runMonitoredModel(args) {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    if (timeoutSeconds !== null) {
-      // A model that never finishes would otherwise hold the run's only slot and keep spending tokens.
+    const scheduleTimeout = () => {
+      if (deadline === null) return;
+      if (timeoutTimer) clearTimeout(timeoutTimer);
       timeoutTimer = setTimeout(() => {
         timedOut = true;
         requestStop("SIGTERM");
-      }, timeoutSeconds * 1000);
+      }, Math.max(0, deadline - Date.now()));
+    };
+    if (timeoutSeconds !== null) {
+      // A model that never finishes would otherwise hold the run's only slot and keep spending tokens.
+      deadline = Date.now() + timeoutSeconds * 1000;
+      scheduleTimeout();
     }
+    const trackStalls = (chunk) => {
+      const lines = (pendingLine + chunk).split("\n");
+      pendingLine = (lines.pop() ?? "").slice(-MAX_LINE_BYTES);
+      for (const line of lines) {
+        if (!line.includes('"step_')) continue;
+        let event;
+        try {
+          event = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        const compensation = stalls.consume(event);
+        if (stalls.count === 0 || (compensation === 0 && !stalls.shouldStop)) continue;
+        process.stdout.write(`\nBENCHFORGE: Sağlayıcı ${stalls.count}. kez yanıt vermedi; ${compensation} saniye süreye eklendi.\n`);
+        if (deadline !== null && compensation > 0) {
+          deadline += compensation * 1000;
+          scheduleTimeout();
+        }
+        if (stalls.shouldStop && !stalledOut) {
+          stalledOut = true;
+          requestStop("SIGTERM");
+        }
+      }
+    };
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
@@ -448,6 +538,7 @@ export async function runMonitoredModel(args) {
         writeSync(eventFd, chunk);
         process.stdout.write(chunk);
         monitor.consumeEvents(chunk);
+        trackStalls(chunk);
       } catch {
         onOutputError();
       }
@@ -474,12 +565,18 @@ export async function runMonitoredModel(args) {
     if (timeoutTimer) clearTimeout(timeoutTimer);
     monitor.finishInput();
     await writeReport(monitor.snapshot());
+    // Machine-readable for the benchmark scripts, which read this log after the call (absent = no stalls).
+    if (stalls.count > 0) process.stdout.write(`\n${stalls.summary()}\n`);
 
     if (ioFailed) return 74;
 
     if (monitor.stoppedForBoundary) {
       process.stdout.write("\nBENCHFORGE: Üç çalışma alanı dışı erişim reddi nedeniyle yalnızca bu model durduruldu.\n");
       return 78;
+    }
+    if (stalledOut) {
+      process.stdout.write(`\nBENCHFORGE: Sağlayıcı ${stalls.count} kez yanıt vermediği için model çağrısı durduruldu.\n`);
+      return 79;
     }
     if (timedOut) {
       process.stdout.write(`\nBENCHFORGE: Model ${timeoutSeconds} saniyelik süre sınırını aştığı için durduruldu.\n`);

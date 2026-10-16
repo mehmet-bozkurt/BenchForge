@@ -82,3 +82,19 @@ test('it reports a passing model without reading logs', function () {
 
     expect(app(ModelRunOutcome::class)->describe($run, $model))->toMatchArray(['tone' => 'pass', 'title' => 'Tüm kontroller geçti', 'detail' => null]);
 });
+
+test('it says when the provider stalled instead of blaming the model', function (int $code, string $tone, string $title) {
+    [$run, $model] = outcomeFixture(['opencode' => ['fail', $code]], [
+        'opencode.log' => "{\"type\":\"step_start\"}\nBENCHFORGE_STALLS count=2 seconds=3000 compensated=2700\n",
+        'opencode.continue.log' => "BENCHFORGE_STALLS count=1 seconds=600 compensated=0\n",
+    ]);
+
+    $outcome = app(ModelRunOutcome::class)->describe($run, $model);
+
+    expect($outcome)->toMatchArray(['tone' => $tone, 'title' => $title])
+        ->and($outcome['detail'])->toContain('Sağlayıcı 3 kez yanıt vermedi (toplam 60 dk); 45 dakikası modelin süresinden sayılmadı.');
+})->with([
+    'not scored' => [StageResult::PROVIDER_ERROR_CODE, 'provider', 'Sağlayıcı yanıt vermedi · puanlanmaz'],
+    'scored submission' => [StageResult::INTERRUPTED_AFTER_SUBMISSION_CODE, 'warning', 'Bağlantı sonda koptu · teslim puanlandı'],
+    'still timed out' => [124, 'fail', 'Süre sınırı doldu'],
+]);
