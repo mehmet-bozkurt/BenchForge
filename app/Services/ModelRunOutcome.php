@@ -35,11 +35,16 @@ class ModelRunOutcome
         $autoContinued = $this->files->read($run, $model, '_logs/'.$model->slug.'.auto-continue.log', 2048) !== '';
         $events = fn (): string => $this->events($run, $model, $autoContinued);
 
+        $stalls = $this->providerStalls($run, $model);
+
         $outcome = match (true) {
+            $code === StageResult::PROVIDER_ERROR_CODE && $stalls !== null => ['provider', 'Sağlayıcı yanıt vermedi · puanlanmaz', $stalls],
             $code === StageResult::PROVIDER_ERROR_CODE => ['provider', 'Sağlayıcı veya hesap hatası · puanlanmaz', $this->lastError($events(), $run, $model)],
-            $code === StageResult::INTERRUPTED_AFTER_SUBMISSION_CODE => ['warning', 'Bağlantı sonda koptu · teslim puanlandı', $this->lastError($events(), $run, $model)],
+            $code === StageResult::INTERRUPTED_AFTER_SUBMISSION_CODE => ['warning', 'Bağlantı sonda koptu · teslim puanlandı', $stalls ?? $this->lastError($events(), $run, $model)],
             $code === StageResult::NO_SUBMISSION_CODE => $this->noSubmission($events()),
-            $code === 124 => ['fail', 'Süre sınırı doldu', 'Model adımı ayrılan sürede bitmedi; o ana kadar yazılanlar doğrulandı.'],
+            $code === 124 => ['fail', 'Süre sınırı doldu', $stalls !== null
+                ? 'Model adımı ayrılan sürede bitmedi. '.$stalls
+                : 'Model adımı ayrılan sürede bitmedi; o ana kadar yazılanlar doğrulandı.'],
             $code === 65 => ['fail', 'Model başlatılamadı', 'Çalışma sınırı hazırlanamadığı için model çağrılmadı.'],
             $code !== null && $code !== 0 && $modelStep?->status === 'fail' => ['fail', "Model adımı hata verdi (kod {$code})", $this->lastError($events(), $run, $model)],
             default => null,
@@ -55,6 +60,36 @@ class ModelRunOutcome
         }
 
         return ['tone' => $outcome[0], 'title' => $outcome[1], 'detail' => $outcome[2], 'autoContinued' => $autoContinued];
+    }
+
+    /**
+     * Provider stalls the boundary monitor counted (a step OpenCode restarted without ever finishing),
+     * as one sentence, or null when there were none.
+     */
+    private function providerStalls(BenchmarkRun $run, ModelRun $model): ?string
+    {
+        $count = 0;
+        $seconds = 0;
+        $compensated = 0;
+
+        foreach (['opencode.log', 'opencode.continue.log'] as $name) {
+            $log = $this->files->read($run, $model, '_logs/'.$model->slug.'.'.$name, 4096);
+
+            if (preg_match_all('/BENCHFORGE_STALLS count=(\d+) seconds=(\d+) compensated=(\d+)/', $log, $matches, PREG_SET_ORDER) > 0) {
+                $last = end($matches);
+                $count += (int) $last[1];
+                $seconds += (int) $last[2];
+                $compensated += (int) $last[3];
+            }
+        }
+
+        if ($count === 0) {
+            return null;
+        }
+
+        $minutes = max(1, (int) round($seconds / 60));
+
+        return "Sağlayıcı {$count} kez yanıt vermedi (toplam {$minutes} dk); ".max(1, (int) round($compensated / 60)).' dakikası modelin süresinden sayılmadı.';
     }
 
     private function events(BenchmarkRun $run, ModelRun $model, bool $autoContinued): string

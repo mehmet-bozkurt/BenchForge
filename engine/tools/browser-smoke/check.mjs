@@ -7,7 +7,12 @@ if (!baseUrl || routes.length === 0) {
   process.exit(2);
 }
 
-const browser = await chromium.launch({ headless: true });
+// WebGPU and GPU-backed WebGL are enabled so 3D work is checked for real, not only its fallback screen.
+// Headless Chromium keeps WebGPU off by default; on macOS it runs on Metal through ANGLE.
+const gpuArguments = ["--enable-unsafe-webgpu", "--enable-gpu", "--ignore-gpu-blocklist"];
+if (process.platform === "darwin") gpuArguments.push("--use-angle=metal");
+
+const browser = await chromium.launch({ headless: true, args: gpuArguments });
 
 let failed = false;
 

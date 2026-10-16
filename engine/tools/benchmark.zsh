@@ -15,7 +15,10 @@ export NEXT_TELEMETRY_DISABLED=1
 #   75 saglayici hatasi (sunucu/kapasite); model puanlanmaz.
 #   77 baglanti sonda koptu: saglayici hatasi geldi ama model bir teslim birakti; teslim puanlanir.
 #   86 teslim yok: model sablonda hicbir dosyayi degistirmedi.
+# Sinir izleyicisinin ozel kodu:
+#   79 saglayici tekrar tekrar takildi (adim baslayip token gelmeden yeniden baslatildi); 75 veya 77'ye cevrilir.
 SAGLAYICI_HATASI_KODU=75
+SAGLAYICI_TAKILDI_KODU=79
 BAGLANTI_SONDA_KOPTU_KODU=77
 TESLIM_YOK_KODU=86
 # Cikti sinirina takilip hicbir dosya yazmayan modele, ayni oturumda bir kez verilen standart devam mesaji.
@@ -26,6 +29,20 @@ OTOMATIK_DEVAM_MESAJI="Onceki yanitin cikti sinirina takildi ve calisma alaninda
 # baslarken bagimliliklar yeniden kurulur.
 calisma_alanini_hafiflet() {
   rm -rf "${1:?}/node_modules" "${1:?}/.next"
+}
+
+# Sinir izleyicisinin "BENCHFORGE_STALLS" satirlarini toplar: "<adet> <saniye> <sureye_eklenen_saniye>".
+saglayici_takilmalari() {
+  local DOSYA SATIR ADET=0 SANIYE=0 TELAFI=0
+  for DOSYA in "$@"; do
+    [[ -f "$DOSYA" ]] || continue
+    SATIR=$(grep -a -o 'BENCHFORGE_STALLS count=[0-9]* seconds=[0-9]* compensated=[0-9]*' "$DOSYA" | tail -1)
+    [[ -n "$SATIR" ]] || continue
+    ADET=$(( ADET + ${${SATIR##*count=}%% *} ))
+    SANIYE=$(( SANIYE + ${${SATIR##*seconds=}%% *} ))
+    TELAFI=$(( TELAFI + ${SATIR##*compensated=} ))
+  done
+  echo "$ADET $SANIYE $TELAFI"
 }
 
 # Calisma alani baslangic sablonuyla ayniysa (model hicbir sey teslim etmediyse) basarili doner.
@@ -283,7 +300,9 @@ model_calistir() {
   # Kural her modele ayni uygulanir; kaydi <model>.auto-continue.log dosyasindadir.
   if [[ "$OPENCODE_RC" == "0" && "$SESSION_ID" == ses_* ]] && sablon_ayni "$PROJE" \
       && [[ "$(node "$HATA_SINIFLANDIRICI" --stop-reason "$EVENT_LOG" 2>/dev/null)" == "length" ]]; then
-    local KALAN_SURE=$(( MODEL_SURE_SINIRI_SANIYE - ($(date +%s) - BASLANGIC) ))
+    # Saglayici takilmasinda gecen sure modelin suresinden sayilmaz.
+    local -a ILK_TAKILMA=(${=$(saglayici_takilmalari "${LOG_DIZIN}/${KLASOR}.opencode.log")})
+    local KALAN_SURE=$(( MODEL_SURE_SINIRI_SANIYE - ($(date +%s) - BASLANGIC) + ILK_TAKILMA[3] ))
 
     if (( KALAN_SURE >= 120 )); then
       echo "[$KLASOR] Cikti siniri: model hicbir dosya yazmadan durdu; ayni oturumda bir kez otomatik devam ediliyor."
@@ -315,7 +334,23 @@ model_calistir() {
     fi
   fi
 
-  if [[ "$OPENCODE_RC" != "0" && "$OPENCODE_RC" != "65" && "$OPENCODE_RC" != "78" && "$OPENCODE_RC" != "124" ]] \
+  # Saglayici takilmalari: tekrar eden takilma (79) ya da suresinin yarisindan fazlasi takilmayla gecen
+  # sure asimi modelin hatasi sayilmaz.
+  local -a TAKILMA=(${=$(saglayici_takilmalari "${LOG_DIZIN}/${KLASOR}.opencode.log" "${LOG_DIZIN}/${KLASOR}.opencode.continue.log")})
+  local MODEL_GECEN=$(( $(date +%s) - BASLANGIC ))
+  if (( TAKILMA[1] > 0 )); then
+    echo "[$KLASOR] Saglayici ${TAKILMA[1]} kez yanit vermedi (${TAKILMA[2]} sn); ${TAKILMA[3]} sn model suresine eklendi."
+  fi
+  if [[ "$OPENCODE_RC" == "$SAGLAYICI_TAKILDI_KODU" ]] \
+    || { [[ "$OPENCODE_RC" == "124" ]] && (( TAKILMA[2] * 2 >= MODEL_GECEN )); }; then
+    if sablon_ayni "$PROJE"; then
+      echo "[$KLASOR] Saglayici takildi: model cagrisi saglayici tarafinda yanit alamadi; puanlanmaz."
+      OPENCODE_RC=$SAGLAYICI_HATASI_KODU
+    else
+      echo "[$KLASOR] Saglayici takildi ama model bir teslim birakti; teslim puanlanir."
+      OPENCODE_RC=$BAGLANTI_SONDA_KOPTU_KODU
+    fi
+  elif [[ "$OPENCODE_RC" != "0" && "$OPENCODE_RC" != "65" && "$OPENCODE_RC" != "78" && "$OPENCODE_RC" != "124" ]] \
     && [[ "$(node "$HATA_SINIFLANDIRICI" "$EVENT_LOG" 2>/dev/null)" == "provider" ]]; then
     if sablon_ayni "$PROJE"; then
       echo "[$KLASOR] Saglayici hatasi: model cagrisi saglayici tarafinda basarisiz oldu; puanlanmaz."

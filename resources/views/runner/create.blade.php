@@ -25,7 +25,8 @@
         'pending' => 'running',
         default => 'unknown',
     };
-    $defaultPrompt = old('prompt', $options['prompts'][0]['value'] ?? '');
+    $requestedPrompt = collect($options['prompts'])->firstWhere('value', request()->query('prompt'));
+    $defaultPrompt = old('prompt', $requestedPrompt['value'] ?? $options['prompts'][0]['value'] ?? '');
     $defaultPromptMode = old('prompt_mode', 'saved');
     $defaultConfig = old('config', $options['configs'][0]['value'] ?? '');
     $defaultModelMode = old('model_mode', 'group');
@@ -221,6 +222,9 @@
                                 </optgroup>
                             @endforeach
                         </select>
+                        <p class="mt-2 text-[11px] leading-5 text-[var(--muted)]">
+                            Promptları eklemek, düzenlemek veya silmek için <a class="font-extrabold text-[var(--forest)] underline" href="{{ route('prompts.index') }}">Promptlar</a> sayfasını kullanın.
+                        </p>
                     </div>
 
                     <div class="grid gap-3" data-prompt-panel="custom" @class(['hidden' => $defaultPromptMode !== 'custom'])>
