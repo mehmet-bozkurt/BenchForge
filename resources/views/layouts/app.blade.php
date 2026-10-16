@@ -32,6 +32,10 @@
                         <span aria-hidden="true">▷</span>
                         Yeni Benchmark
                     </a>
+                    <a class="nav-item {{ request()->routeIs('prompts.*') ? 'nav-item-active' : '' }}" href="{{ route('prompts.index') }}">
+                        <span aria-hidden="true">¶</span>
+                        Promptlar
+                    </a>
                     <a class="nav-item {{ request()->routeIs('model-groups.*') ? 'nav-item-active' : '' }}" href="{{ route('model-groups.index') }}">
                         <span aria-hidden="true">≡</span>
                         Model Grupları

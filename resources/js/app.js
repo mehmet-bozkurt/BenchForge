@@ -1216,6 +1216,48 @@ export function groupFileName(value) {
         .slice(0, 63);
 }
 
+/** Prompt editor: live file name, character count; prompt list: instant search. */
+function initializePrompts() {
+    const title = document.querySelector('[data-prompt-title]');
+    const file = document.querySelector('[data-prompt-file]');
+    if (title && file) {
+        const update = () => {
+            const name = groupFileName(title.value).slice(0, 80);
+            file.textContent = name.length >= 2 ? `Dosya: prompts/${name}.txt` : 'Başlık en az 2 harf veya rakam içermeli.';
+        };
+        title.addEventListener('input', update);
+        update();
+    }
+
+    const content = document.querySelector('[data-prompt-content]');
+    const count = document.querySelector('[data-prompt-count]');
+    if (content && count) {
+        const update = () => {
+            const text = content.value.trim();
+            const words = text === '' ? 0 : text.split(/\s+/).length;
+            count.textContent = `${content.value.length.toLocaleString('tr-TR')} karakter · ${words.toLocaleString('tr-TR')} kelime`;
+        };
+        content.addEventListener('input', update);
+        update();
+    }
+
+    const filter = document.querySelector('[data-prompt-filter]');
+    if (filter) {
+        const items = [...document.querySelectorAll('[data-prompt-item]')];
+        const empty = document.querySelector('[data-prompt-empty]');
+        filter.addEventListener('input', () => {
+            const query = filter.value.trim().toLocaleLowerCase('tr-TR');
+            let visible = 0;
+            items.forEach((item) => {
+                const match = query === '' || item.dataset.search.includes(query);
+                item.hidden = !match;
+                if (match) visible++;
+            });
+            empty?.classList.toggle('hidden', visible > 0);
+        });
+    }
+}
+
 function initializeGroupNamePreview() {
     const input = document.querySelector('[data-group-name-input]');
     const preview = document.querySelector('[data-group-name-preview]');
@@ -1311,6 +1353,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeModelGroups();
     initializeDialogs();
     initializeGroupNamePreview();
+    initializePrompts();
     initializeRunner();
     initializePreparationCreate();
     initializePreparationShow();

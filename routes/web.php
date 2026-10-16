@@ -23,6 +23,7 @@ use App\Http\Controllers\PreparationEvaluationController;
 use App\Http\Controllers\PreparationExecutionController;
 use App\Http\Controllers\PreparationPackageController;
 use App\Http\Controllers\PreparationStatusController;
+use App\Http\Controllers\PromptController;
 use App\Http\Controllers\StopBenchmarkExecutionController;
 use App\Http\Controllers\SystemSettingsController;
 use App\Http\Middleware\EnsureLocalPreparationAccess;
@@ -37,6 +38,15 @@ Route::middleware(EnsureLocalPreparationAccess::class)->prefix('system')->name('
     Route::get('/', [SystemSettingsController::class, 'index'])->middleware('throttle:20,1')->name('index');
     Route::put('/', [SystemSettingsController::class, 'update'])->middleware('throttle:5,1')->name('update');
 });
+Route::middleware(EnsureLocalPreparationAccess::class)->prefix('prompts')->name('prompts.')->group(function (): void {
+    Route::get('/', [PromptController::class, 'index'])->name('index');
+    Route::get('/create', [PromptController::class, 'create'])->name('create');
+    Route::post('/', [PromptController::class, 'store'])->middleware('throttle:20,1')->name('store');
+    Route::get('/{prompt}/edit', [PromptController::class, 'edit'])->where('prompt', '[A-Za-z0-9][A-Za-z0-9._-]*')->name('edit');
+    Route::put('/{prompt}', [PromptController::class, 'update'])->where('prompt', '[A-Za-z0-9][A-Za-z0-9._-]*')->middleware('throttle:20,1')->name('update');
+    Route::delete('/{prompt}', [PromptController::class, 'destroy'])->where('prompt', '[A-Za-z0-9][A-Za-z0-9._-]*')->middleware('throttle:20,1')->name('destroy');
+});
+
 Route::middleware(EnsureLocalPreparationAccess::class)->prefix('model-groups')->name('model-groups.')->group(function (): void {
     Route::get('/', [ModelGroupController::class, 'index'])->name('index');
     Route::post('/', [ModelGroupController::class, 'store'])->middleware('throttle:20,1')->name('store');
