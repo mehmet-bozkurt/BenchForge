@@ -279,7 +279,7 @@ test('initial terminal benchmark sanitizes npm install before any real model or 
         await Promise.all([
             mkdir(join(toolsPath, 'browser-smoke'), { recursive: true }), mkdir(commandPath), mkdir(homePath), mkdir(join(root, 'sablon')),
         ]);
-        for (const name of ['benchmark.zsh', 'benchforge-process-environment.zsh', 'benchforge-model-policy.mjs', 'select-opencode-session.mjs', 'classify-opencode-failure.mjs']) {
+        for (const name of ['benchmark.zsh', 'benchforge-process-environment.zsh', 'benchforge-model-policy.mjs', 'select-opencode-session.mjs', 'classify-opencode-failure.mjs', 'run-with-timeout.mjs']) {
             await copyFile(join(engineTools, name), join(toolsPath, name));
         }
         await writeFile(join(toolsPath, 'browser-smoke', 'check.mjs'), 'throw new Error("Browser must never run");\n');

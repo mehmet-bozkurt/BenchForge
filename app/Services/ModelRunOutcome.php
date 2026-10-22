@@ -31,6 +31,12 @@ class ModelRunOutcome
         'runtime' => 'Sayfa tarayıcıda hata verdi',
     ];
 
+    /** A validation step the engine stopped at its time limit (exit code 124). */
+    private const STAGE_TIMEOUT_TITLES = [
+        'lint' => 'Lint süre sınırını aştı',
+        'build' => 'Build süre sınırını aştı',
+    ];
+
     public function __construct(private BenchmarkModelFiles $files) {}
 
     /**
@@ -67,6 +73,7 @@ class ModelRunOutcome
         if ($outcome === null) {
             $failed = $model->stageResults->first(fn (StageResult $stage): bool => $stage->status === 'fail' && $stage->stage !== 'opencode' && ! in_array($stage->stage, $remeasured, true));
             $outcome = match (true) {
+                $failed !== null && $failed->exit_code === 124 && isset(self::STAGE_TIMEOUT_TITLES[$failed->stage]) => ['fail', self::STAGE_TIMEOUT_TITLES[$failed->stage], $this->stepTimeoutDetail($run, $model, $failed->stage)],
                 $failed !== null => ['fail', self::STAGE_TITLES[$failed->stage] ?? 'Doğrulama başarısız', $this->firstLogError($run, $model, $failed->stage)],
                 $model->status === 'pass' => ['pass', 'Tüm kontroller geçti', null],
                 $remeasured !== [] => ['warning', 'Ölçüm hatası · yeniden doğrulamada geçti', 'İlk teslimdeki hata aynı kod yeniden doğrulanınca çıkmadı; sorun modelde değil ölçüm ortamındaydı.'],
@@ -155,7 +162,11 @@ class ModelRunOutcome
         $failed = collect($validationStages)->first(fn (string $stage): bool => ($stages[$stage]['status'] ?? null) !== 'pass');
 
         if ($failed !== null) {
-            return ['tone' => 'fail', 'label' => $label, 'title' => self::STAGE_TITLES[$failed] ?? 'Doğrulama başarısız'];
+            $title = ($stages[$failed]['code'] ?? null) === 124 && isset(self::STAGE_TIMEOUT_TITLES[$failed])
+                ? self::STAGE_TIMEOUT_TITLES[$failed]
+                : (self::STAGE_TITLES[$failed] ?? 'Doğrulama başarısız');
+
+            return ['tone' => 'fail', 'label' => $label, 'title' => $title];
         }
 
         $modelCode = $attempt->mode === 'continue' ? ($stages['opencode']['code'] ?? null) : 0;
@@ -301,6 +312,17 @@ class ModelRunOutcome
         }
 
         return is_string($message) ? $this->excerpt($message, $run, $model) : null;
+    }
+
+    /** The engine writes the limit into the step log when it stops the step. */
+    private function stepTimeoutDetail(BenchmarkRun $run, ModelRun $model, string $stage): string
+    {
+        $log = $this->files->read($run, $model, '_logs/'.$model->slug.'.'.$stage.'.log', 4096);
+        $limit = preg_match('/BENCHFORGE: Adim (\d+) saniyelik sure sinirini asti/', $log, $match) === 1
+            ? ' '.max(1, (int) round((int) $match[1] / 60)).' dakikada'
+            : '';
+
+        return "Adım{$limit} bitmedi; komut ve başlattığı süreçler durduruldu. Modelin komutu kapanmayan bir süreç (örneğin bir test sunucusu) başlatmış olabilir.";
     }
 
     private function firstLogError(BenchmarkRun $run, ModelRun $model, string $stage): ?string

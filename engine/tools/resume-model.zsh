@@ -28,6 +28,10 @@ KAYNAK_SESSION="$9"
 PROMPT_DOSYASI="${10}"
 PROJE="${RUN_DIZIN}/${KLASOR}"
 BROWSER_SMOKE="${ANA_DIZIN}/tools/browser-smoke/check.mjs"
+# Ilk kosudaki gibi: dogrulama adimlari bu sureyi asarsa komut ve baslattigi surecler durdurulur; adim 124 ile kalir.
+ADIM_SURE_SINIRI_SANIYE=900
+[[ "${BENCHFORGE_STEP_TIMEOUT_SECONDS:-}" == <1-> ]] && ADIM_SURE_SINIRI_SANIYE=$BENCHFORGE_STEP_TIMEOUT_SECONDS
+ADIM_CALISTIRICI="${ANA_DIZIN}/tools/run-with-timeout.mjs"
 BROWSER_SMOKE_DIZIN="${ANA_DIZIN}/tools/browser-smoke"
 SESSION_SECICI="${ANA_DIZIN}/tools/select-opencode-session.mjs"
 EVENT_SESSION_SECICI="${ANA_DIZIN}/tools/extract-opencode-event-session.mjs"
@@ -194,7 +198,8 @@ if [[ ! -d "${PROJE}/node_modules" ]]; then
   echo "Bagimliliklar yeniden kuruluyor (calisma alani hafifletilmisti)."
   if ! (
     cd "$PROJE"
-    npm ci --prefer-offline --no-audit --no-fund || npm install --ignore-scripts --no-audit --no-fund
+    node "$ADIM_CALISTIRICI" "$ADIM_SURE_SINIRI_SANIYE" npm ci --prefer-offline --no-audit --no-fund \
+      || node "$ADIM_CALISTIRICI" "$ADIM_SURE_SINIRI_SANIYE" npm install --ignore-scripts --no-audit --no-fund
   ) > "${DENEME_DIZIN}/npm-ci.log" 2>&1; then
     echo "HATA: Bagimliliklar kurulamadi; ayrintilar npm-ci.log dosyasinda."
     exit 74
@@ -281,7 +286,7 @@ fi
 echo "Lint kontrolu basliyor."
 (
   cd "$PROJE"
-  npm run lint
+  node "$ADIM_CALISTIRICI" "$ADIM_SURE_SINIRI_SANIYE" npm run lint
 ) > "${DENEME_DIZIN}/lint.log" 2>&1
 LINT_RC=$?
 
@@ -308,7 +313,7 @@ fi
 
 (
   cd "$PROJE"
-  NEXT_PUBLIC_BASE_PATH="/${KLASOR}" npm run build
+  NEXT_PUBLIC_BASE_PATH="/${KLASOR}" node "$ADIM_CALISTIRICI" "$ADIM_SURE_SINIRI_SANIYE" npm run build
 ) > "${DENEME_DIZIN}/build.log" 2>&1
 BUILD_RC=$?
 
@@ -342,7 +347,7 @@ if [[ "$EXPORT_RC" -eq 0 ]]; then
       break
     fi
 
-    if curl -fsSL "${BASE_URL}/" >/dev/null 2>&1; then
+    if curl -fsSL --max-time 5 "${BASE_URL}/" >/dev/null 2>&1; then
       HAZIR=1
       break
     fi
@@ -361,7 +366,7 @@ if [[ "$EXPORT_RC" -eq 0 ]]; then
         URL="${BASE_URL}${ROTA}"
       fi
 
-      HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" "$URL")
+      HTTP_CODE=$(curl -L -s --max-time 30 -o /dev/null -w "%{http_code}" "$URL")
       echo "$HTTP_CODE $ROTA" >> "${DENEME_DIZIN}/routes.log"
 
       if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 400 ]]; then

@@ -96,6 +96,11 @@ MODEL_POLICY="${ANA_DIZIN}/tools/benchforge-model-policy.mjs"
 HATA_SINIFLANDIRICI="${ANA_DIZIN}/tools/classify-opencode-failure.mjs"
 # Takilan bir model tek kosu yuvasini tutmasin ve token harcamaya devam etmesin.
 MODEL_SURE_SINIRI_SANIYE=3600
+# Dogrulama adimlari (bagimlilik kurulumu, lint, build) bu sureyi asarsa komut ve baslattigi surecler durdurulur;
+# adim 124 ile kalir. Modelin build komutuna ekledigi ve kapanmayan bir betik kosuyu kilitleyemez.
+ADIM_SURE_SINIRI_SANIYE=900
+[[ "${BENCHFORGE_STEP_TIMEOUT_SECONDS:-}" == <1-> ]] && ADIM_SURE_SINIRI_SANIYE=$BENCHFORGE_STEP_TIMEOUT_SECONDS
+ADIM_CALISTIRICI="${ANA_DIZIN}/tools/run-with-timeout.mjs"
 # Modelin calisma kosulu: kullanicinin global OpenCode ayarlarindan yalitilmis ortam ve sablon talimati.
 ORTAM_PROFILI="isolated-v1"
 BOUNDARY_MONITOR="${BENCHFORGE_BOUNDARY_MONITOR:-}"
@@ -219,7 +224,7 @@ for (( i = 1; i <= ${#KLASORLER}; i++ )); do
 
   (
     cd "$PROJE"
-    npm ci --prefer-offline --no-audit --no-fund
+    node "$ADIM_CALISTIRICI" "$ADIM_SURE_SINIRI_SANIYE" npm ci --prefer-offline --no-audit --no-fund
   ) > "${LOG_DIZIN}/${KLASOR}.npm-ci.log" 2>&1
 
   if [[ $? -ne 0 ]]; then
@@ -368,14 +373,14 @@ model_calistir() {
 
   (
     cd "$PROJE"
-    npm run lint
+    node "$ADIM_CALISTIRICI" "$ADIM_SURE_SINIRI_SANIYE" npm run lint
   ) > "${LOG_DIZIN}/${KLASOR}.lint.log" 2>&1
 
   LINT_RC=$?
 
   (
     cd "$PROJE"
-    NEXT_PUBLIC_BASE_PATH="/${KLASOR}" npm run build
+    NEXT_PUBLIC_BASE_PATH="/${KLASOR}" node "$ADIM_CALISTIRICI" "$ADIM_SURE_SINIRI_SANIYE" npm run build
   ) > "${LOG_DIZIN}/${KLASOR}.build.log" 2>&1
 
   BUILD_RC=$?
@@ -415,7 +420,7 @@ model_calistir() {
     local HAZIR=0
 
     for DENEME in {1..30}; do
-      if curl -fsSL "${BASE_URL}/" >/dev/null 2>&1; then
+      if curl -fsSL --max-time 5 "${BASE_URL}/" >/dev/null 2>&1; then
         HAZIR=1
         break
       fi
@@ -435,7 +440,7 @@ model_calistir() {
           URL="${BASE_URL}${ROTA}"
         fi
 
-        HTTP_CODE=$(curl -L -s \
+        HTTP_CODE=$(curl -L -s --max-time 30 \
           -o /dev/null \
           -w "%{http_code}" \
           "$URL")
