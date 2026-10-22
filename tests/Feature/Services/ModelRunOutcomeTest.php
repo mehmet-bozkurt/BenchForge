@@ -184,3 +184,14 @@ test('it summarises the latest finished recovery attempt', function (array $atte
         ['tone' => 'unknown', 'label' => 'Kurtarma 2', 'title' => 'Durduruldu'],
     ],
 ]);
+
+test('it says when a validation step was stopped at its time limit', function () {
+    [$run, $model] = outcomeFixture(['opencode' => ['pass', 0], 'lint' => ['pass', 0], 'build' => ['fail', 124]], [
+        'build.log' => "  FAIL  /cart/  errors=cart: confirmation message did not appear\n\nBENCHFORGE: Adim 900 saniyelik sure sinirini asti; komut ve baslattigi surecler durduruldu.\n",
+    ]);
+
+    $outcome = app(ModelRunOutcome::class)->describe($run, $model);
+
+    expect($outcome)->toMatchArray(['tone' => 'fail', 'title' => 'Build süre sınırını aştı'])
+        ->and($outcome['detail'])->toStartWith('Adım 15 dakikada bitmedi;');
+});

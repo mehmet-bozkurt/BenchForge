@@ -37,7 +37,7 @@ test('wires a resumed model to its scoped policy and monitor without live servic
             mkdir(attemptPath, { recursive: true }),
             mkdir(join(runPath, '_gallery', modelSlug), { recursive: true }),
         ]);
-        for (const name of ['resume-model.zsh', 'benchforge-process-environment.zsh', 'benchforge-model-policy.mjs', 'select-opencode-session.mjs', 'extract-opencode-event-session.mjs']) {
+        for (const name of ['resume-model.zsh', 'benchforge-process-environment.zsh', 'benchforge-model-policy.mjs', 'select-opencode-session.mjs', 'extract-opencode-event-session.mjs', 'run-with-timeout.mjs']) {
             await copyFile(join(engineTools, name), join(toolsPath, name));
         }
         await writeFile(join(toolsPath, 'browser-smoke', 'check.mjs'), 'throw new Error("Browser must not run in this fixture");\n');

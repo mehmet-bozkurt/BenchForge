@@ -21,7 +21,7 @@ async function runWithModel(modelScript) {
 }
 
 /** Same, but also reports whether the engine continued the session automatically. */
-async function runWithModelDetails(modelScript, { npm = 'process.exit(process.argv.includes("build") ? 1 : 0);', inspect } = {}) {
+async function runWithModelDetails(modelScript, { npm = 'process.exit(process.argv.includes("build") ? 1 : 0);', inspect, env = {} } = {}) {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'benchforge-classification-')));
     const commands = join(root, 'commands');
 
@@ -32,7 +32,7 @@ async function runWithModelDetails(modelScript, { npm = 'process.exit(process.ar
             mkdir(commands),
             mkdir(join(root, 'home')),
         ]);
-        for (const name of ['benchmark.zsh', 'benchforge-process-environment.zsh', 'benchforge-model-policy.mjs', 'select-opencode-session.mjs', 'classify-opencode-failure.mjs']) {
+        for (const name of ['benchmark.zsh', 'benchforge-process-environment.zsh', 'benchforge-model-policy.mjs', 'select-opencode-session.mjs', 'classify-opencode-failure.mjs', 'run-with-timeout.mjs']) {
             await copyFile(join(engineTools, name), join(root, 'tools', name));
         }
         await writeFile(join(root, 'tools', 'browser-smoke', 'check.mjs'), 'process.exit(1);\n');
@@ -50,7 +50,7 @@ async function runWithModelDetails(modelScript, { npm = 'process.exit(process.ar
 
         const runner = spawn('/bin/zsh', ['-f', join(root, 'tools', 'benchmark.zsh'), 'fixture-run', 'prompt.txt', 'models.conf', '/', 'opencode.json'], {
             cwd: root,
-            env: { PATH: `${commands}:${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`, HOME: join(root, 'home'), BENCHFORGE_BOUNDARY_MONITOR: monitorPath },
+            env: { PATH: `${commands}:${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`, HOME: join(root, 'home'), BENCHFORGE_BOUNDARY_MONITOR: monitorPath, ...env },
             stdio: 'ignore',
         });
         const watchdog = setTimeout(() => runner.kill('SIGKILL'), 60_000);
@@ -149,4 +149,31 @@ test('slims every workspace after validation and archives the export of a model 
         export: true,
         gallery: true,
     });
+});
+
+test('stops a build that never finishes at the step time limit and still records the run', async () => {
+    // A model can add a script to its own build that never exits (for example a smoke test that keeps a server open).
+    const npm = [
+        'if (process.argv.includes("build")) {',
+        '  require("node:child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" });',
+        '  setInterval(() => {}, 1000);',
+        '} else {',
+        '  process.exit(0);',
+        '}',
+    ].join('\n');
+    let build;
+
+    await runWithModelDetails(writeSubmission + ' process.exit(0);', {
+        npm,
+        env: { BENCHFORGE_STEP_TIMEOUT_SECONDS: '2' },
+        inspect: async (run) => {
+            build = {
+                code: (await readFile(join(run, '_results', 'fixture-model.result'), 'utf8')).trim().split('|')[4],
+                log: await readFile(join(run, '_logs', 'fixture-model.build.log'), 'utf8'),
+            };
+        },
+    });
+
+    assert.equal(build.code, '124');
+    assert.match(build.log, /BENCHFORGE: Adim 2 saniyelik sure sinirini asti/);
 });

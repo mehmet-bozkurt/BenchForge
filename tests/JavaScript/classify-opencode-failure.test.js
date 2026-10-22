@@ -17,9 +17,8 @@ test('treats server, capacity and unexpected server errors as provider failures'
     assert.equal(isProviderError(errorEvent({ name: 'UnknownError', data: { message: 'Unexpected server error. Check server logs for details.' } })), true);
 });
 
-test('keeps model, request and authentication errors as model failures', () => {
+test('keeps model and request errors as model failures', () => {
     assert.equal(isProviderError(errorEvent({ name: 'APIError', data: { statusCode: 400, message: 'Invalid tool call' } })), false);
-    assert.equal(isProviderError(errorEvent({ name: 'ProviderAuthError', data: { message: 'Missing key' } })), false);
     assert.equal(isProviderError(errorEvent({ name: 'UnknownError', data: { message: 'Tool failed' } })), false);
     assert.equal(isProviderError({ type: 'step_finish' }), false);
 });
@@ -46,6 +45,12 @@ test('classifies an event log by its last error and treats missing logs as model
     } finally {
         await rm(root, { recursive: true, force: true });
     }
+});
+
+test('treats a refused key, subscription or missing credential as an account failure', () => {
+    assert.equal(isProviderError(errorEvent({ name: 'APIError', data: { statusCode: 401, isRetryable: false, message: 'This API key has expired. Create a new API key in OpenCode Console and replace it in your client or secret store.' } })), true);
+    assert.equal(isProviderError(errorEvent({ name: 'APIError', data: { statusCode: 403, isRetryable: false, message: 'Upstream request failed: An active OpenCode Go subscription is required to use Go models.' } })), true);
+    assert.equal(isProviderError(errorEvent({ name: 'ProviderAuthError', data: { message: 'Missing key' } })), true);
 });
 
 test('treats an account privacy refusal as a provider-side failure', () => {
