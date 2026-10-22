@@ -8,7 +8,8 @@ const MAX_EVENT_LOG_BYTES = 64 * 1024 * 1024;
 
 /**
  * A failed model call is a provider failure when OpenCode reports a server-side or
- * capacity error (5xx, 429, a retryable API error or an unexpected server error).
+ * capacity error (5xx, 429, a retryable API error or an unexpected server error), or when
+ * the provider refuses this account (an expired key, a missing subscription or credential).
  * Such runs say nothing about the model's ability and are not scored.
  */
 export function isProviderError(event) {
@@ -25,6 +26,9 @@ export function isProviderError(event) {
   // The provider refuses the model for this account (for example a data-training privacy setting):
   // an account configuration problem, not something the model did.
   if (status === 400 && /privacy settings|trains on request data/iu.test(message)) return true;
+  // The key or subscription is not accepted (for example "This API key has expired" or
+  // "An active OpenCode Go subscription is required"), or no credential is configured at all.
+  if (status === 401 || status === 403 || name === "ProviderAuthError") return true;
 
   return name === "UnknownError" && /unexpected server error/iu.test(message);
 }
