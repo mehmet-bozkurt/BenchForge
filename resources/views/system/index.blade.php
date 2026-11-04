@@ -83,7 +83,7 @@
 
             @if ($busy)
                 <div class="mt-5 rounded-xl border border-[var(--amber-line)] bg-[var(--amber-soft)] px-4 py-3 text-xs leading-5 text-[var(--amber-ink)]" role="status">
-                    <strong>Ayar değişikliği şu anda kilitli.</strong> Çalışan benchmark, kurtarma veya hazırlık tamamlanmadan ve çalışma kayıtları okunabilir olmadan yollar değiştirilemez. Kontrolleri görüntüleyebilirsiniz.
+                    <strong>Ayar değişikliği şu anda kilitli.</strong> Çalışan benchmark, kurtarma, hazırlık veya iş akışı tamamlanmadan ve çalışma kayıtları okunabilir olmadan yollar değiştirilemez. Kontrolleri görüntüleyebilirsiniz.
                 </div>
             @endif
 
