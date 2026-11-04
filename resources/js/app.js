@@ -5,7 +5,9 @@ import {
     pricedFixedEndpoints,
     selectedFixedEndpoints,
 } from './openrouter-catalog.js';
+import { initializeModelPickers } from './model-picker.js';
 import { initializePreparationCreate, initializePreparationShow } from './preparations.js';
+import { initializeWorkflowRun } from './workflows.js';
 
 const statusLabels = {
     idle: 'Hazır',
@@ -1349,6 +1351,15 @@ function initializeModelGroups() {
     });
 }
 
+/** Runs a page module's initializer so that an unexpected error cannot stop the initializers after it. */
+function initializeIsolated(initializer) {
+    try {
+        initializer();
+    } catch {
+        // The page keeps its server-rendered state; the shared behaviours below still start.
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initializeModelGroups();
     initializeDialogs();
@@ -1357,6 +1368,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeRunner();
     initializePreparationCreate();
     initializePreparationShow();
+    initializeIsolated(() => initializeModelPickers());
+    initializeIsolated(() => initializeWorkflowRun());
     initializePreviewComparison();
     initializeEvaluationPanel();
     initializeDestructiveForms();

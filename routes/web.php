@@ -26,10 +26,19 @@ use App\Http\Controllers\PreparationStatusController;
 use App\Http\Controllers\PromptController;
 use App\Http\Controllers\StopBenchmarkExecutionController;
 use App\Http\Controllers\SystemSettingsController;
+use App\Http\Controllers\WorkflowController;
+use App\Http\Controllers\WorkflowDemoController;
+use App\Http\Controllers\WorkflowRunController;
+use App\Http\Controllers\WorkflowRunDetailController;
+use App\Http\Controllers\WorkflowRunExecutionController;
+use App\Http\Controllers\WorkflowRunStatusController;
 use App\Http\Middleware\EnsureLocalPreparationAccess;
+use App\Services\WorkflowRunFiles;
+use App\Services\WorkflowTemplateStore;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 Route::get('/', DashboardController::class)->name('dashboard');
@@ -67,6 +76,39 @@ Route::middleware(EnsureLocalPreparationAccess::class)->prefix('preparations')->
         ->scopeBindings()->name('packages.download');
     Route::put('/{preparationComparison}/packages/{preparationPackage}/evaluation', [PreparationEvaluationController::class, 'update'])
         ->scopeBindings()->middleware('throttle:30,1')->name('packages.evaluation.update');
+});
+Route::middleware(EnsureLocalPreparationAccess::class)->prefix('workflows')->name('workflows.')->group(function (): void {
+    $templatePattern = Str::between(WorkflowTemplateStore::ID_PATTERN, '/^', '$/');
+    $stepPattern = Str::between(WorkflowRunFiles::STEP_ID_PATTERN, '/^', '$/');
+
+    Route::get('/', [WorkflowController::class, 'index'])->name('index');
+    Route::get('/templates/{template}/new', [WorkflowController::class, 'create'])->where('template', $templatePattern)->name('create');
+    Route::post('/templates/{template}/runs', [WorkflowRunController::class, 'store'])
+        ->where('template', $templatePattern)->middleware('throttle:5,1,workflows-start')->name('runs.store');
+    Route::get('/runs/{workflowRun:slug}', [WorkflowRunController::class, 'show'])->name('runs.show');
+    Route::get('/runs/{workflowRun:slug}/status', WorkflowRunStatusController::class)->name('runs.status');
+    Route::post('/runs/{workflowRun:slug}/stop', [WorkflowRunExecutionController::class, 'destroy'])
+        ->middleware('throttle:10,1,workflows-control')->name('runs.stop');
+    Route::get('/runs/{workflowRun:slug}/detail', WorkflowRunDetailController::class)->name('runs.detail');
+    $demoPatterns = [
+        'model' => Str::between(WorkflowRunFiles::MODEL_SLUG_PATTERN, '/^', '$/'),
+        'step' => $stepPattern,
+        'item' => Str::between(WorkflowRunFiles::ITEM_KEY_PATTERN, '/^', '$/'),
+        'child' => $stepPattern,
+    ];
+    $sessionlessDemoMiddleware = [
+        PreventRequestForgery::class,
+        StartSession::class,
+        ShareErrorsFromSession::class,
+    ];
+    Route::get('/runs/{workflowRun:slug}/demos/{model}/{step}/{item}/{child}', [WorkflowDemoController::class, 'show'])
+        ->where($demoPatterns)
+        ->withoutMiddleware($sessionlessDemoMiddleware)
+        ->name('runs.demos.show');
+    Route::get('/runs/{workflowRun:slug}/demos/{model}/{step}', [WorkflowDemoController::class, 'step'])
+        ->where($demoPatterns)
+        ->withoutMiddleware($sessionlessDemoMiddleware)
+        ->name('runs.demos.step');
 });
 Route::get('/models/{modelSlug}', [ModelController::class, 'show'])
     ->where('modelSlug', '[^/]+')

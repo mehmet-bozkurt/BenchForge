@@ -36,6 +36,10 @@
                         <span aria-hidden="true">¶</span>
                         Promptlar
                     </a>
+                    <a class="nav-item {{ request()->routeIs('workflows.*') ? 'nav-item-active' : '' }}" href="{{ route('workflows.index') }}">
+                        <span aria-hidden="true">⇶</span>
+                        İş Akışları
+                    </a>
                     <a class="nav-item {{ request()->routeIs('model-groups.*') ? 'nav-item-active' : '' }}" href="{{ route('model-groups.index') }}">
                         <span aria-hidden="true">≡</span>
                         Model Grupları

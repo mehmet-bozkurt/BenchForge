@@ -4,6 +4,7 @@ use App\Models\BenchmarkExecution;
 use App\Models\BenchmarkRun;
 use App\Models\ModelRunAttempt;
 use App\Models\PreparationComparison;
+use App\Models\WorkflowRun;
 use App\Services\BenchForgeSettings;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -241,7 +242,7 @@ test('it refuses updates during every active lifecycle without reconciling or ch
         expect(app(BenchForgeSettings::class)->busy())->toBeTrue();
         expect(fn () => app(BenchForgeSettings::class)->save([...$fixture['values'], 'home_path' => $fixture['directory'].'/other-home']))->toThrow(
             RuntimeException::class,
-            'Çalışan benchmark, kurtarma veya hazırlık tamamlanmadan sistem ayarları değiştirilemez.',
+            'Çalışan benchmark, kurtarma, hazırlık veya iş akışı tamamlanmadan sistem ayarları değiştirilemez.',
         );
         expect(File::get($fixture['path']))->toBe($original);
         expect($record->refresh()->getAttributes())->toBe($attributes);
@@ -250,21 +251,23 @@ test('it refuses updates during every active lifecycle without reconciling or ch
     'initial benchmark' => [fn () => BenchmarkExecution::factory()->create(['status' => 'running'])],
     'recovery attempt' => [fn () => ModelRunAttempt::factory()->create(['status' => 'starting'])],
     'preparation comparison' => [fn () => PreparationComparison::factory()->create(['status' => 'stopping', 'finished_at' => null])],
+    'workflow' => [fn () => WorkflowRun::factory()->create(['status' => 'running', 'finished_at' => null])],
 ]);
 
-test('it refuses a different canonical root when benchmark history exists', function (callable $history): void {
+test('it refuses a different canonical root when benchmark or workflow history exists', function (callable $history): void {
     withBenchForgeSettingsFixture(function (array $fixture) use ($history): void {
         $history();
 
         expect(fn () => app(BenchForgeSettings::class)->save([...$fixture['values'], 'root_path' => $fixture['directory'].'/other-benchmark']))->toThrow(
             RuntimeException::class,
-            'Geçmiş benchmark kayıtları varken kök veya sonuç klasörü değiştirilemez. Mevcut sonuçları taşımak ayrı bir işlem gerektirir.',
+            'Geçmiş benchmark veya iş akışı kayıtları varken kök veya sonuç klasörü değiştirilemez. Mevcut sonuçları taşımak ayrı bir işlem gerektirir.',
         );
         expect(File::exists($fixture['path']))->toBeFalse();
     });
 })->with([
     'archived run' => [fn () => BenchmarkRun::factory()->create()],
     'completed execution without an archive' => [fn () => BenchmarkExecution::factory()->create(['status' => 'completed'])],
+    'finished workflow run' => [fn () => WorkflowRun::factory()->create(['status' => 'completed'])],
 ]);
 
 test('it accepts the same physical root with history without relocating results', function () {
@@ -326,6 +329,7 @@ test('it serializes settings with runner and preparation locks in a fixed order'
         $store = Cache::store();
         Cache::shouldReceive('lock')->once()->with('benchforge:runner:start', 120)->ordered()->andReturn($store->lock('benchforge:runner:start', 120));
         Cache::shouldReceive('lock')->once()->with('benchforge:preparation:lifecycle', 120)->ordered()->andReturn($store->lock('benchforge:preparation:lifecycle', 120));
+        Cache::shouldReceive('lock')->once()->with('benchforge:workflow:lifecycle', 120)->ordered()->andReturn($store->lock('benchforge:workflow:lifecycle', 120));
 
         app(BenchForgeSettings::class)->save($fixture['values']);
 

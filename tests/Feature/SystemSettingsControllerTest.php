@@ -185,7 +185,7 @@ test('it refuses a settings update during an active preparation without reconcil
 
         $this->from(route('system.index'))->put(route('system.update'), $fixture['values'])
             ->assertRedirectToRoute('system.index')
-            ->assertSessionHasErrors(['settings' => 'Çalışan benchmark, kurtarma veya hazırlık tamamlanmadan sistem ayarları değiştirilemez.']);
+            ->assertSessionHasErrors(['settings' => 'Çalışan benchmark, kurtarma, hazırlık veya iş akışı tamamlanmadan sistem ayarları değiştirilemez.']);
 
         expect(File::exists($fixture['path']))->toBeFalse();
         expect($comparison->refresh()->getAttributes())->toBe($before);

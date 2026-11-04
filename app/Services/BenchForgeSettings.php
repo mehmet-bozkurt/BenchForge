@@ -6,6 +6,7 @@ use App\Models\BenchmarkExecution;
 use App\Models\BenchmarkRun;
 use App\Models\ModelRunAttempt;
 use App\Models\PreparationComparison;
+use App\Models\WorkflowRun;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
@@ -99,15 +100,17 @@ class BenchForgeSettings
         try {
             Cache::lock('benchforge:runner:start', 120)->block(5, function () use ($values): void {
                 Cache::lock('benchforge:preparation:lifecycle', 120)->block(5, function () use ($values): void {
-                    $this->apply();
+                    Cache::lock('benchforge:workflow:lifecycle', 120)->block(5, function () use ($values): void {
+                        $this->apply();
 
-                    if ($this->busy()) {
-                        throw new RuntimeException('Çalışan benchmark, kurtarma veya hazırlık tamamlanmadan sistem ayarları değiştirilemez.');
-                    }
+                        if ($this->busy()) {
+                            throw new RuntimeException('Çalışan benchmark, kurtarma, hazırlık veya iş akışı tamamlanmadan sistem ayarları değiştirilemez.');
+                        }
 
-                    $validated = $this->validateValues($values);
-                    $this->guardHistory($validated['root_path']);
-                    $this->persist($validated);
+                        $validated = $this->validateValues($values);
+                        $this->guardHistory($validated['root_path']);
+                        $this->persist($validated);
+                    });
                 });
             });
         } catch (LockTimeoutException) {
@@ -120,7 +123,8 @@ class BenchForgeSettings
         try {
             return BenchmarkExecution::query()->whereIn('status', BenchmarkExecution::ACTIVE_STATUSES)->exists()
                 || ModelRunAttempt::query()->whereIn('status', ModelRunAttempt::ACTIVE_STATUSES)->exists()
-                || PreparationComparison::query()->whereIn('status', PreparationComparison::ACTIVE_STATUSES)->exists();
+                || PreparationComparison::query()->whereIn('status', PreparationComparison::ACTIVE_STATUSES)->exists()
+                || WorkflowRun::query()->whereIn('status', WorkflowRun::ACTIVE_STATUSES)->exists();
         } catch (QueryException) {
             return true;
         }
@@ -304,7 +308,9 @@ class BenchForgeSettings
 
     private function guardHistory(string $rootPath): void
     {
-        if (! BenchmarkRun::query()->exists() && ! BenchmarkExecution::query()->exists()) {
+        if (! BenchmarkRun::query()->exists()
+            && ! BenchmarkExecution::query()->exists()
+            && ! WorkflowRun::query()->exists()) {
             return;
         }
 
@@ -312,7 +318,7 @@ class BenchForgeSettings
         $currentRuns = realpath((string) config('benchforge.runs_path'));
 
         if ($currentRoot !== $rootPath || $currentRuns !== $rootPath.'/runs') {
-            throw new RuntimeException('Geçmiş benchmark kayıtları varken kök veya sonuç klasörü değiştirilemez. Mevcut sonuçları taşımak ayrı bir işlem gerektirir.');
+            throw new RuntimeException('Geçmiş benchmark veya iş akışı kayıtları varken kök veya sonuç klasörü değiştirilemez. Mevcut sonuçları taşımak ayrı bir işlem gerektirir.');
         }
     }
 

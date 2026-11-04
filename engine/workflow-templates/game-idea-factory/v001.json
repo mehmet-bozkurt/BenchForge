@@ -1,0 +1,331 @@
+{
+    "schema": "benchforge-workflow/1",
+    "id": "game-idea-factory",
+    "name": "Oyun Fikir Fabrikası",
+    "description": "Dört kategoride (var olan, özgün, melez ve yeniden yorumlanan oyunlar) oyun fikirleri üretir, fikirleri puanlar ve her fikir için tek dosyalık, oynanabilir bir HTML5 demo yazar.",
+    "version": 1,
+    "constants": {
+        "categories": [
+            {
+                "key": "existing",
+                "label": "Var olan oyun",
+                "brief": "EXISTING GAME: Pick a real, proven game or mechanic (mobile hit, classic arcade, web portal hit, or a current YouTube Playables / hypercasual hit) and design a faithful web version of its core mechanic.\nName the reference game(s) in \"references\". The demo itself must use an ORIGINAL title, original visuals and original text: no trademarks, character names, logos, copied levels or assets."
+            },
+            {
+                "key": "original",
+                "label": "Özgün oyun",
+                "brief": "ORIGINAL GAME: Invent a completely new concept. It must not be a reskin of a famous game. It still has to be instantly understandable (one-finger, no tutorial) and buildable by a solo developer in 2-6 weeks.\nLeave \"references\" empty unless an influence is worth naming."
+            },
+            {
+                "key": "hybrid",
+                "label": "Melez oyun",
+                "brief": "HYBRID: Combine the core mechanics of TWO existing games into one new game where the combination creates something neither has alone (not just two modes glued together).\nName both games in \"references\" and explain the synergy in \"pitch\"."
+            },
+            {
+                "key": "reimagined",
+                "label": "Yeniden yorum",
+                "brief": "REIMAGINED: Take one existing game and redesign it as if YOU had made it: keep what makes it fun, fix its known weaknesses (for example ad overload, slow start, grind, confusing controls) and add one signature twist.\nName the game in \"references\" and state clearly what you changed and why."
+            }
+        ],
+        "platformBrief": "TARGET PLATFORMS AND WHAT WORKS THERE (facts checked October 2026):\n- YouTube Playables: HTML5 web games inside YouTube (web + YouTube Android/iOS apps). Initial bundle must be under 30 MiB (under 15 MiB recommended), interactive in under 5 seconds, no external network calls, touch AND mouse required, must work at any aspect ratio from tall portrait (9:32) to wide landscape (32:9) without locking orientation, English text required, ads only through the platform SDK (pre-roll, interstitial, rewarded), no in-app purchases.\n- What performs on Playables (catalog data Jul-Sep 2026): draw-and-escape puzzles, car physics / crash sandboxes, store / tycoon idle simulations, beauty / fashion casual, ragdoll and action shooters, arcade racing / obstacle courses. Worst: RPGs, strategy and multiplayer, because they need long tutorials. The catalog is dominated by hypercasual publishers with large portfolios, so an idea needs a hook that is obvious within 3 seconds.\n- Samsung Instant Plays 2.0 is NOT a web platform: it cloud-streams Android APK games from Galaxy Store. A web game would later need an Android build to go there. Design for short mobile sessions and touch.\n- Web portals (CrazyGames, Poki) reward games that load fast, start instantly and hold players 10+ minutes per session.\n- The developer is a single person. Ideas must be buildable in 2-6 weeks with simple procedural or low-cost art.\nGOOD IDEA CHECKLIST: one-finger or one-gesture control, playable without a tutorial, the fun is visible in a 3-second clip, short loops (30-180 s) with a reason to play one more round, a natural place for an optional rewarded ad, no reliance on online features.",
+        "demoRules": "DEMO REQUIREMENTS (follow all of them):\n1. Output ONE complete HTML document inside a single ```html code block and nothing else.\n2. Use only vanilla JavaScript with Canvas 2D (or plain DOM). No libraries, frameworks, fonts, images, audio files, CDNs or network requests of any kind. Draw every visual procedurally (shapes, gradients, paths). Use classic inline <script> tags, not type=\"module\".\n3. Fill the whole viewport and adapt to any aspect ratio from tall portrait to wide landscape. Handle window resize and scale the canvas by devicePixelRatio (capped at 2). Set touch-action: none and prevent page scroll and zoom.\n4. Use Pointer Events (pointerdown / pointermove / pointerup) so the game works with both touch and mouse. Keyboard controls are an optional extra.\n5. The player must be playing within 3 seconds of load: no start menu. A short one-line hint is fine; fade it out after the first input.\n6. The core loop must be complete and working: clear goal, score or progress, at least 3 levels or escalating difficulty, win/lose or round end, and instant restart.\n7. Add \"juice\": particles, easing, screen shake or squash on impacts, satisfying feedback on every success.\n8. Show a simulated rewarded ad at a natural moment: a button like \"Watch ad: +3 moves\" that shows an \"Ad playing...\" overlay for about 1.5 seconds and then grants the reward.\n9. Do not use the Page Visibility API or localStorage (if you must use localStorage, wrap it in try/catch). Use requestAnimationFrame for the game loop.\n10. In-game text is short and in English. Put the game title in <title>.\n11. Prefer a smaller game that works over a bigger one that breaks. Keep it under about 1,200 lines. Before you answer, check the code for undefined variables, missing functions, typos and runtime errors."
+    },
+    "inputs": [
+        {
+            "id": "ideasPerCategory",
+            "type": "integer",
+            "label": "Kategori başına fikir",
+            "description": "Her kategori için üretilecek fikir sayısı. Dört kategori olduğu için demo sayısı bunun dört katıdır.",
+            "default": 5,
+            "min": 1,
+            "max": 10
+        },
+        {
+            "id": "docLanguage",
+            "type": "string",
+            "label": "Belge dili",
+            "description": "Başlıklar dışındaki fikir metinlerinin ve puan gerekçelerinin dili.",
+            "default": "Türkçe",
+            "maxLength": 40
+        },
+        {
+            "id": "extraBrief",
+            "type": "text",
+            "label": "Ek açıklama",
+            "description": "İsteğe bağlı: tema, hedef kitle ya da kaçınılacak türler gibi ek yönlendirmeler.",
+            "default": "",
+            "required": false,
+            "maxLength": 4000
+        }
+    ],
+    "steps": [
+        {
+            "id": "ideas",
+            "type": "foreach",
+            "title": "Fikir üret",
+            "over": "constants.categories",
+            "itemLabel": "{{item.label}}",
+            "concurrency": 1,
+            "steps": [
+                {
+                    "id": "generate",
+                    "type": "llm_json",
+                    "title": "Kategori fikirleri",
+                    "prompt": "You are an experienced game designer. You find and design small HTML5 games that a single developer can build.\n\nCATEGORY:\n{{item.brief}}\n\n{{constants.platformBrief}}\n\nTASK:\nWrite exactly {{inputs.ideasPerCategory}} game ideas for this category.\n- Write \"title\" in English: an original game title with no trademarks.\n- Write every other text field in {{inputs.docLanguage}}.\n- Every idea must be clearly different from the others and from the titles under DO NOT REPEAT.\n- Be concrete and practical. Do not invent download numbers, revenue figures or percentages.\n- Follow the field descriptions in the JSON Schema below.\n\nDO NOT REPEAT (ideas from earlier categories; empty for the first category):\n{{loop.previous[*].generate.output.ideas[*].title}}\n\nEXTRA NOTES FROM THE USER (may be empty):\n{{inputs.extraBrief}}",
+                    "schema": {
+                        "type": "object",
+                        "required": [
+                            "ideas"
+                        ],
+                        "properties": {
+                            "ideas": {
+                                "type": "array",
+                                "minItems": 1,
+                                "maxItems": 10,
+                                "items": {
+                                    "type": "object",
+                                    "required": [
+                                        "title",
+                                        "references",
+                                        "pitch",
+                                        "coreLoop",
+                                        "controls",
+                                        "first10Seconds",
+                                        "sessionLength",
+                                        "whyReturn",
+                                        "hook",
+                                        "rewardedAdMoments",
+                                        "hitPotential",
+                                        "platformFit",
+                                        "demoSpec"
+                                    ],
+                                    "properties": {
+                                        "title": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 120,
+                                            "description": "Original English game title, no trademarks"
+                                        },
+                                        "references": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            },
+                                            "description": "Existing games this idea is based on (empty array for fully original ideas)"
+                                        },
+                                        "pitch": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "description": "One or two sentences: what the game is and why it is fun"
+                                        },
+                                        "coreLoop": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "description": "The repeated loop, step by step"
+                                        },
+                                        "controls": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "description": "Exact one-finger / one-gesture controls for touch and mouse"
+                                        },
+                                        "first10Seconds": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "description": "What the player sees and does in the first 10 seconds, without a tutorial"
+                                        },
+                                        "sessionLength": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "description": "Typical round length and session length"
+                                        },
+                                        "whyReturn": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "description": "Why the player plays one more round and comes back tomorrow"
+                                        },
+                                        "hook": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "description": "What makes the fun visible in a 3-second clip or thumbnail"
+                                        },
+                                        "rewardedAdMoments": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            },
+                                            "description": "Natural optional rewarded-ad moments"
+                                        },
+                                        "hitPotential": {
+                                            "type": "object",
+                                            "required": [
+                                                "rating",
+                                                "reasons",
+                                                "risks"
+                                            ],
+                                            "properties": {
+                                                "rating": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "low",
+                                                        "medium",
+                                                        "high"
+                                                    ]
+                                                },
+                                                "reasons": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "description": "Why it could become a hit"
+                                                },
+                                                "risks": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "description": "What could stop it from becoming a hit"
+                                                }
+                                            }
+                                        },
+                                        "platformFit": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "description": "Fit with YouTube Playables, web portals and a later Android build for Samsung Instant Plays"
+                                        },
+                                        "demoSpec": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "description": "Precise scope for a 1-file HTML5 demo: entities, rules, levels, win/lose, what to fake"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "retry": {
+                        "attempts": 3,
+                        "backoffSeconds": 10
+                    },
+                    "timeoutSeconds": 600,
+                    "maxOutputChars": 60000
+                }
+            ]
+        },
+        {
+            "id": "score",
+            "type": "llm_json",
+            "title": "Fikirleri puanla",
+            "dependsOn": [
+                "ideas"
+            ],
+            "prompt": "You are an honest, experienced game producer. Rate every game idea below for a single developer who targets YouTube Playables, web portals (CrazyGames, Poki) and a later Android build.\n\n{{constants.platformBrief}}\n\nIDEAS (JSON):\n{{steps.ideas.items[*].generate.output.ideas[*]}}\n\nEXTRA NOTES FROM THE USER (may be empty):\n{{inputs.extraBrief}}\n\nRULES:\n- Rate every idea exactly once, in the given order, and copy its \"title\" exactly.\n- \"score\": an integer from 1 (weak) to 10 (excellent) for hit potential, platform fit and how realistic it is to build in 2-6 weeks.\n- \"verdict\": one short sentence in {{inputs.docLanguage}}.\n- \"reasoning\": two to four sentences in {{inputs.docLanguage}}, based only on the idea itself and the platform facts above.\n- Do NOT invent download numbers, revenue, player counts, percentages or any other statistics, and do not cite sources you were not given.",
+            "schema": {
+                "type": "object",
+                "required": [
+                    "scores"
+                ],
+                "properties": {
+                    "scores": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "object",
+                            "required": [
+                                "title",
+                                "score",
+                                "verdict",
+                                "reasoning"
+                            ],
+                            "properties": {
+                                "title": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "The idea title, copied exactly"
+                                },
+                                "score": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10
+                                },
+                                "verdict": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "One short sentence"
+                                },
+                                "reasoning": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "Two to four sentences"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "id": "demos",
+            "type": "foreach",
+            "title": "Demolar",
+            "dependsOn": [
+                "ideas"
+            ],
+            "over": "steps.ideas.items[*].generate.output.ideas[*]",
+            "itemLabel": "{{item.title}}",
+            "concurrency": 2,
+            "steps": [
+                {
+                    "id": "build",
+                    "type": "code_text",
+                    "title": "Demo yaz",
+                    "modes": [
+                        "code_text",
+                        "code_agent"
+                    ],
+                    "prompt": "Build a playable one-file HTML5 demo of the game idea below. The idea text may be written in another language; all in-game text must be short and in English.\n\nTITLE: {{item.title}}\nPITCH: {{item.pitch}}\nCORE LOOP: {{item.coreLoop}}\nCONTROLS: {{item.controls}}\nFIRST 10 SECONDS: {{item.first10Seconds}}\nDEMO SCOPE: {{item.demoSpec}}\n\n{{constants.demoRules}}",
+                    "repairAttempts": 2,
+                    "checks": {
+                        "requireListeners": [
+                            "pointerdown",
+                            "touchstart",
+                            "mousedown"
+                        ],
+                        "maxBytes": 204800
+                    },
+                    "timeoutSeconds": 1200,
+                    "maxOutputChars": 400000,
+                    "maxOutputTokens": 100000
+                },
+                {
+                    "id": "check",
+                    "type": "browser_check",
+                    "title": "Tarayıcı testi",
+                    "dependsOn": [
+                        "build"
+                    ],
+                    "target": "build",
+                    "interactions": [
+                        {
+                            "type": "drag",
+                            "from": [
+                                0.5,
+                                0.65
+                            ],
+                            "to": [
+                                0.5,
+                                0.35
+                            ]
+                        }
+                    ],
+                    "screenshot": true
+                }
+            ]
+        }
+    ],
+    "gallery": {
+        "from": "demos",
+        "title": "{{item.title}}",
+        "file": "build",
+        "check": "check"
+    }
+}
