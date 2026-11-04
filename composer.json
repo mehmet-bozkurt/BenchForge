@@ -62,7 +62,7 @@
         ],
         "check:syntax": [
             "for file in engine/tools/*.zsh; do zsh -n \"$file\" || exit 1; done",
-            "for file in bin/*.mjs engine/tools/*.mjs engine/tools/browser-smoke/*.mjs; do node --check \"$file\" || exit 1; done"
+            "for file in bin/*.mjs bin/workflow/*.mjs engine/tools/*.mjs engine/tools/browser-smoke/*.mjs; do node --check \"$file\" || exit 1; done"
         ],
         "check": [
             "@lint",
