@@ -22,6 +22,7 @@ BenchForge, yapay zekâ kodlama modellerini gerçek ürün geliştirmeye benzeye
 - **Liderlik tablosu:** Model kimliğine göre gruplanır; %60 teknik başarı (koşu başına aşama oranlarının ortalaması) ve %40 insan puanı. Farklı çalışma koşullarında üretilmiş sonuçlar karıştırılmaz.
 - **Kullanım ve maliyet:** Token ve maliyet OpenCode'un yerel veritabanından okunur. Eksik veri sıfır diye gösterilmez.
 - **Hazırlık paketi karşılaştırması:** Aynı müşteri şartnamesinden modellerin ürettiği başlangıç promptu, gereksinimler, görev planı, hafıza bankası ve varsayımları yan yana karşılaştırma. Bu akışta model araç kullanmaz, yalnız metin üretir.
+- **İş Akışları:** Çok adımlı yapay zekâ işlerini (fikir üret → değerlendir → her fikir için demo yaz) JSON şablonlarıyla tanımlayıp 1–5 modelle yan yana çalıştırma ve canlı izleme. Ayrıntılar [İş Akışları](#iş-akışları) bölümündedir.
 - **Sistem ve Kurulum ekranı:** Araç sürümleri, yollar, yazma izinleri ve veritabanı kontrolleri. Benchmark kökü ve araç yolları arayüzden ayarlanabilir.
 - **Alan yönetimi:** Her koşunun kapladığı alan ölçülür. Çalışma alanları, sonuç arşivi ve koşunun tamamı ayrı ayrı silinebilir.
 - **Tema:** Açık, koyu ve işletim sistemini izleyen tema seçenekleri.
@@ -44,9 +45,10 @@ Laravel arayüzü ──► Node işçileri (bin/) ──► engine/tools/benchm
 | `engine/sablon/` | Her modele kopyalanan başlangıç projesi (Next.js) |
 | `engine/config/` | OpenCode ayarı ve örnek model grubu |
 | `engine/prompts/` | Örnek görev metni |
+| `engine/workflow-templates/` | Yerleşik iş akışı şablonları |
 | `engine/runs/` | Varsayılan koşu klasörü (Git dışında) |
 
-**Veri kökü:** Koşular, görev metinleri ve model grupları "veri kökü"nde durur. Varsayılan veri kökü `engine/` klasörüdür. Kendi görev metinlerinizi ve büyük koşu verilerinizi depodan ayrı tutmak için `.env` içindeki `BENCHFORGE_ROOT` ile başka bir klasör gösterebilirsiniz; o klasörde `prompts/`, `config/` ve `runs/` bulunmalıdır. Betikler ve şablon her durumda depodaki `engine/` klasöründen kullanılır.
+**Veri kökü:** Koşular, görev metinleri ve model grupları "veri kökü"nde durur. Varsayılan veri kökü `engine/` klasörüdür. Kendi görev metinlerinizi ve büyük koşu verilerinizi depodan ayrı tutmak için `.env` içindeki `BENCHFORGE_ROOT` ile başka bir klasör gösterebilirsiniz; o klasörde `prompts/`, `config/` ve `runs/` bulunmalıdır. Betikler ve şablon her durumda depodaki `engine/` klasöründen kullanılır. İş akışı şablonları ve çıktıları için veri kökünde `workflows/` ve `workflow-runs/` klasörleri ilk kullanımda kendiliğinden oluşturulur.
 
 1. Arayüz koşuyu başlatır; işçi süreçleri arka planda, kendi süreç grubunda çalışır. Aynı anda yalnız bir koşu çalışır.
 2. Her model için başlangıç şablonu ayrı bir çalışma klasörüne kopyalanır.
@@ -94,6 +96,67 @@ Başlıktaki **Sorunlu** sayısı modelin kendi hatalarını, **Dış etken** sa
 **Kurtarma:**
 - Bir kurtarma denemesinin son sonucu satırda küçük bir etiketle görünür; örneğin "✓ Kurtarma 1 · Tüm kontroller geçti".
 - Deneme süresi 2 saat 45 dakika ile sınırlıdır. Bilgisayarın uykuda geçirdiği süre bu sınırdan sayılmaz.
+
+## İş Akışları
+
+İş Akışları modülü, birden fazla model çağrısından oluşan işleri bir JSON şablonuyla tanımlar. Seçilen her model şablonun tamamını kendi başına çalıştırır; sonuçlar model model yan yana izlenir. İlk yerleşik şablon **Oyun Fikir Fabrikası**dır. Bu şablon dört kategoride oyun fikri üretir, fikirleri puanlar ve her fikir için oynanabilir tek dosyalık bir HTML5 demo yazdırır.
+
+**Çalıştırma:**
+1. Sol menüden **İş Akışları**'nı açın ve bir şablonda **Çalıştır**'a tıklayın.
+2. Formu doldurun. Girdiler şablondan üretilir. Model seçimi kod benchmarkındakiyle aynıdır: grup, OpenRouter veya OpenCode Go, en fazla 5 model.
+3. Ayarları seçin:
+   - aynı anda çalışacak model sayısı;
+   - aynı anda yapılacak model çağrısı sayısı (ücretsiz modellerin dakikalık istek sınırına karşı);
+   - isteğe bağlı süre sınırları.
+4. Çalıştırma sayfası şunları 2 saniyede bir günceller:
+   - her model için adım grafiğini: durum, süre, token ve döngülerde "4 öğeden 2'si tamamlandı" gibi ilerleme;
+   - olay günlüğünü, etkin model çağrılarını ve modelin son yanıtını.
+
+   Bir adıma tıklayınca değişkenleri yerleştirilmiş prompt, çıktı, denemeler ve hatalar açılır. **Durdur** etkin çağrıları güvenle kapatır.
+5. Üretilen demolar **Galeri**'de listelenir. **Oyna** demoyu sandbox'lı bir çerçevede açar.
+
+**Adım türleri (Aşama 1):**
+
+| Tür | Ne yapar |
+| --- | --- |
+| `llm_text` | Prompt'u gönderir, metin yanıtı saklar. |
+| `llm_json` | Yanıtı JSON olarak ayıklar. Gerekirse onarır (`jsonrepair`) ve şemaya göre doğrular. Olmazsa hatayı ve önceki cevabı prompt'a ekleyerek yeniden dener. |
+| `foreach` | Önceki bir adımın dizi çıktısındaki her öğe için alt adımları çalıştırır; eş zamanlılık şablonda ayarlanır. |
+| `code_text` | Model tek HTML dosyasını tek cevapta yazar. Dosya statik kontrollerden geçer: kesik çıktı, script sözdizimi, dış ağ kullanımı, dokunma/fare dinleyicisi. Kritik sorun varsa onarım istenir. |
+
+`code_agent` (araçlarla yazma) ve `browser_check` (Playwright ile tarayıcı testi ve ekran görüntüsü) şablonda tanımlanabilir. Bu adımlar Aşama 2'de etkinleşecek. Şimdilik `browser_check` "atlandı" olarak görünür ve sonucu bozmaz.
+
+**Şablonlar:**
+- Yerleşik şablonlar `engine/workflow-templates/<şablon>/v001.json` dosyasındadır. Kullanıcı şablonları veri kökündeki `workflows/<şablon>/vNNN.json` dosyalarına yazılır; her kayıt yeni bir sürüm olur ve eski sürümün üzerine yazılmaz.
+- Değişkenler `{{inputs.x}}`, `{{constants.…}}`, `{{steps.<adım>.output…}}`, `{{item.…}}` ve `{{loop.…}}` biçimindedir. Yerleştirme düz metin değiştirmedir; şablonda hiçbir koşulda kod çalıştırılmaz.
+- Doğrulayıcı, var olmayan bir girdiye, adıma ya da JSON şemasında olmayan bir alana yapılan başvuruları kaydetmeden önce yakalar.
+- Biçimin ayrıntısı [docs/workflows.md](docs/workflows.md) dosyasındadır.
+
+**Kayıtlar:**
+- Her çalıştırma veri kökündeki `workflow-runs/<çalıştırma>/` altında tutulur. Klasörde şunlar bulunur:
+  - şablonun başlangıç anındaki kopyası;
+  - `state.json` ve `events.jsonl`;
+  - her adımın prompt, yanıt ve çıktı dosyaları;
+  - demolar.
+- Veritabanında yalnız model düzeyindeki özetler bulunur.
+- Token ve maliyet OpenCode'un çağrı olaylarından toplanır:
+  - Girdi token'ı önbellekten okunan ve yazılan token'ları da içerir.
+  - Çıktı token'ı akıl yürütme token'larını da içerir.
+  - Bilinmeyen değerler "bilinmiyor" diye gösterilir.
+
+**Hatalar:**
+- **Geçici hata (429 veya 5xx):** Artan beklemeyle yeniden denenir; bu denemeler içerik denemesinden sayılmaz. Bir model üst üste iki çağrıda bekleme hakkını bitirirse yalnız o model durdurulur.
+- **Hesap hatası (401 veya 403):** Bütün çalıştırma durur.
+- **Model kaldırılmış (404 veya 410) ya da hesabın gizlilik ayarı nedeniyle reddedilmiş:** Yalnız o model başarısız olur, diğerleri devam eder.
+- **Çıktı token sınırı:** Sınıra takılıp kesilen yanıt başarısız deneme sayılır. Demo adımında model daha küçük bir sürüm yazması için uyarılır.
+
+**Güvenlik ve sınırlar:**
+- **Modeller:** Araçsız adımlar hazırlık paketlerindeki kısıtlı ajan ayarıyla çalışır; araç ve izinler kapalıdır, süreç ortamı izin listesiyle temizlenir.
+- **Demolar:** Yalnız sandbox'lı çerçevede açılır ve uygulama oturumuna erişemez. Demo adresi kısıtlayıcı bir CSP ile sunulur; tarayıcı dış kaynak yüklemeyi ve bağlantı isteklerini engeller. WebRTC ve sayfa yönlendirmesi CSP kapsamında değildir; bunlar yalnız statik kontrolde yakalanır. Demoları yine de güvenilmeyen kod olarak düşünün.
+- **Aynı anda çalışma:** Aynı anda tek iş akışı çalışır. Bir iş akışı, bir benchmark koşusuyla aynı anda çalışabilir.
+- **Çıktı sınırı:** OpenCode bir çağrının çıktısını varsayılan olarak 32.000 token ile sınırlar. Demo adımları bu sınırı adım ayarındaki `maxOutputTokens` değerine yükseltir; bu değer `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` olarak geçirilir.
+- **Canlı metin:** `opencode run` metni bir yanıt parçası tamamlanınca bildirir. Bu yüzden sayfa, çağrı sürerken yalnız çalışan çağrıyı ve geçen süreyi gösterir; modelin yazdığı metin çağrı bitince **Son yanıt** alanında görünür.
+- **Aşama 2 ve 3:** Durdurulan bir çalıştırmayı sürdürme, başarısız öğeleri yeniden deneme, modeller arası karşılaştırma, puanlama, zip dışa aktarma ve şablon editörü sonraki aşamalardadır.
 
 ## Gereksinimler
 
