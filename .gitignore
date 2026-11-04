@@ -78,6 +78,8 @@ Thumbs.db
 # Engine: shipped runner scripts, template and examples. Run data and personal inputs stay local.
 /engine/runs/*
 !/engine/runs/.gitkeep
+/engine/workflows/
+/engine/workflow-runs/
 /engine/prompts/*
 !/engine/prompts/example.txt
 /engine/config/*
