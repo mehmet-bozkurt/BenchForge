@@ -9,7 +9,9 @@ use App\Models\BenchmarkRun;
 use App\Models\ModelRunAttempt;
 use App\Models\OpenCodeGoModel;
 use App\Models\OpenRouterModel;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -24,9 +26,7 @@ class BenchmarkRunner
 
     private const ROUTE_PATTERN = "/^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%\/]*$/";
 
-    public const CUSTOM_MODEL_LIMIT = 16;
-
-    private const CUSTOM_MODEL_PORT_START = 3251;
+    public const CUSTOM_MODEL_LIMIT = ModelSelection::BENCHMARK_MODEL_LIMIT;
 
     private const STATIC_EXPORT_CONTRACT = <<<'PROMPT'
 
@@ -42,9 +42,7 @@ PROMPT;
     public function __construct(
         private SyncBenchmarkArchive $syncBenchmarkArchive,
         private BenchmarkPreflight $benchmarkPreflight,
-        private OpenRouterCatalog $openRouterCatalog,
-        private OpenRouterProviderRouting $openRouterProviderRouting,
-        private OpenCodeGoCatalog $openCodeGoCatalog,
+        private ModelSelection $modelSelection,
         private ModelRunContinuationRunner $modelRunContinuationRunner,
         private BenchmarkProcessEnvironment $processEnvironment,
     ) {}
@@ -54,7 +52,9 @@ PROMPT;
      *     prompts: list<array{value: string, label: string, source: string}>,
      *     configs: list<array{value: string, label: string, modelCount: int, ports: list<int>, providers: list<string>, maxParallel: int}>,
      *     openRouterModels: Collection<int, OpenRouterModel>,
-     *     catalog: array{count: int, lastSyncedAt: mixed},
+     *     openCodeGoModels: Collection<int, OpenCodeGoModel>,
+     *     catalog: array{count: int, lastSyncedAt: ?CarbonImmutable},
+     *     goCatalog: array{count: int, lastSyncedAt: ?CarbonImmutable},
      *     suggestedRoutes: list<string>
      * }
      */
@@ -81,24 +81,11 @@ PROMPT;
             )
             ->values()
             ->all();
-        $configs = collect($this->listFiles($root.'/config', '.conf'))
-            ->map(fn (string $filename): array => $this->parseConfig($filename)['option'])
-            ->values()
-            ->all();
 
         return [
             'prompts' => $prompts,
-            'configs' => $configs,
-            'openRouterModels' => $this->openRouterCatalog->selectableModels(),
-            'openCodeGoModels' => $this->openCodeGoCatalog->selectableModels(),
-            'catalog' => [
-                'count' => OpenRouterModel::query()->where('available', true)->count(),
-                'lastSyncedAt' => $this->openRouterCatalog->lastSyncedAt(),
-            ],
-            'goCatalog' => [
-                'count' => OpenCodeGoModel::query()->where('available', true)->count(),
-                'lastSyncedAt' => $this->openCodeGoCatalog->lastSyncedAt(),
-            ],
+            'configs' => $this->modelSelection->groupOptions(),
+            ...$this->modelSelection->catalogOptions(),
             'suggestedRoutes' => ['/'],
         ];
     }
@@ -115,8 +102,8 @@ PROMPT;
     {
         $parsedConfig = match ($modelMode) {
             'custom' => $this->customModelSelection($selectedModels, $routingMode, $fixedProviders),
-            'opencode_go' => $this->openCodeGoModelSelection($selectedModels),
-            default => $this->resolveConfig((string) $selectedConfig, $this->options()['configs']),
+            'opencode_go' => $this->modelSelection->openCodeGo($selectedModels),
+            default => $this->modelSelection->group((string) $selectedConfig, $this->options()['configs']),
         };
 
         return $this->benchmarkPreflight->inspect(
@@ -190,12 +177,8 @@ PROMPT;
 
         $options = $this->options();
         $promptSelection = $this->resolvePromptSelection($input, $options['prompts']);
-        $parsedConfig = match ($input['model_mode'] ?? 'group') {
-            'custom' => $this->customModelSelection($input['models'] ?? [], $input['routing_mode'] ?? 'auto', $input['fixed_providers'] ?? [], refreshProviders: true),
-            'opencode_go' => $this->openCodeGoModelSelection($input['go_models'] ?? []),
-            default => $this->resolveConfig((string) ($input['config'] ?? ''), $options['configs']),
-        };
-        $parsedConfig = $this->withMaxParallel($parsedConfig, $input['max_parallel'] ?? 1);
+        $parsedConfig = $this->modelSelection->resolve($input, refreshProviders: true, groupOptions: $options['configs']);
+        $parsedConfig = $this->modelSelection->withMaxParallel($parsedConfig, $input['max_parallel'] ?? 1);
         $routes = $this->validateRoutes($input['routes']);
         $preflight = $this->benchmarkPreflight->inspect(
             $parsedConfig['option']['ports'],
@@ -672,137 +655,12 @@ PROMPT;
 
     /**
      * @param  list<string>  $selectedModels
-     * @return array{absolutePath: null, reference: string, configContents: string, openCodeConfigContents: string, option: array{value: string, label: string, modelCount: int, ports: list<int>, providers: list<string>, maxParallel: int}}
+     * @param  array<string, mixed>  $fixedProviders
+     * @return array{absolutePath: null, reference: string, configContents: string, openCodeConfigContents: string, option: array{value: string, label: string, modelCount: int, ports: list<int>, providers: list<string>, maxParallel: int}, models: list<array{provider: string, modelId: string, model: string, folder: string, port: int, routing: array<string, mixed>}>}
      */
     private function customModelSelection(array $selectedModels, string $routingMode = 'auto', array $fixedProviders = [], bool $refreshProviders = false): array
     {
-        $selectedModels = array_values(array_unique(array_filter(
-            array_map(fn (mixed $model): string => trim((string) $model), $selectedModels),
-        )));
-
-        if ($selectedModels === [] || count($selectedModels) > self::CUSTOM_MODEL_LIMIT) {
-            throw new BenchmarkRunnerException('OpenRouter kataloğundan 1–'.self::CUSTOM_MODEL_LIMIT.' model seçin.');
-        }
-
-        $modelsById = OpenRouterModel::query()
-            ->whereIn('model_id', $selectedModels)
-            ->where('available', true)
-            ->where('agent_compatible', true)
-            ->get()
-            ->keyBy('model_id');
-
-        if ($modelsById->count() !== count($selectedModels)) {
-            throw new BenchmarkRunnerException('Seçilen modellerden biri artık kullanılamıyor veya araç desteği sunmuyor. Kataloğu yenileyin.');
-        }
-
-        $routing = $this->openRouterProviderRouting->routingForModels($selectedModels, $routingMode, $fixedProviders, $refreshProviders);
-
-        $ports = [];
-        $configLines = [
-            '# BenchForge tarafından OpenRouter kataloğundan oluşturuldu.',
-            '# max_parallel=1',
-            '# openrouter_routing='.$routingMode,
-        ];
-
-        if ($routingMode === 'fixed') {
-            $configLines[] = '# openrouter_requested_providers='.implode(', ', array_map(fn (string $modelId): string => $modelId.':'.$fixedProviders[$modelId], $selectedModels));
-        }
-        $openCodeModels = [];
-
-        foreach ($selectedModels as $index => $modelId) {
-            $port = self::CUSTOM_MODEL_PORT_START + $index;
-            $ports[] = $port;
-            $modelSlug = Str::slug(Str::afterLast($modelId, '/')) ?: 'model';
-            $folder = 'or-'.Str::limit($modelSlug, 36, '').'-'.substr(sha1($modelId), 0, 6);
-            $configLines[] = "{$folder}|openrouter/{$modelId}|{$port}";
-            $openCodeModels[$modelId] = [
-                'options' => [
-                    'provider' => $routing[$modelId],
-                ],
-            ];
-        }
-
-        $openCodeConfig = [
-            '$schema' => 'https://opencode.ai/config.json',
-            'provider' => [
-                'openrouter' => [
-                    'models' => $openCodeModels,
-                ],
-            ],
-        ];
-
-        return [
-            'absolutePath' => null,
-            'reference' => 'custom:openrouter',
-            'configContents' => implode(PHP_EOL, $configLines).PHP_EOL,
-            'openCodeConfigContents' => json_encode(
-                $openCodeConfig,
-                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
-            ).PHP_EOL,
-            'option' => [
-                'value' => 'custom:openrouter',
-                'label' => 'Özel OpenRouter seçimi',
-                'modelCount' => count($selectedModels),
-                'ports' => $ports,
-                'providers' => ['openrouter'],
-                'maxParallel' => 1,
-            ],
-        ];
-    }
-
-    /**
-     * @param  list<string>  $selectedModels
-     * @return array{absolutePath: null, reference: string, configContents: string, openCodeConfigContents: null, option: array{value: string, label: string, modelCount: int, ports: list<int>, providers: list<string>, maxParallel: int}}
-     */
-    private function openCodeGoModelSelection(array $selectedModels): array
-    {
-        $selectedModels = array_values(array_unique(array_filter(
-            array_map(fn (mixed $model): string => trim((string) $model), $selectedModels),
-        )));
-
-        if ($selectedModels === [] || count($selectedModels) > self::CUSTOM_MODEL_LIMIT) {
-            throw new BenchmarkRunnerException('OpenCode Go kataloğundan 1–'.self::CUSTOM_MODEL_LIMIT.' model seçin.');
-        }
-
-        $modelsById = OpenCodeGoModel::query()
-            ->whereIn('model_id', $selectedModels)
-            ->where('available', true)
-            ->where('agent_compatible', true)
-            ->get()
-            ->keyBy('model_id');
-
-        if ($modelsById->count() !== count($selectedModels)) {
-            throw new BenchmarkRunnerException('Seçilen OpenCode Go modellerinden biri artık kullanılamıyor veya araç desteği sunmuyor. Kataloğu yenileyin.');
-        }
-
-        $ports = [];
-        $configLines = [
-            '# BenchForge tarafından OpenCode Go kataloğundan oluşturuldu.',
-            '# max_parallel=1',
-        ];
-
-        foreach ($selectedModels as $index => $modelId) {
-            $port = self::CUSTOM_MODEL_PORT_START + $index;
-            $ports[] = $port;
-            $modelSlug = Str::slug($modelId) ?: 'model';
-            $folder = 'go-'.Str::limit($modelSlug, 36, '').'-'.substr(sha1($modelId), 0, 6);
-            $configLines[] = "{$folder}|opencode-go/{$modelId}|{$port}";
-        }
-
-        return [
-            'absolutePath' => null,
-            'reference' => 'custom:opencode-go',
-            'configContents' => implode(PHP_EOL, $configLines).PHP_EOL,
-            'openCodeConfigContents' => null,
-            'option' => [
-                'value' => 'custom:opencode-go',
-                'label' => 'Özel OpenCode Go seçimi',
-                'modelCount' => count($selectedModels),
-                'ports' => $ports,
-                'providers' => ['opencode-go'],
-                'maxParallel' => 1,
-            ],
-        ];
+        return $this->modelSelection->openRouter($selectedModels, $routingMode, $fixedProviders, $refreshProviders);
     }
 
     /** @param array<string, mixed> $config */
@@ -817,37 +675,6 @@ PROMPT;
         @chmod($path, 0600);
 
         return $path;
-    }
-
-    /**
-     * @param  array{absolutePath: ?string, reference: string, configContents: ?string, openCodeConfigContents: ?string, option: array{value: string, label: string, modelCount: int, ports: list<int>, providers: list<string>, maxParallel: int}}  $config
-     * @return array{absolutePath: null, reference: string, configContents: string, openCodeConfigContents: ?string, option: array{value: string, label: string, modelCount: int, ports: list<int>, providers: list<string>, maxParallel: int}}
-     */
-    private function withMaxParallel(array $config, mixed $requestedMaxParallel): array
-    {
-        $maxParallel = filter_var($requestedMaxParallel, FILTER_VALIDATE_INT);
-        $modelCount = $config['option']['modelCount'];
-
-        if ($maxParallel === false || $maxParallel < 1 || $maxParallel > $modelCount) {
-            throw new BenchmarkRunnerException("Eşzamanlılık 1 ile {$modelCount} arasında olmalıdır.");
-        }
-
-        $contents = is_string($config['configContents'])
-            ? $config['configContents']
-            : File::get((string) $config['absolutePath']);
-        $parallelDirective = "# max_parallel={$maxParallel}";
-
-        if (preg_match('/^#\s*max_parallel=\d+$/m', $contents) === 1) {
-            $contents = (string) preg_replace('/^#\s*max_parallel=\d+$/m', $parallelDirective, $contents, 1);
-        } else {
-            $contents = $parallelDirective.PHP_EOL.$contents;
-        }
-
-        $config['absolutePath'] = null;
-        $config['configContents'] = $contents;
-        $config['option']['maxParallel'] = $maxParallel;
-
-        return $config;
     }
 
     /** @param array<string, mixed> $config */
@@ -868,108 +695,6 @@ PROMPT;
         }
 
         return $path;
-    }
-
-    /**
-     * @param  list<array{value: string}>  $options
-     * @return array{absolutePath: string, reference: string, configContents: null, openCodeConfigContents: null, option: array{value: string, label: string, modelCount: int, ports: list<int>, providers: list<string>, maxParallel: int}}
-     */
-    private function resolveConfig(string $selected, array $options): array
-    {
-        if (! collect($options)->contains('value', $selected)) {
-            throw new BenchmarkRunnerException('Listeden geçerli bir model grubu seçin.');
-        }
-
-        return $this->parseConfig(basename($selected));
-    }
-
-    /**
-     * @return array{absolutePath: string, reference: string, configContents: null, openCodeConfigContents: null, option: array{value: string, label: string, modelCount: int, ports: list<int>, providers: list<string>, maxParallel: int}}
-     */
-    private function parseConfig(string $filename): array
-    {
-        $configRoot = realpath($this->projectRoot().'/config');
-        $absolutePath = realpath($this->projectRoot().'/config/'.$filename);
-
-        if ($configRoot === false || $absolutePath === false || ! $this->isWithin($configRoot, $absolutePath)) {
-            throw new BenchmarkRunnerException('Model yapılandırması güvenli dizinin dışında.');
-        }
-
-        $ports = [];
-        $providers = [];
-        $modelCount = 0;
-        $maxParallel = null;
-
-        foreach (preg_split('/\R/', File::get($absolutePath)) ?: [] as $index => $rawLine) {
-            $line = trim($rawLine);
-
-            if (preg_match('/^#\s*max_parallel=(\d+)$/', $line, $matches) === 1) {
-                if ($maxParallel !== null) {
-                    throw new BenchmarkRunnerException("{$filename}:".($index + 1).' max_parallel birden fazla tanımlanamaz.');
-                }
-
-                $maxParallel = (int) $matches[1];
-
-                continue;
-            }
-
-            if ($line === '' || str_starts_with($line, '#')) {
-                continue;
-            }
-
-            $parts = array_map('trim', explode('|', $line));
-
-            if (count($parts) !== 3) {
-                throw new BenchmarkRunnerException("{$filename}:".($index + 1).' geçerli bir model kaydı değil.');
-            }
-
-            [$folder, $model, $rawPort] = $parts;
-            $port = filter_var($rawPort, FILTER_VALIDATE_INT);
-
-            if (
-                preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/', $folder) !== 1
-                || $model === ''
-                || preg_match('/\s/', $model) === 1
-                || $port === false
-                || $port < 1024
-                || $port > 65535
-            ) {
-                throw new BenchmarkRunnerException("{$filename}:".($index + 1).' geçerli bir model kaydı değil.');
-            }
-
-            if (in_array($port, $ports, true)) {
-                throw new BenchmarkRunnerException("{$filename} içinde {$port} portu birden fazla kullanılıyor.");
-            }
-
-            $ports[] = $port;
-            $providers[] = Str::before($model, '/');
-            $modelCount++;
-        }
-
-        if ($modelCount === 0) {
-            throw new BenchmarkRunnerException("{$filename} içinde çalıştırılabilir model bulunamadı.");
-        }
-
-        $maxParallel ??= $modelCount;
-
-        if ($maxParallel < 1 || $maxParallel > $modelCount) {
-            throw new BenchmarkRunnerException("{$filename} içinde max_parallel 1 ile {$modelCount} arasında olmalıdır.");
-        }
-
-        return [
-            'absolutePath' => $absolutePath,
-            'reference' => 'config/'.$filename,
-            'configContents' => null,
-            'openCodeConfigContents' => null,
-            'option' => [
-                'value' => 'config/'.$filename,
-                'label' => $this->titleFromFilename($filename),
-                'modelCount' => $modelCount,
-                'ports' => $ports,
-                'providers' => array_values(array_unique($providers)),
-                'maxParallel' => $maxParallel,
-            ],
-        ];
     }
 
     /**
