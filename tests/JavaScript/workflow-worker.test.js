@@ -15,17 +15,33 @@ const workerPath = join(repositoryRoot, "bin/workflow-worker.mjs");
 const gameTemplatePath = join(repositoryRoot, "engine/workflow-templates/game-idea-factory/v001.json");
 const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/;
 const RUN_ID = "fixture-flow-20261022-183012";
-const ACCOUNT_MESSAGE = "Sağlayıcı hesabı isteği reddetti (401/403). Anahtarı veya aboneliği kontrol edin.";
+const ACCOUNT_MESSAGE = "Sağlayıcı hesabı isteği reddetti (anahtar, abonelik veya kullanım sınırı). Anahtarı, aboneliği ve sınırı kontrol edin.";
 
 // The fake CLI picks the first rule whose `match` substrings all occur in the prompt (and whose `model`
 // occurs in --model); `responses` are used in call order per rule. Every call is recorded next to it.
 // Its command line, and that of the grandchild a hanging call starts, names the fake directory.
 const fakeCliSource = `#!/usr/bin/env node
 import { spawn } from 'node:child_process';
-import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
+if (process.argv[2] === 'api') {
+  const { limits, limitsFailFirst = 0, limitsHang = false } = JSON.parse(readFileSync(join(here, 'behavior.json'), 'utf8'));
+  appendFileSync(join(here, 'lookups.jsonl'), JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd(), home: process.env.HOME, hasConfig: typeof process.env.OPENCODE_CONFIG_CONTENT === 'string' }) + '\\n');
+  if (limitsHang) {
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  } else {
+  let lookup = 0;
+  for (;;) {
+    try { closeSync(openSync(join(here, 'counters', 'api-' + lookup), 'wx')); break; } catch { lookup += 1; }
+  }
+  if (!limits || lookup < limitsFailFirst) process.exit(1);
+  process.stdout.write(JSON.stringify({ location: {}, data: Object.entries(limits).map(([id, limit]) => ({ providerID: id.slice(0, id.indexOf('/')), modelID: id.slice(id.indexOf('/') + 1), limit })) }));
+  process.exit(0);
+  }
+}
 const prompt = await new Promise((resolve) => {
   let input = '';
   process.stdin.setEncoding('utf8');
@@ -79,6 +95,14 @@ if (response.hang) {
     }
     for (const text of [].concat(response.text ?? [])) {
       emit({ type: 'text', messageID: 'm1', part: { id: 'p1', text } });
+    }
+    if (response.outputLimit) {
+      // OpenCode 2.x after three cut-off answers: a length step, its own error event, exit 1.
+      emit({ type: 'step_finish', part: { cost: 0.001, tokens: { input: 10, output: 5 }, reason: 'length' } });
+      emit({ type: 'error', error: { type: 'output-limit', message: 'Response still truncated after two output token limit continuations' } });
+      done();
+      process.exitCode = 1;
+      return;
     }
     if (response.usage !== null) {
       emit({ type: 'step_finish', part: response.finish ?? { cost: 0.001, tokens: { input: 10, output: 5 }, reason: 'stop' } });
@@ -168,7 +192,14 @@ async function killFakeCliProcesses(directories) {
   }
 }
 
-async function fixture({ template, inputs = {}, models = 1, rules = [], settings = {}, testing = {} }) {
+// What the fake CLI reports for `opencode api GET /api/model`: the real token limits of every fixture model.
+const MODEL_LIMITS = {
+  "openrouter/fixture/alpha:free": { context: 262144, output: 64000 },
+  "openrouter/fixture/beta": { context: 1000000, output: 128000 },
+  "opencode-go/gamma": { context: 200000, output: 16000 },
+};
+
+async function fixture({ template, inputs = {}, models = 1, rules = [], settings = {}, testing = {}, limits = MODEL_LIMITS, behavior = {} }) {
   const base = await realpath(await mkdtemp(join(tmpdir(), "benchforge-workflow-worker-")));
   const fakeDirectory = join(base, "fake");
   const cliPath = join(fakeDirectory, "opencode.mjs");
@@ -178,7 +209,7 @@ async function fixture({ template, inputs = {}, models = 1, rules = [], settings
   fakeDirectories.add(fakeDirectory);
   await writeFile(cliPath, fakeCliSource, { mode: 0o700 });
   await chmod(cliPath, 0o700);
-  await writeFile(join(fakeDirectory, "behavior.json"), JSON.stringify({ rules }));
+  await writeFile(join(fakeDirectory, "behavior.json"), JSON.stringify({ rules, limits, ...behavior }));
 
   const runDirectory = join(base, "workflow-runs", RUN_ID);
   await mkdir(runDirectory, { recursive: true });
@@ -270,6 +301,20 @@ function isAlive(pid) {
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, "utf8"));
+}
+
+/** The `limit` the call's OpenCode configuration gives `model`, or undefined when the call leaves the model's own. */
+function configuredLimit(call, model) {
+  const slash = model.indexOf("/");
+  return JSON.parse(call.env.OPENCODE_CONFIG_CONTENT).provider?.[model.slice(0, slash)]?.models?.[model.slice(slash + 1)]?.limit;
+}
+
+async function lookups(fakeDirectory) {
+  try {
+    return (await readFile(join(fakeDirectory, "lookups.jsonl"), "utf8")).trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  } catch {
+    return [];
+  }
 }
 
 async function calls(fakeDirectory) {
@@ -394,7 +439,7 @@ test("runs the Game Idea Factory template end to end for two models", async () =
       assert.equal(modelCalls.length, callCount);
       for (const call of modelCalls) {
         const workspace = join(runDirectory, "models", model.slug, "workspace");
-        assert.deepEqual(call.args.slice(0, 10), ["run", "--pure", "--format", "json", "--agent", "benchforge-workflow", "--model", model.model, "--dir", workspace]);
+        assert.deepEqual(call.args.slice(0, 8), ["run", "--standalone", "--format", "json", "--agent", "benchforge-workflow", "--model", model.model]);
         assert.equal(call.cwd, workspace);
         assert.equal(call.env.HOME, join(runDirectory, "models", model.slug, ".benchforge-home"));
         assert.equal(call.env.OPENCODE_CONFIG, join(runDirectory, "models", model.slug, "opencode.json"));
@@ -410,12 +455,13 @@ test("runs the Game Idea Factory template end to end for two models", async () =
     assert.ok(titlesOfAlpha.includes(`benchforge:workflow:${RUN_ID}:${alpha.slug}:build:003:2`));
 
     const generateCall = observed.find((call) => titleOf(call) === `benchforge:workflow:${RUN_ID}:${alpha.slug}:generate:002:1`);
-    assert.equal(generateCall.env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX, "32000");
+    assert.equal(generateCall.environmentKeys.includes("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX"), false);
+    assert.deepEqual(configuredLimit(generateCall, alpha.model), { context: 262144, output: 32000 });
     assert.match(generateCall.prompt, /DO NOT REPEAT \(ideas from earlier categories; empty for the first category\):\n- Existing Idea\n/);
     assert.match(generateCall.prompt, /Write exactly 1 game ideas for this category\./);
     assert.ok(generateCall.prompt.includes("\n\nOUTPUT FORMAT (mandatory):\n"));
     const buildCall = observed.find((call) => titleOf(call) === `benchforge:workflow:${RUN_ID}:${beta.slug}:build:001:1`);
-    assert.equal(buildCall.env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX, "100000");
+    assert.deepEqual(configuredLimit(buildCall, beta.model), { context: 1000000, output: 100000 });
     assert.ok(buildCall.prompt.includes("TITLE: Existing Idea\n"));
     const scoreCall = observed.find((call) => titleOf(call) === `benchforge:workflow:${RUN_ID}:${beta.slug}:score:-:1`);
     for (const title of titles) assert.ok(scoreCall.prompt.includes(`"title": "${title}"`));
@@ -534,6 +580,159 @@ test("accepts an optional input left empty and renders it as empty text", async 
   }
 });
 
+test("reads each model's real token limits once and caps a step only below the model's own limit", async () => {
+  const { base, fakeDirectory, runDirectory, jobPath, models, statePath } = await fixture({
+    template: flowTemplate([
+      textStep("small", "Small step.", { maxOutputTokens: 4000 }),
+      textStep("large", "Large step.", { maxOutputTokens: 150000 }),
+      textStep("exact", "Exact step.", { maxOutputTokens: 64000 }),
+    ]),
+    models: 2,
+    rules: [{ match: "step.", response: { text: "done" } }],
+  });
+  try {
+    const exit = await waitForExit(launch(jobPath));
+    const observed = await calls(fakeDirectory);
+    const lookedUp = await lookups(fakeDirectory);
+    const [alpha, beta] = models;
+    const limitOf = (model, step) => configuredLimit(observed.find((call) => call.model === model.model && call.prompt.startsWith(step)), model.model);
+
+    assert.deepEqual(exit, { code: 0, signal: null });
+    assert.equal((await readJson(statePath)).status, "completed");
+    assert.equal(observed.length, 6);
+    assert.equal(lookedUp.length, 2);
+    assert.deepEqual(lookedUp[0].args, ["api", "--standalone", "GET", "/api/model"]);
+    assert.ok(lookedUp.every((lookup) => lookup.home.endsWith("/.benchforge-home")));
+    assert.deepEqual(limitOf(alpha, "Small"), { context: 262144, output: 4000 });
+    assert.equal(limitOf(alpha, "Large"), undefined);
+    assert.equal(limitOf(alpha, "Exact"), undefined);
+    assert.deepEqual(limitOf(beta, "Small"), { context: 1000000, output: 4000 });
+    assert.equal(limitOf(beta, "Large"), undefined);
+    assert.deepEqual(limitOf(beta, "Exact"), { context: 1000000, output: 64000 });
+    assert.equal((await events(runDirectory)).some((event) => event.type === "output_limit_unknown"), false);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("runs with the model's own limit and says so once when OpenCode cannot report it", async () => {
+  const { base, fakeDirectory, runDirectory, jobPath, models, statePath } = await fixture({
+    template: flowTemplate([textStep("one", "First step.", { maxOutputTokens: 4000 }), textStep("two", "Second step.", { maxOutputTokens: 4000 })]),
+    models: 2,
+    rules: [{ match: "step.", response: { text: "done" } }],
+    limits: null,
+  });
+  try {
+    const exit = await waitForExit(launch(jobPath));
+    const observed = await calls(fakeDirectory);
+    const unknown = (await events(runDirectory)).filter((event) => event.type === "output_limit_unknown");
+
+    assert.deepEqual(exit, { code: 0, signal: null });
+    assert.equal((await readJson(statePath)).status, "completed");
+    assert.equal(observed.length, 4);
+    assert.equal((await lookups(fakeDirectory)).length, 6);
+    assert.ok(observed.every((call) => configuredLimit(call, call.model) === undefined));
+    assert.deepEqual(unknown.map((event) => event.model).sort(), models.map((model) => model.slug).sort());
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("tries a failed limit lookup again, because starting OpenCode processes together sometimes fails", async () => {
+  const { base, fakeDirectory, runDirectory, jobPath, statePath } = await fixture({
+    template: flowTemplate([textStep("write", "Write it.", { maxOutputTokens: 4000 })]),
+    rules: [{ match: "Write it.", response: { text: "done" } }],
+    behavior: { limitsFailFirst: 2 },
+  });
+  try {
+    const exit = await waitForExit(launch(jobPath));
+    const [call] = await calls(fakeDirectory);
+
+    assert.deepEqual(exit, { code: 0, signal: null });
+    assert.equal((await readJson(statePath)).status, "completed");
+    assert.equal((await lookups(fakeDirectory)).length, 3);
+    assert.deepEqual(configuredLimit(call, call.model), { context: 262144, output: 4000 });
+    assert.equal((await events(runDirectory)).some((event) => event.type === "output_limit_unknown"), false);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("ends at once on SIGTERM while a model limit lookup hangs, without starting a model call", async () => {
+  const { base, fakeDirectory, jobPath, statePath } = await fixture({
+    template: flowTemplate([textStep("write", "Write it.")]),
+    rules: [{ match: "Write it.", response: { text: "done" } }],
+    behavior: { limitsHang: true },
+  });
+  try {
+    const child = launch(jobPath);
+    await waitFor(async () => (await lookups(fakeDirectory)).length > 0 || null);
+    const signalled = Date.now();
+    child.kill("SIGTERM");
+    const exit = await waitForExit(child, 10000);
+    const state = await readJson(statePath);
+
+    assert.deepEqual(exit, { code: 0, signal: null });
+    assert.ok(Date.now() - signalled < 8000, `stopping took ${Date.now() - signalled} ms`);
+    assert.equal(state.status, "stopped");
+    assert.equal((await calls(fakeDirectory)).length, 0);
+    assert.equal(state.models[models0Slug(state)].steps.write.status, "stopped");
+    for (const pid of await spawnedPids(fakeDirectory)) await waitFor(() => !isAlive(pid), 3000);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+function models0Slug(state) {
+  return Object.keys(state.models)[0];
+}
+
+test("sends a demo that OpenCode 2.x gave up on after three cut-offs to the static checks and a repair", async () => {
+  const goodHtml = demoHtml("pointerdown");
+  const { base, fakeDirectory, runDirectory, jobPath, models, statePath } = await fixture({
+    template: flowTemplate([{ id: "build", type: "code_text", title: "Demo", prompt: "Build a demo." }]),
+    rules: [
+      { match: "YOUR PREVIOUS ANSWER HAD THESE PROBLEMS", response: { text: fenced("html", goodHtml) } },
+      { match: "Build a demo.", response: { text: fenced("html", goodHtml), outputLimit: true } },
+    ],
+  });
+  const stepDirectory = join(runDirectory, "models", models[0].slug, "steps", "build");
+  try {
+    const exit = await waitForExit(launch(jobPath));
+    const build = await readJson(join(stepDirectory, "result.json"));
+
+    assert.deepEqual(exit, { code: 0, signal: null });
+    assert.equal((await readJson(statePath)).status, "completed");
+    assert.equal((await calls(fakeDirectory)).length, 2);
+    assert.deepEqual(build.attempts.map((attempt) => [attempt.kind, attempt.status, attempt.stopReason]), [
+      ["initial", "failed", "length"], ["repair", "completed", "stop"],
+    ]);
+    assert.deepEqual((await readJson(join(stepDirectory, "attempt-1/checks.json"))).critical.map((issue) => issue.code), ["output-limit"]);
+    assert.ok((await readFile(join(stepDirectory, "attempt-2/prompt.txt"), "utf8")).includes("Your answer was cut off. Write a smaller version that fits.\n"));
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("retries a text step after OpenCode 2.x gave up on a cut-off answer, and rejects the cut-off text", async () => {
+  const { base, runDirectory, jobPath, models, statePath } = await fixture({
+    template: flowTemplate([textStep("write", "Write the report.")]),
+    rules: [{ match: "Write the report.", responses: [{ text: "The report starts and is cut", outputLimit: true }, { text: "The complete report." }] }],
+  });
+  try {
+    const exit = await waitForExit(launch(jobPath));
+    const result = await readJson(join(runDirectory, "models", models[0].slug, "steps/write/result.json"));
+
+    assert.deepEqual(exit, { code: 0, signal: null });
+    assert.equal((await readJson(statePath)).status, "completed");
+    assert.deepEqual(result.attempts.map((attempt) => [attempt.status, attempt.stopReason]), [["failed", "length"], ["completed", "stop"]]);
+    assert.equal(result.attempts[0].error, "Çıktı token sınırına ulaşıldı; yanıt kesildi.");
+    assert.equal(result.output, "The complete report.");
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
 test("waits after a rate limit without spending a content attempt and keeps unknown usage unknown", async () => {
   const { base, runDirectory, jobPath, models, statePath } = await fixture({
     template: flowTemplate([textStep("write", "Write a haiku.", { retry: { attempts: 1 } })]),
@@ -623,6 +822,33 @@ test("fails only the model the provider no longer serves", async () => {
     assert.equal(state.models[beta.slug].status, "completed");
     const secondCall = (await calls(fakeDirectory)).find((call) => call.prompt.startsWith("Second task"));
     assert.equal(secondCall.prompt, "Second task using first answer.");
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("fails only the model whose own spend limit is used up", async () => {
+  const { base, fakeDirectory, jobPath, models, statePath } = await fixture({
+    template: flowTemplate([textStep("first", "First task."), textStep("second", "Second task using {{steps.first.output}}.")]),
+    models: 2,
+    rules: [
+      { match: "First task.", model: "alpha", response: { error: { type: "provider.model-budget-limit", status: 429, message: "You've reached the spend limit for this model. Switch models to keep going." } } },
+      { match: "First task.", response: { text: "first answer" } },
+      { match: "Second task", response: { text: "second answer" } },
+    ],
+  });
+  try {
+    const exit = await waitForExit(launch(jobPath));
+    const state = await readJson(statePath);
+    const [alpha, beta] = models;
+
+    assert.deepEqual(exit, { code: 0, signal: null });
+    assert.equal(state.status, "partial");
+    assert.equal(state.models[alpha.slug].status, "failed");
+    assert.equal(state.models[alpha.slug].message, "Bu model için harcama sınırı doldu.");
+    assert.equal(state.models[alpha.slug].steps.second.status, "pending");
+    assert.equal(state.models[beta.slug].status, "completed");
+    assert.equal((await calls(fakeDirectory)).filter((call) => call.model === alpha.model).length, 1);
   } finally {
     await rm(base, { recursive: true, force: true });
   }

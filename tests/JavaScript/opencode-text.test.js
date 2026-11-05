@@ -6,11 +6,33 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
 const modulePath = join(dirname(fileURLToPath(import.meta.url)), "../../bin/opencode-text.mjs");
-const { assertRestrictedConfig, defaultDescribeError, runOpenCodeText, textModelEnvironment } = await import(pathToFileURL(modulePath));
+const {
+  LIMIT_MESSAGE, OUTPUT_LIMIT_MESSAGE, STARTUP_RETRY_DELAYS_MS, assertRestrictedConfig, defaultDescribeError, lookupModelLimit, modelLimitFrom, runOpenCodeText, textModelEnvironment, withOutputCap,
+} = await import(pathToFileURL(modulePath));
 
 const fakeCliSource = `#!/usr/bin/env node
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
+if (process.argv[2] === 'api') {
+  const apiBehavior = JSON.parse(readFileSync('behavior.json', 'utf8'));
+  writeFileSync('api-observed.json', JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd(), home: process.env.HOME, configPath: process.env.OPENCODE_CONFIG, hasContent: typeof process.env.OPENCODE_CONFIG_CONTENT === 'string' }));
+  let started = 0;
+  try { started = Number(readFileSync('api-count', 'utf8')); } catch {}
+  writeFileSync('api-count', String(started + 1));
+  if (apiBehavior.apiHang) {
+    if (apiBehavior.apiGrandchild) {
+      const grandchild = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+      writeFileSync('api-grandchild.pid', String(grandchild.pid));
+    }
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  } else if (started < (apiBehavior.apiFailFirst ?? 0)) {
+    process.exit(1);
+  } else {
+    process.stdout.write(apiBehavior.apiOutput ?? '');
+    process.exit(apiBehavior.apiExitCode ?? 0);
+  }
+}
 const prompt = await new Promise((resolve) => {
   let input = '';
   process.stdin.setEncoding('utf8');
@@ -24,11 +46,18 @@ writeFileSync('observed.json', JSON.stringify({
   cwd: process.cwd(),
   home: process.env.HOME,
   configPath: process.env.OPENCODE_CONFIG,
-  outputTokenMax: process.env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX,
+  extra: process.env.BENCHFORGE_FIXTURE_EXTRA,
   environmentKeys: Object.keys(process.env),
 }));
 const emit = (value) => process.stdout.write(JSON.stringify(value) + '\\n');
 await new Promise((resolve) => setTimeout(resolve, behavior.delayMs ?? 0));
+let runs = 0;
+try { runs = Number(readFileSync('run-count', 'utf8')); } catch {}
+writeFileSync('run-count', String(runs + 1));
+if (runs < (behavior.startupFailFirst ?? 0)) {
+  emit({ type: 'error', sessionID: '', error: { type: 'unknown', message: 'Standalone server exited before reporting readiness' } });
+  process.exit(1);
+}
 if (behavior.mode === 'success') {
   emit({ type: 'step_start', sessionID: 'not a session id', part: { type: 'step-start' } });
   emit({ type: 'text', sessionID: 'ses_fixture_A1', part: { id: 'p1', text: 'draft' } });
@@ -46,6 +75,7 @@ if (behavior.mode === 'success') {
   setInterval(() => {}, 1000);
 } else if (behavior.mode === 'events') {
   for (const event of behavior.events) emit(event);
+  if (behavior.exitCode) process.exitCode = behavior.exitCode;
 } else if (behavior.mode === 'hang') {
   const grandchild = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], { stdio: 'ignore' });
   writeFileSync('grandchild.pid', String(grandchild.pid));
@@ -141,7 +171,7 @@ test("passes the title after the fixed arguments and extra environment to the CL
     const result = await runOpenCodeText({
       ...options,
       title,
-      extraEnv: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: 32000 },
+      extraEnv: { BENCHFORGE_FIXTURE_EXTRA: 32000 },
       onText: (text) => texts.push(text),
     });
     const seen = await observed(directory);
@@ -150,14 +180,14 @@ test("passes the title after the fixed arguments and extra environment to the CL
     assert.equal(result.text, "ready text");
     assert.equal(result.errorMessage, null);
     assert.deepEqual(seen.args, [
-      "run", "--pure", "--format", "json", "--agent", "benchforge-workflow",
-      "--model", "openrouter/fixture/model-1", "--dir", directory, "--title", title,
+      "run", "--standalone", "--format", "json", "--agent", "benchforge-workflow",
+      "--model", "openrouter/fixture/model-1", "--title", title,
     ]);
     assert.equal(seen.prompt, "Write one sentence.\n");
     assert.equal(seen.cwd, await realpath(directory));
     assert.equal(seen.home, privateHome);
     assert.equal(seen.configPath, options.configPath);
-    assert.equal(seen.outputTokenMax, "32000");
+    assert.equal(seen.extra, "32000");
     assert.deepEqual(texts, ["draft", "ready text"]);
     assert.equal(result.costUsd, 0.002);
     assert.equal(result.inputTokens, 7);
@@ -183,10 +213,10 @@ test("adds no title or extra environment unless the caller asks for them", async
 
     assert.equal(result.status, "completed");
     assert.deepEqual(seen.args, [
-      "run", "--pure", "--format", "json", "--agent", "benchforge-workflow",
-      "--model", "openrouter/fixture/model-1", "--dir", directory,
+      "run", "--standalone", "--format", "json", "--agent", "benchforge-workflow",
+      "--model", "openrouter/fixture/model-1",
     ]);
-    assert.ok(!seen.environmentKeys.includes("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX"));
+    assert.ok(!seen.environmentKeys.includes("BENCHFORGE_FIXTURE_EXTRA"));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -314,10 +344,219 @@ test("stops at once when a stop was requested before the call started", async ()
   }
 });
 
+const step = (type, part = {}) => ({ type, sessionID: "ses_fixture_cut", part });
+const cutOffStep = (text, reason) => [step("step_start"), step("text", { id: `p-${text}`, text }), step("step_finish", { cost: 0.001, tokens: { input: 10, output: 5 }, reason })];
+
+test("reports a response that OpenCode 2.x continued after a cut-off as cut off", async () => {
+  const events = [...cutOffStep("The report starts and is cut", "length"), ...cutOffStep("off here and goes on.", "stop")];
+  const { root, options } = await fixture({ mode: "events", events });
+  try {
+    const result = await runOpenCodeText(options);
+
+    assert.equal(result.status, "completed");
+    assert.equal(result.stopReason, "length");
+    assert.equal(result.text, "The report starts and is cut\noff here and goes on.");
+    assert.equal(result.outputTokens, 10);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("keeps an ordinary stop as it is", async () => {
+  const { root, options } = await fixture({ mode: "events", events: cutOffStep("A complete answer.", "stop") });
+  try {
+    assert.equal((await runOpenCodeText(options)).stopReason, "stop");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("reports OpenCode 2.x's output-limit error as a cut-off answer, not as a provider error or an abort", async () => {
+  // The order OpenCode 2.2.5 wrote: the error comes before the events of the third cut-off step.
+  const events = [
+    ...cutOffStep("cut one", "length"),
+    ...cutOffStep("cut two", "length"),
+    { type: "error", sessionID: "ses_fixture_cut", error: { type: "output-limit", message: "Response still truncated after two output token limit continuations" } },
+    ...cutOffStep("cut three", "length"),
+  ];
+  const { root, options } = await fixture({ mode: "events", events, exitCode: 1 });
+  try {
+    const result = await runOpenCodeText(options);
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.stopReason, "length");
+    assert.equal(result.abortReason, null);
+    assert.equal(result.errorEvent, null);
+    assert.equal(result.errorMessage, OUTPUT_LIMIT_MESSAGE);
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.outputTokens, 15);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("still aborts on another error event", async () => {
+  const events = [{ type: "error", sessionID: "ses_fixture_cut", error: { type: "provider.auth", message: "User not found.", status: 401 } }];
+  const { root, options } = await fixture({ mode: "events", events, exitCode: 1 });
+  try {
+    const result = await runOpenCodeText(options);
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.abortReason, "cli-error");
+    assert.notEqual(result.stopReason, "length");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+const modelList = (...models) => JSON.stringify({ location: { directory: "/workspace" }, data: models });
+const listedModel = (providerID, modelID, limit) => ({ id: modelID, modelID, providerID, type: "chat", limit });
+
+test("reads a model's real token limits from the OpenCode model list", () => {
+  const list = modelList(
+    listedModel("openrouter", "google/gemma-4-26b-a4b-it", { context: 262144, output: 32768 }),
+    listedModel("opencode-go", "hy4", { context: 1048576, input: 983010, output: 65536 }),
+    listedModel("openrouter", "no/output", { context: 1000 }),
+  );
+
+  assert.deepEqual(modelLimitFrom(list, "openrouter/google/gemma-4-26b-a4b-it"), { context: 262144, output: 32768 });
+  assert.deepEqual(modelLimitFrom(list, "opencode-go/hy4"), { context: 1048576, output: 65536, input: 983010 });
+  assert.equal(modelLimitFrom(list, "openrouter/no/output"), null);
+  assert.equal(modelLimitFrom(modelList(listedModel("openrouter", "no/context", { output: 1000 })), "openrouter/no/context"), null);
+  assert.equal(modelLimitFrom(modelList(listedModel("openrouter", "zero/limit", { context: 0, output: 0 })), "openrouter/zero/limit"), null);
+  assert.equal(modelLimitFrom(modelList(listedModel("openrouter", "no/limit", undefined)), "openrouter/no/limit"), null);
+  assert.equal(modelLimitFrom(list, "openrouter/unlisted"), null);
+  assert.equal(modelLimitFrom(list, "opencode-go/google/gemma-4-26b-a4b-it"), null);
+  assert.equal(modelLimitFrom(list, "no-slash"), null);
+  assert.equal(modelLimitFrom("not json", "openrouter/x"), null);
+  assert.equal(modelLimitFrom(JSON.stringify({ data: "no" }), "openrouter/x"), null);
+});
+
+test("limits the answer to a cap below the model's own limit, keeping routing and the model's other limits", () => {
+  const config = JSON.stringify({
+    ...restrictiveConfig(),
+    provider: { openrouter: { models: { "google/gemma-4-26b-a4b-it": { options: { provider: { order: ["x/fp8"], allow_fallbacks: false } } } } } },
+  });
+  const limit = { context: 262144, output: 32768, input: 200000 };
+  const capped = JSON.parse(withOutputCap(config, "openrouter/google/gemma-4-26b-a4b-it", limit, 8000));
+
+  assert.deepEqual(capped.provider.openrouter.models["google/gemma-4-26b-a4b-it"], {
+    options: { provider: { order: ["x/fp8"], allow_fallbacks: false } },
+    limit: { context: 262144, output: 8000, input: 200000 },
+  });
+  assert.deepEqual(capped.agent, JSON.parse(config).agent);
+
+  const added = JSON.parse(withOutputCap(JSON.stringify(restrictiveConfig()), "opencode-go/hy4", { context: 1048576, output: 65536 }, 4000));
+  assert.deepEqual(added.provider["opencode-go"].models.hy4, { limit: { context: 1048576, output: 4000 } });
+});
+
+test("leaves the configuration alone when the cap is not below the model's limit or the limit is unknown", () => {
+  const config = JSON.stringify(restrictiveConfig());
+  const limit = { context: 262144, output: 32768 };
+
+  assert.equal(withOutputCap(config, "openrouter/x/y", limit, 32768), config);
+  assert.equal(withOutputCap(config, "openrouter/x/y", limit, 100000), config);
+  assert.equal(withOutputCap(config, "openrouter/x/y", null, 4000), config);
+  assert.equal(withOutputCap(config, "openrouter/x/y", limit, 0), config);
+  assert.equal(withOutputCap(config, "no-slash", limit, 4000), config);
+});
+
+test("looks a model's limit up with the call environment, and gives null when OpenCode cannot answer", async () => {
+  const good = await fixture({ mode: "success", apiOutput: modelList(listedModel("openrouter", "fixture/model-1", { context: 128000, output: 16000 })) });
+  const failing = await fixture({ mode: "success", apiOutput: "{}", apiExitCode: 1 });
+  const garbage = await fixture({ mode: "success", apiOutput: "<html>" });
+  const hanging = await fixture({ mode: "success", apiHang: true });
+  try {
+    assert.deepEqual(await lookupModelLimit(good.options), { context: 128000, output: 16000 });
+    const seen = JSON.parse(await readFile(join(good.directory, "api-observed.json"), "utf8"));
+    assert.deepEqual(seen.args, ["api", "--standalone", "GET", "/api/model"]);
+    assert.equal(seen.cwd, await realpath(good.directory));
+    assert.equal(seen.home, good.privateHome);
+    assert.equal(seen.configPath, good.options.configPath);
+    assert.equal(seen.hasContent, true);
+
+    assert.equal(await lookupModelLimit(failing.options), null);
+    assert.equal(await lookupModelLimit(garbage.options), null);
+    assert.equal(await lookupModelLimit({ ...good.options, model: "unlisted/model" }), null);
+    assert.equal(await lookupModelLimit({ ...good.options, model: "no-slash" }), null);
+    assert.equal(await lookupModelLimit({ ...good.options, privateHome: "relative/home" }), null);
+    assert.equal(await lookupModelLimit({ ...good.options, opencodeBinary: join(good.root, "missing") }), null);
+
+    const started = Date.now();
+    assert.equal(await lookupModelLimit({ ...hanging.options, timeoutSeconds: 0.3, stopGraceMs: 200 }), null);
+    assert.ok(Date.now() - started < 4000);
+  } finally {
+    await Promise.all([good, failing, garbage, hanging].map(({ root }) => rm(root, { recursive: true, force: true })));
+  }
+});
+
+async function apiCount(directory) {
+  return Number(await readFile(join(directory, "api-count"), "utf8"));
+}
+
+test("tries a lookup again only when the OpenCode process itself failed, and gives up after the last wait", async () => {
+  const flaky = await fixture({ mode: "success", apiFailFirst: 1, apiOutput: modelList(listedModel("openrouter", "fixture/model-1", { context: 128000, output: 16000 })) });
+  const broken = await fixture({ mode: "success", apiFailFirst: 9, apiOutput: "{}" });
+  const hanging = await fixture({ mode: "success", apiHang: true });
+  const unlisted = await fixture({ mode: "success", apiOutput: modelList() });
+  try {
+    assert.deepEqual(await lookupModelLimit({ ...flaky.options, retryDelaysMs: [10, 10] }), { context: 128000, output: 16000 });
+    assert.equal(await apiCount(flaky.directory), 2);
+
+    assert.equal(await lookupModelLimit({ ...broken.options, retryDelaysMs: [10, 10] }), null);
+    assert.equal(await apiCount(broken.directory), 3);
+
+    // The timeout must outlast the start-up of the fake CLI on a loaded machine.
+    assert.equal(await lookupModelLimit({ ...hanging.options, timeoutSeconds: 2, stopGraceMs: 100, retryDelaysMs: [10, 10] }), null);
+    assert.equal(await apiCount(hanging.directory), 1);
+
+    assert.equal(await lookupModelLimit({ ...unlisted.options, retryDelaysMs: [10, 10] }), null);
+    assert.equal(await apiCount(unlisted.directory), 1);
+  } finally {
+    await Promise.all([flaky, broken, hanging, unlisted].map(({ root }) => rm(root, { recursive: true, force: true })));
+  }
+});
+
+test("stops a lookup at once when its signal aborts, and never starts one that is already aborted", async () => {
+  const { root, directory, options } = await fixture({ mode: "success", apiHang: true });
+  try {
+    const controller = new AbortController();
+    const lookup = lookupModelLimit({ ...options, timeoutSeconds: 30, stopGraceMs: 200, signal: controller.signal });
+    await waitFor(() => readFile(join(directory, "api-count"), "utf8"));
+    const aborted = Date.now();
+    controller.abort();
+
+    assert.equal(await lookup, null);
+    assert.ok(Date.now() - aborted < 3000, `abort took ${Date.now() - aborted} ms`);
+    assert.equal(await apiCount(directory), 1);
+
+    assert.equal(await lookupModelLimit({ ...options, signal: AbortSignal.abort() }), null);
+    assert.equal(await apiCount(directory), 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("kills what a stopped lookup left behind, even a child that ignores SIGTERM", async () => {
+  const { root, directory, options } = await fixture({ mode: "success", apiHang: true, apiGrandchild: true });
+  try {
+    const controller = new AbortController();
+    const lookup = lookupModelLimit({ ...options, timeoutSeconds: 30, stopGraceMs: 200, signal: controller.signal });
+    // Stop it only once the fake CLI has started its grandchild, however slow the machine is.
+    const grandchildPid = Number(await waitFor(() => readFile(join(directory, "api-grandchild.pid"), "utf8")));
+    controller.abort();
+
+    assert.equal(await lookup, null);
+    await waitFor(() => !isAlive(grandchildPid), 3000);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("refuses extra environment that would replace the isolation settings", async () => {
   const { root, directory, privateHome, options } = await fixture({ mode: "success" });
   try {
-    for (const key of ["HOME", "OPENCODE_PERMISSION", "OPENCODE_CONFIG_CONTENT", "OPENCODE_DISABLE_SHARE"]) {
+    for (const key of ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_DISABLE_PROJECT_CONFIG", "OPENCODE_DISABLE_MODELS_FETCH"]) {
       await assert.rejects(runOpenCodeText({ ...options, extraEnv: { [key]: "override" } }), /may not replace/);
     }
     await assert.rejects(readFile(join(directory, "observed.json"), "utf8"), { code: "ENOENT" });
@@ -326,12 +565,20 @@ test("refuses extra environment that would replace the isolation settings", asyn
       privateHome,
       configPath: options.configPath,
       configContent: options.configContent,
-      extra: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: 1000 },
+      extra: { BENCHFORGE_FIXTURE_EXTRA: 1000 },
     });
     assert.equal(environment.HOME, privateHome);
-    assert.equal(environment.OPENCODE_PERMISSION, "");
-    assert.equal(Object.keys(environment).at(-1), "OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX");
-    assert.equal(environment.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX, "1000");
+    assert.equal(environment.OPENCODE_CONFIG_DIR, "");
+    assert.equal(environment.OPENCODE_DISABLE_PROJECT_CONFIG, "1");
+    assert.equal(Object.keys(environment).at(-1), "BENCHFORGE_FIXTURE_EXTRA");
+    assert.equal(environment.BENCHFORGE_FIXTURE_EXTRA, "1000");
+    // OpenCode 2.x has none of these switches; the restricted config and the private HOME replace them.
+    for (const name of [
+      "OPENCODE_PURE", "OPENCODE_PERMISSION", "OPENCODE_TUI_CONFIG", "OPENCODE_DISABLE_DEFAULT_PLUGINS", "OPENCODE_DISABLE_EXTERNAL_SKILLS",
+      "OPENCODE_DISABLE_LSP_DOWNLOAD", "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT", "OPENCODE_DISABLE_SHARE", "OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX",
+    ]) {
+      assert.equal(name in environment, false, name);
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -478,6 +725,120 @@ test("describes a privacy or data policy refusal of the model in Turkish", () =>
   );
   assert.equal(
     defaultDescribeError({ type: "error", error: { name: "APIError", data: { statusCode: 401, message: "Invalid key" } } }),
-    "Sağlayıcı hesabı isteği reddetti (401/403). Anahtarı veya aboneliği kontrol edin.",
+    "Sağlayıcı hesabı isteği reddetti (anahtar, abonelik veya kullanım sınırı). Anahtarı, aboneliği ve sınırı kontrol edin.",
   );
+});
+
+const runCount = async (directory) => Number(await readFile(join(directory, "run-count"), "utf8"));
+const STARTUP_MESSAGE = "OpenCode başlatılamadı (geçici bir başlatma hatası).";
+
+test("runs a call again when its OpenCode server did not start, and returns the later answer", async () => {
+  const { root, directory, options } = await fixture({ mode: "success", startupFailFirst: 2 });
+  try {
+    const result = await runOpenCodeText({ ...options, startupRetryDelaysMs: [0, 0, 0] });
+
+    assert.equal(result.status, "completed");
+    assert.equal(result.text, "ready text");
+    assert.equal(result.errorEvent, null);
+    assert.equal(result.errorMessage, null);
+    assert.equal(await runCount(directory), 3);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("returns the startup failure like any other failure after the last new try", async () => {
+  const { root, directory, options } = await fixture({ mode: "success", startupFailFirst: 9 });
+  try {
+    const result = await runOpenCodeText({ ...options, startupRetryDelaysMs: [0, 0] });
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.errorMessage, STARTUP_MESSAGE);
+    assert.equal(result.errorEvent.error.message, "Standalone server exited before reporting readiness");
+    assert.equal(result.sessionId, null);
+    assert.equal(await runCount(directory), 3);
+    assert.equal(defaultDescribeError(result.errorEvent), STARTUP_MESSAGE);
+    assert.deepEqual([...STARTUP_RETRY_DELAYS_MS], [300, 900, 2000]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("does not run a call again for any other failure", async () => {
+  for (const behavior of [{ mode: "error" }, { mode: "exit-code" }]) {
+    const { root, directory, options } = await fixture(behavior);
+    try {
+      const result = await runOpenCodeText({ ...options, startupRetryDelaysMs: [0, 0, 0] });
+
+      assert.equal(result.status, "failed");
+      assert.equal(await runCount(directory), 1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("does not run a call again once the model has been asked: the error event has a session", async () => {
+  const startupWithSession = { type: "error", sessionID: "ses_fixture_started", error: { type: "unknown", message: "Standalone server exited before reporting readiness" } };
+  const { root, directory, options } = await fixture({ mode: "events", events: [startupWithSession], exitCode: 1 });
+  try {
+    const result = await runOpenCodeText({ ...options, startupRetryDelaysMs: [0, 0, 0] });
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.sessionId, "ses_fixture_started");
+    assert.equal(await runCount(directory), 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a stop that arrives while waiting for a new try ends the call as stopped, without starting another process", async () => {
+  const { root, directory, options } = await fixture({ mode: "success", startupFailFirst: 9 });
+  try {
+    let stopRequested = false;
+    const result = await runOpenCodeText({
+      ...options,
+      startupRetryDelaysMs: [300, 300, 300],
+      isStopRequested: () => stopRequested,
+      // The first try has failed by now; the stop request comes during the wait that follows.
+      onHandle: (handle) => {
+        if (handle === null) setTimeout(() => { stopRequested = true; }, 30);
+      },
+    });
+
+    assert.equal(result.status, "stopped");
+    assert.equal(result.errorMessage, "Kullanıcı tarafından durduruldu.");
+    assert.equal(await runCount(directory), 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an aborted signal wakes the wait for a new try at once", async () => {
+  const { root, directory, options } = await fixture({ mode: "success", startupFailFirst: 9 });
+  try {
+    const controller = new AbortController();
+    const started = Date.now();
+    const result = await runOpenCodeText({
+      ...options,
+      startupRetryDelaysMs: [20_000],
+      signal: controller.signal,
+      onHandle: (handle) => {
+        if (handle === null) setTimeout(() => controller.abort(), 30);
+      },
+    });
+
+    assert.equal(result.status, "stopped");
+    assert.ok(Date.now() - started < 10_000, `the wait took ${Date.now() - started} ms`);
+    assert.equal(await runCount(directory), 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("describes a spent model spend limit apart from the account errors", () => {
+  const limit = { type: "error", sessionID: "ses_fixture", status: 429, error: { type: "provider.model-budget-limit", message: "You've reached the spend limit for this model. Switch models to keep going.", status: 429 } };
+
+  assert.equal(defaultDescribeError(limit), LIMIT_MESSAGE);
+  assert.equal(LIMIT_MESSAGE, "Bu model için harcama sınırı doldu.");
 });

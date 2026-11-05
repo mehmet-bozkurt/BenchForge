@@ -29,7 +29,7 @@ writeFileSync('observed.json', JSON.stringify({
   dataHome: process.env.XDG_DATA_HOME,
   authPresent: existsSync(join(process.env.XDG_DATA_HOME, 'opencode', 'auth.json')),
   configDirectoryOverride: process.env.OPENCODE_CONFIG_DIR,
-  permissionOverride: process.env.OPENCODE_PERMISSION,
+  permissionOverride: process.env.OPENCODE_PERMISSION ?? null,
   configPath: process.env.OPENCODE_CONFIG,
   config: process.env.OPENCODE_CONFIG_CONTENT,
   flags: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('OPENCODE_DISABLE_') || key === 'OPENCODE_PURE')),
@@ -45,6 +45,17 @@ if (behavior.mode === 'success') {
   process.stderr.write('PRIVATE_TOKEN_DO_NOT_EXPOSE\\n');
   emit({ type: 'error', error: { message: 'PRIVATE_TOKEN_DO_NOT_EXPOSE', code: 429 } });
   process.exitCode = 7;
+} else if (behavior.mode === 'continued-after-cut-off') {
+  // OpenCode 2.x continued a cut-off answer by itself: the first step was cut off, the second finished normally.
+  emit({ type: 'text', messageID: 'm1', part: { id: 'p1', text: '{"summary":"starts and is cut' } });
+  emit({ type: 'step_finish', part: { cost: 0.01, tokens: { input: 10, output: 3 }, reason: 'length' } });
+  emit({ type: 'text', messageID: 'm2', part: { id: 'p2', text: 'off here"}' } });
+  emit({ type: 'step_finish', part: { cost: 0.01, tokens: { input: 4, output: 2 }, reason: 'stop' } });
+} else if (behavior.mode === 'output-limit') {
+  emit({ type: 'text', messageID: 'm1', part: { id: 'p1', text: '{"summary":"cut' } });
+  emit({ type: 'step_finish', part: { cost: 0.01, tokens: { input: 10, output: 3 }, reason: 'length' } });
+  emit({ type: 'error', error: { type: 'output-limit', message: 'Response still truncated after two output token limit continuations' } });
+  process.exitCode = 1;
 } else if (behavior.mode === 'tool') {
   emit({ type: 'tool_use', part: { type: 'tool', tool: 'bash', state: { status: 'running' } } });
   setInterval(() => {}, 1000);
@@ -182,8 +193,8 @@ test("records sequential text results, usage and restrictive OpenCode invocation
     assert.equal(await readFile(job.models[0].resultPath, "utf8"), '{"summary":"ready"}\n');
     assert.equal(await readFile(job.models[1].resultPath, "utf8"), '{"summary":"ready"}\n');
     assert.deepEqual(observed.args, [
-      "run", "--pure", "--format", "json", "--agent", "benchforge-preparation",
-      "--model", job.models[0].model, "--dir", job.models[0].directory,
+      "run", "--standalone", "--format", "json", "--agent", "benchforge-preparation",
+      "--model", job.models[0].model,
     ]);
     assert.equal(observed.prompt, "Create a preparation JSON.\n");
     assert.equal(observed.cwd, await realpath(job.models[0].directory));
@@ -191,15 +202,14 @@ test("records sequential text results, usage and restrictive OpenCode invocation
     assert.equal(secondObserved.priorResultPresent, true);
     assert.equal(observed.configPath, job.models[0].configPath);
     assert.equal(observed.config, await readFile(job.models[0].configPath, "utf8"));
-    for (const flag of [
-      "OPENCODE_DISABLE_PROJECT_CONFIG", "OPENCODE_DISABLE_EXTERNAL_SKILLS",
-      "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS", "OPENCODE_DISABLE_DEFAULT_PLUGINS",
-      "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT", "OPENCODE_DISABLE_CLAUDE_CODE",
-      "OPENCODE_DISABLE_MODELS_FETCH", "OPENCODE_DISABLE_SHARE",
-    ]) {
-      assert.equal(observed.flags[flag], "1");
-    }
-    assert.equal(observed.flags.OPENCODE_PURE, "1");
+    // Exactly the switches OpenCode 2.x still has; OPENCODE_PURE and the other 1.x switches are gone.
+    assert.deepEqual(observed.flags, {
+      OPENCODE_DISABLE_PROJECT_CONFIG: "1",
+      OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: "1",
+      OPENCODE_DISABLE_AUTOUPDATE: "1",
+      OPENCODE_DISABLE_CLAUDE_CODE: "1",
+      OPENCODE_DISABLE_MODELS_FETCH: "1",
+    });
     assert.equal((await readFile(job.models[0].resultPath, "utf8")).includes("draft"), false);
     assert.equal((await readFile(jobPath, "utf8")).includes('"comparisonId":47'), true);
     assert.equal((await stat(statePath)).mode & 0o777, 0o600);
@@ -239,7 +249,7 @@ test("isolates global instructions while preserving the configured authenticatio
     assert.equal(observed.dataHome, join(fakeHostHome, ".local", "share"));
     assert.equal(observed.authPresent, true);
     assert.equal(observed.configDirectoryOverride, "");
-    assert.equal(observed.permissionOverride, "");
+    assert.equal(observed.permissionOverride, null);
     for (const key of ['APP_KEY', 'OPENROUTER_API_KEY', 'AWS_SECRET_ACCESS_KEY', 'NODE_OPTIONS', 'BENCHFORGE_UNKNOWN', 'BENCHFORGE_RUNNER']) {
       assert.ok(!observed.environmentKeys.includes(key));
     }
@@ -266,6 +276,26 @@ test("continues after a model error without disclosing stderr or treating missin
     assert.equal(JSON.stringify(state).includes("PRIVATE_TOKEN_DO_NOT_EXPOSE"), false);
     await assert.rejects(readFile(job.models[0].resultPath, "utf8"), { code: "ENOENT" });
     assert.equal(await readFile(job.models[1].resultPath, "utf8"), '{"summary":"ready"}\n');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("fails a model whose answer was cut off, whether OpenCode 2.x continued it or gave up, and continues with the next", async () => {
+  const { root, jobPath, statePath, job } = await fixture(["continued-after-cut-off", "output-limit", "success"]);
+  try {
+    const exit = await waitForExit(launch(jobPath));
+    const state = JSON.parse(await readFile(statePath, "utf8"));
+
+    assert.deepEqual(exit, { code: 0, signal: null });
+    assert.equal(state.status, "partial");
+    assert.deepEqual(state.models.map((model) => model.status), ["failed", "failed", "completed"]);
+    assert.equal(state.models[0].errorMessage, "Çıktı token sınırına ulaşıldı; yanıt kesildi.");
+    assert.equal(state.models[1].errorMessage, "Çıktı token sınırına ulaşıldı; yanıt kesildi.");
+    assert.equal(state.models[0].costUsd, 0.02);
+    await assert.rejects(readFile(job.models[0].resultPath, "utf8"), { code: "ENOENT" });
+    await assert.rejects(readFile(job.models[1].resultPath, "utf8"), { code: "ENOENT" });
+    assert.equal(await readFile(job.models[2].resultPath, "utf8"), '{"summary":"ready"}\n');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

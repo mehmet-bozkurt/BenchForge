@@ -6,7 +6,16 @@ import { lstat, mkdir } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { performance } from "node:perf_hooks";
 import { isUnexpectedServerError, providerErrorKind } from "../../engine/tools/classify-opencode-failure.mjs";
-import { POLICY_REFUSAL_MESSAGE, runOpenCodeText } from "../opencode-text.mjs";
+import {
+  LOOKUP_RETRY_DELAYS_MS,
+  LIMIT_MESSAGE,
+  OUTPUT_LIMIT_MESSAGE,
+  POLICY_REFUSAL_MESSAGE,
+  STARTUP_RETRY_DELAYS_MS,
+  lookupModelLimit,
+  runOpenCodeText,
+  withOutputCap,
+} from "../opencode-text.mjs";
 import { atomicWrite, withinRoot } from "../private-files.mjs";
 import { checkDemoHtml, demoRepairSuffix, extractHtml } from "./html-demo.mjs";
 import { WORKFLOW_AGENT, loadWorkflowJob, readRunIdQuietly, resolveRunDirectory } from "./job.mjs";
@@ -49,11 +58,12 @@ const STEP_DEFAULTS = Object.freeze({
 export const MESSAGES = Object.freeze({
   stopping: "Çalıştırma durduruluyor.",
   stopped: "Çalıştırma durduruldu.",
-  account: "Sağlayıcı hesabı isteği reddetti (401/403). Anahtarı veya aboneliği kontrol edin.",
+  account: "Sağlayıcı hesabı isteği reddetti (anahtar, abonelik veya kullanım sınırı). Anahtarı, aboneliği ve sınırı kontrol edin.",
   unavailable: "Model sağlayıcıda bulunamadı veya kaldırıldı.",
+  limit: LIMIT_MESSAGE,
   policy: POLICY_REFUSAL_MESSAGE,
   persistentTransient: "Sağlayıcı bu modele sürekli geçici hata döndürüyor; model durduruldu.",
-  outputLimit: "Çıktı token sınırına ulaşıldı; yanıt kesildi.",
+  outputLimit: OUTPUT_LIMIT_MESSAGE,
   codeAgent: "Bu adım türü (code_agent) Aşama 2'de etkinleşecek.",
   browserCheck: "Tarayıcı testi Aşama 2'de etkinleşecek.",
   promptTooLarge: "Yerleştirilmiş prompt 256 KB sınırını aşıyor.",
@@ -280,6 +290,9 @@ class ModelRun {
     this.phaseSkipped = new Set();
     this.startedAt = null;
     this.exhaustedTransientCalls = 0;
+    /** Promise of the model's real token limits (null until the first call asks for them). */
+    this.modelLimit = null;
+    this.limitWarned = false;
   }
 
   get signal() {
@@ -885,11 +898,56 @@ export class WorkflowEngine {
     }
   }
 
+  /**
+   * The model's call configuration with the step's maxOutputTokens applied as its answer limit. OpenCode 2.x
+   * has no switch for that, so the model's real limits are read once per model and the step limit is written
+   * into the call configuration when it is below the model's own. When the limits cannot be read the call runs
+   * with the model's own limit, which is said once.
+   */
+  async configWithOutputCap(run, cap, eventScope) {
+    run.modelLimit ??= lookupModelLimit({
+      opencodeBinary: this.job.opencodeBinary,
+      model: run.spec.model,
+      directory: run.spec.workspace,
+      privateHome: run.spec.privateHome,
+      configPath: run.spec.configPath,
+      configContent: run.spec.configContent,
+      retryDelaysMs: LOOKUP_RETRY_DELAYS_MS.map((milliseconds) => milliseconds * this.settings.backoffScale),
+      signal: run.signal,
+    });
+    const limit = await run.modelLimit;
+
+    if (limit !== null) {
+      try {
+        return withOutputCap(run.spec.configContent, run.spec.model, limit, cap);
+      } catch {
+        // A configuration of an unexpected shape is treated like unreadable limits.
+      }
+    }
+
+    if (!run.limitWarned && !run.signal.aborted) {
+      run.limitWarned = true;
+      this.event("warn", "output_limit_unknown", {
+        model: eventScope.model,
+        message: "Modelin çıktı sınırı OpenCode'dan okunamadı; adımların maxOutputTokens sınırı uygulanamıyor, model kendi sınırıyla çalışır.",
+      });
+    }
+
+    return run.spec.configContent;
+  }
+
   /** One OpenCode call under the global call limit; records attempt-<n>/ files and the attempt entry. */
   async singleCall(target, prompt, kind, settings) {
     const { run, step } = target;
     const release = await this.calls.acquire(run.signal);
     if (release === null) return { outcome: "halted", record: null, text: "" };
+
+    const eventScope = { model: run.slug, step: step.id, item: target.itemKey };
+    const configContent = await this.configWithOutputCap(run, settings.maxOutputTokens, eventScope);
+    if (run.signal.aborted) {
+      release();
+      return { outcome: "halted", record: null, text: "" };
+    }
 
     const n = target.attempts.length + 1;
     const record = {
@@ -914,7 +972,6 @@ export class WorkflowEngine {
       startedAt: record.startedAt,
       tail: "",
     };
-    const eventScope = { model: run.slug, step: step.id, item: target.itemKey };
     let handle = null;
     let overLimit = false;
     const onAbort = () => handle?.abort("stopped");
@@ -937,13 +994,14 @@ export class WorkflowEngine {
         directory: run.spec.workspace,
         privateHome: run.spec.privateHome,
         configPath: run.spec.configPath,
-        configContent: run.spec.configContent,
+        configContent,
         prompt,
+        startupRetryDelaysMs: STARTUP_RETRY_DELAYS_MS.map((milliseconds) => milliseconds * this.settings.backoffScale),
+        signal: run.signal,
         timeoutSeconds: settings.timeoutSeconds,
         maxResultBytes: settings.maxOutputChars * 4,
         maxEventBytes: Math.max(MIN_EVENT_BYTES, settings.maxOutputChars * 8),
         title: `benchforge:workflow:${this.job.runId}:${run.slug}:${step.id}:${target.itemKey ?? "-"}:${n}`,
-        extraEnv: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: String(settings.maxOutputTokens) },
         isStopRequested: () => run.signal.aborted,
         onHandle: (value) => {
           handle = value;
@@ -1021,7 +1079,11 @@ export class WorkflowEngine {
     }
 
     record.status = "failed";
-    if (result.status === "completed") {
+    // OpenCode 2.x ends a call that stayed cut off after its two own continuations with an error (exit 1). For a
+    // demo that is a cut-off demo as well: it goes to the static checks, and a repair asks for a smaller one.
+    const cutOffDemo = result.abortReason === null && result.stopReason === "length" && result.text !== ""
+      && target.step.type === "code_text";
+    if (result.status === "completed" || cutOffDemo) {
       if (result.text.length > settings.maxOutputChars) {
         record.error = `Model yanıtı ${settings.maxOutputChars} karakter sınırını aştı.`;
         return "failed";
@@ -1054,7 +1116,7 @@ export class WorkflowEngine {
       this.failRun(MESSAGES.account);
       return "halted";
     }
-    if (kind === "unavailable" || kind === "policy") {
+    if (kind === "unavailable" || kind === "policy" || kind === "limit") {
       record.error = MESSAGES[kind];
       this.failModel(run, MESSAGES[kind]);
       return "halted";
