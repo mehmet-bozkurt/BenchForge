@@ -19,9 +19,21 @@ class OpenCodeUsageTracker
         'tokens_cache_read', 'tokens_cache_write',
     ];
 
+    /**
+     * Newest first. OpenCode 2.x keeps sessions in session_v2 and copies the 1.x sessions there one by one
+     * when it migrates the database; the old session table then stops changing. A 1.x database only has
+     * session.
+     *
+     * @var list<string>
+     */
+    private const SESSION_TABLES = ['session_v2', 'session'];
+
     private ?SQLite3 $database = null;
 
     private bool $databaseChecked = false;
+
+    /** @var list<string> */
+    private array $sessionTables = [];
 
     public function syncForRun(BenchmarkRun $benchmarkRun): void
     {
@@ -127,7 +139,10 @@ class OpenCodeUsageTracker
         }
 
         try {
-            $query = $database->prepare('SELECT id, parent_id, directory, title, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write FROM session WHERE directory = :directory');
+            $query = $database->prepare($this->sessionQuery(
+                'id, parent_id, directory, title, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write',
+                'directory = :directory',
+            ));
 
             if ($query === false) {
                 return null;
@@ -320,7 +335,7 @@ class OpenCodeUsageTracker
         }
 
         try {
-            $query = $database->prepare('SELECT directory, time_created FROM session WHERE id = :id LIMIT 1');
+            $query = $database->prepare($this->sessionQuery('directory, time_created', 'id = :id').' LIMIT 1');
 
             if ($query === false) {
                 return false;
@@ -363,31 +378,76 @@ class OpenCodeUsageTracker
         try {
             $database = new SQLite3($path, SQLITE3_OPEN_READONLY);
             $database->busyTimeout(1000);
-            $columns = [];
-            $result = $database->query('PRAGMA table_info(session)');
+            $tables = [];
 
-            if ($result === false) {
+            foreach (self::SESSION_TABLES as $index => $table) {
+                $columns = $this->columns($database, $table) ?? [];
+
+                if ($columns === []) {
+                    continue;
+                }
+
+                if (array_diff(self::REQUIRED_COLUMNS, $columns) === []) {
+                    $tables[] = $table;
+                } elseif ($index === 0) {
+                    // An unknown session_v2 layout: the frozen 1.x table alone would give stale usage.
+                    $tables = [];
+                    break;
+                }
+            }
+
+            if ($tables === []) {
                 $database->close();
 
                 return null;
             }
 
-            while ($column = $result->fetchArray(SQLITE3_ASSOC)) {
-                $columns[] = $column['name'];
-            }
-
-            $result->finalize();
-
-            if (array_diff(self::REQUIRED_COLUMNS, $columns) !== []) {
-                $database->close();
-
-                return null;
-            }
+            $this->sessionTables = $tables;
 
             return $this->database = $database;
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Selects $columns from the session rows matching $condition. A row of an older table counts only when
+     * no newer table has its id yet, so a migration in progress neither loses nor doubles a session.
+     */
+    private function sessionQuery(string $columns, string $condition): string
+    {
+        $queries = [];
+
+        foreach ($this->sessionTables as $index => $table) {
+            $newerTables = array_slice($this->sessionTables, 0, $index);
+            $notYetCopied = implode('', array_map(
+                fn (string $newerTable): string => " AND id NOT IN (SELECT id FROM {$newerTable})",
+                $newerTables,
+            ));
+            $queries[] = "SELECT {$columns} FROM {$table} WHERE {$condition}{$notYetCopied}";
+        }
+
+        return implode(' UNION ALL ', $queries);
+    }
+
+    /** @return list<string>|null */
+    private function columns(SQLite3 $database, string $table): ?array
+    {
+        $result = $database->query("PRAGMA table_info({$table})");
+
+        if ($result === false) {
+            return null;
+        }
+
+        $columns = [];
+
+        while ($column = $result->fetchArray(SQLITE3_ASSOC)) {
+            $columns[] = $column['name'];
+        }
+
+        $result->finalize();
+
+        return $columns;
     }
 
     /** @param array<string, int|string|null> $usage */

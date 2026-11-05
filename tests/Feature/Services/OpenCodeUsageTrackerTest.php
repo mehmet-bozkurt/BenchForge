@@ -74,6 +74,84 @@ it('keeps continuation usage separate from its source session and later forks', 
     }
 });
 
+it('reads OpenCode 2.x usage from session_v2, where a recovery fork is not a child session', function () {
+    [$root, $runPath, $workspace, $database] = usageFixture(openCode2: true);
+    $startedAt = now()->startOfSecond()->subMinute();
+    $attemptPath = $runPath.'/_attempts/model-a/attempt-2';
+    File::ensureDirectoryExists($attemptPath);
+    File::put($attemptPath.'/opencode.events.jsonl', json_encode(['type' => 'step_start', 'sessionID' => 'ses_stoppedFork'], JSON_THROW_ON_ERROR)."\n");
+    $run = BenchmarkRun::factory()->create(['slug' => 'usage-run', 'source_path' => $runPath]);
+    $modelRun = ModelRun::factory()->for($run)->create(['slug' => 'model-a']);
+    File::put($runPath.'/_sessions/model-a.session', 'ses_initial');
+    $attempt = ModelRunAttempt::factory()->for($modelRun)->create(['attempt_number' => 1, 'session_id' => 'ses_fork']);
+    $stoppedAttempt = ModelRunAttempt::factory()->for($modelRun)->create([
+        'attempt_number' => 2, 'status' => 'stopped', 'session_id' => null, 'result' => null,
+        'attempt_path' => $attemptPath, 'started_at' => $startedAt, 'finished_at' => $startedAt->copy()->addMinute(),
+    ]);
+    $initialTitle = 'benchforge:usage-run:model-a:initial';
+    insertUsageSession($database, 'ses_initial', null, $workspace, $initialTitle, 9.9, 9999, 9999, 0, 0, 0);
+    insertUsageSession($database, 'ses_initial', null, $workspace, $initialTitle, 0.1, 100, 40, 10, 200, 0, table: 'session_v2');
+    insertUsageSession($database, 'ses_fork', null, $workspace, $initialTitle.' (fork #1)', 0.04, 25, 12, 3, 80, 4, table: 'session_v2');
+    insertUsageSession($database, 'ses_stoppedFork', null, $workspace, $initialTitle.' (fork #2)', 0.02, 10, 5, 0, 0, 0, $startedAt->copy()->addSeconds(10)->getTimestampMs(), 'session_v2');
+
+    try {
+        $tracker = app(OpenCodeUsageTracker::class);
+        $tracker->syncInitial($modelRun);
+        $tracker->syncAttempt($attempt);
+        $tracker->syncAttempt($stoppedAttempt);
+
+        expect($modelRun->fresh()->usage)->toMatchArray([
+            'inputTokens' => 100, 'outputTokens' => 40, 'costUsd' => '0.1000000000', 'sessionCount' => 1, 'sessionId' => 'ses_initial',
+        ])->and($attempt->fresh()->usage)->toMatchArray([
+            'inputTokens' => 25, 'outputTokens' => 12, 'costUsd' => '0.0400000000', 'sessionCount' => 1, 'sessionId' => 'ses_fork',
+        ])->and($stoppedAttempt->fresh()->usage)->toMatchArray([
+            'inputTokens' => 10, 'costUsd' => '0.0200000000', 'sessionId' => 'ses_stoppedFork',
+        ]);
+    } finally {
+        $database->close();
+        File::deleteDirectory($root);
+    }
+});
+
+it('counts a 1.x session that OpenCode 2.x has not copied to session_v2 yet, once', function () {
+    [$root, $runPath, $workspace, $database] = usageFixture(openCode2: true);
+    $run = BenchmarkRun::factory()->create(['slug' => 'usage-run', 'source_path' => $runPath]);
+    $modelRun = ModelRun::factory()->for($run)->create(['slug' => 'model-a']);
+    File::put($runPath.'/_sessions/model-a.session', 'ses_initial');
+    insertUsageSession($database, 'ses_initial', null, $workspace, 'Original', 0.1, 100, 40, 10, 200, 0);
+    insertUsageSession($database, 'ses_initial', null, $workspace, 'Original', 0.1, 100, 40, 10, 200, 0, table: 'session_v2');
+    insertUsageSession($database, 'ses_child', 'ses_initial', $workspace, 'Explore subagent', 0.05, 30, 12, 2, 50, 0);
+
+    try {
+        app(OpenCodeUsageTracker::class)->syncInitial($modelRun);
+
+        expect($modelRun->fresh()->usage)->toMatchArray([
+            'inputTokens' => 130, 'costUsd' => '0.1500000000', 'sessionCount' => 2,
+        ]);
+    } finally {
+        $database->close();
+        File::deleteDirectory($root);
+    }
+});
+
+it('records no usage when session_v2 has an unknown layout instead of reading the frozen 1.x table', function () {
+    [$root, $runPath, $workspace, $database] = usageFixture();
+    $database->exec('CREATE TABLE session_v2 (id TEXT PRIMARY KEY, parent_id TEXT, directory TEXT, title TEXT, cost REAL)');
+    $run = BenchmarkRun::factory()->create(['slug' => 'usage-run', 'source_path' => $runPath]);
+    $modelRun = ModelRun::factory()->for($run)->create(['slug' => 'model-a', 'usage' => null]);
+    File::put($runPath.'/_sessions/model-a.session', 'ses_initial');
+    insertUsageSession($database, 'ses_initial', null, $workspace, 'Original', 0.1, 100, 40, 10, 200, 0);
+
+    try {
+        app(OpenCodeUsageTracker::class)->syncInitial($modelRun);
+
+        expect($modelRun->fresh()->usage)->toBeNull();
+    } finally {
+        $database->close();
+        File::deleteDirectory($root);
+    }
+});
+
 it('records stopped continuation usage from its own event log without assigning a session to the attempt', function () {
     [$root, $runPath, $workspace, $database] = usageFixture();
     $startedAt = now()->startOfSecond()->subMinute();
@@ -325,8 +403,12 @@ it('backfills recorded usage when archive synchronization imports a run', functi
     }
 });
 
-/** @return array{string, string, string, SQLite3} */
-function usageFixture(): array
+/**
+ * With $openCode2, the database also has OpenCode 2.x's session_v2 table next to the 1.x session table.
+ *
+ * @return array{string, string, string, SQLite3}
+ */
+function usageFixture(bool $openCode2 = false): array
 {
     $root = storage_path('framework/testing/usage-'.Str::uuid());
     $runPath = $root.'/runs/usage-run';
@@ -336,14 +418,19 @@ function usageFixture(): array
     config()->set('benchforge.runs_path', $root.'/runs');
     config()->set('benchforge.opencode_db_path', $root.'/opencode.db');
     $database = new SQLite3($root.'/opencode.db');
-    $database->exec('CREATE TABLE session (id TEXT PRIMARY KEY, parent_id TEXT, directory TEXT, title TEXT, cost REAL, tokens_input INTEGER, tokens_output INTEGER, tokens_reasoning INTEGER, tokens_cache_read INTEGER, tokens_cache_write INTEGER, time_created INTEGER)');
+    $columns = 'id TEXT PRIMARY KEY, parent_id TEXT, directory TEXT, title TEXT, cost REAL, tokens_input INTEGER, tokens_output INTEGER, tokens_reasoning INTEGER, tokens_cache_read INTEGER, tokens_cache_write INTEGER, time_created INTEGER';
+    $database->exec("CREATE TABLE session ({$columns})");
+
+    if ($openCode2) {
+        $database->exec("CREATE TABLE session_v2 ({$columns}, fork_session_id TEXT)");
+    }
 
     return [$root, $runPath, $workspace, $database];
 }
 
-function insertUsageSession(SQLite3 $database, string $id, ?string $parentId, string $directory, string $title, float $cost, int $input, int $output, int $reasoning, int $cacheRead, int $cacheWrite, ?int $timeCreated = null): void
+function insertUsageSession(SQLite3 $database, string $id, ?string $parentId, string $directory, string $title, float $cost, int $input, int $output, int $reasoning, int $cacheRead, int $cacheWrite, ?int $timeCreated = null, string $table = 'session'): void
 {
-    $query = $database->prepare('INSERT INTO session VALUES (:id, :parent_id, :directory, :title, :cost, :input, :output, :reasoning, :cache_read, :cache_write, :time_created)');
+    $query = $database->prepare("INSERT INTO {$table} (id, parent_id, directory, title, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write, time_created) VALUES (:id, :parent_id, :directory, :title, :cost, :input, :output, :reasoning, :cache_read, :cache_write, :time_created)");
     $query->bindValue(':id', $id, SQLITE3_TEXT);
     $query->bindValue(':parent_id', $parentId, SQLITE3_TEXT);
     $query->bindValue(':directory', $directory, SQLITE3_TEXT);

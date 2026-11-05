@@ -37,4 +37,25 @@ class BenchmarkProcessEnvironment
 
         return $environment;
     }
+
+    /**
+     * For OpenCode's own commands (auth list, session list), which run with --standalone. OpenCode 2.x has
+     * no --pure flag: BenchForge's own config directory, the one model runs use, and a disabled project
+     * config keep the user's global and the workspace's plugins and MCP servers from loading. The data
+     * directory, with the shared credentials and session database, stays the user's.
+     *
+     * @return array<string, string|false>
+     */
+    public function openCodeCommand(): array
+    {
+        $environment = $this->make();
+        $cacheHome = is_string($environment['XDG_CACHE_HOME'] ?? null) && $environment['XDG_CACHE_HOME'] !== ''
+            ? $environment['XDG_CACHE_HOME']
+            : rtrim((string) $environment['HOME'], '/').'/.cache';
+
+        $environment['XDG_CONFIG_HOME'] = rtrim($cacheHome, '/').'/benchforge/opencode-config';
+        $environment['OPENCODE_DISABLE_PROJECT_CONFIG'] = '1';
+
+        return $environment;
+    }
 }

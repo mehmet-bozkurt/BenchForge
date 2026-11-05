@@ -78,7 +78,7 @@ class ProviderConnectionStatus
     private function authenticationList(string $binary): ?string
     {
         try {
-            $process = new Process([$binary, 'auth', 'list', '--pure'], null, $this->environment());
+            $process = new Process([$binary, 'auth', 'list', '--standalone'], null, $this->environment());
             $process->setTimeout(8);
             $process->run();
 
@@ -139,7 +139,7 @@ class ProviderConnectionStatus
     /** @return array<string, string|false> */
     private function environment(): array
     {
-        return $this->processEnvironment->make();
+        return $this->processEnvironment->openCodeCommand();
     }
 
     /**
