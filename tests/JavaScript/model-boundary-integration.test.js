@@ -37,7 +37,7 @@ test('wires a resumed model to its scoped policy and monitor without live servic
             mkdir(attemptPath, { recursive: true }),
             mkdir(join(runPath, '_gallery', modelSlug), { recursive: true }),
         ]);
-        for (const name of ['resume-model.zsh', 'benchforge-process-environment.zsh', 'benchforge-model-policy.mjs', 'select-opencode-session.mjs', 'extract-opencode-event-session.mjs', 'run-with-timeout.mjs']) {
+        for (const name of ['resume-model.zsh', 'benchforge-process-environment.zsh', 'benchforge-model-policy.mjs', 'select-opencode-session.mjs', 'extract-opencode-event-session.mjs', 'classify-opencode-failure.mjs', 'run-with-timeout.mjs']) {
             await copyFile(join(engineTools, name), join(toolsPath, name));
         }
         await writeFile(join(toolsPath, 'browser-smoke', 'check.mjs'), 'throw new Error("Browser must not run in this fixture");\n');
@@ -51,14 +51,14 @@ test('wires a resumed model to its scoped policy and monitor without live servic
             'const fs = require("node:fs");',
             'const args = process.argv.slice(2);',
             'if (args[0] !== "run") process.exit(93);',
-            'fs.writeFileSync("opencode-observed.json", JSON.stringify({ args, cwd: process.cwd(), configPath: process.env.OPENCODE_CONFIG, runtime: JSON.parse(process.env.OPENCODE_CONFIG_CONTENT), basePath: process.env.NEXT_PUBLIC_BASE_PATH, projectConfigDisabled: process.env.OPENCODE_DISABLE_PROJECT_CONFIG, pure: process.env.OPENCODE_PURE, externalSkillsDisabled: process.env.OPENCODE_DISABLE_EXTERNAL_SKILLS, environmentKeys: Object.keys(process.env) }));',
+            'fs.writeFileSync("opencode-observed.json", JSON.stringify({ args, cwd: process.cwd(), configPath: process.env.OPENCODE_CONFIG, runtime: JSON.parse(process.env.OPENCODE_CONFIG_CONTENT), basePath: process.env.NEXT_PUBLIC_BASE_PATH, projectConfigDisabled: process.env.OPENCODE_DISABLE_PROJECT_CONFIG, claudeSkillsDisabled: process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS, removedSwitches: ["OPENCODE_PURE", "OPENCODE_DISABLE_EXTERNAL_SKILLS", "OPENCODE_DISABLE_SHARE", "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"].filter((name) => name in process.env), environmentKeys: Object.keys(process.env) }));',
             'for (const id of ["denial-one", "denial-two", "denial-three"]) console.log(JSON.stringify({ type: "tool_use", sessionID: "ses_fixtureContinued", part: { callID: id, tool: "bash", state: { status: "error", input: { command: "cat ../_logs/other-model.build.log" }, error: "The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules [{\\\"permission\\\":\\\"external_directory\\\",\\\"pattern\\\":\\\"*\\\",\\\"action\\\":\\\"deny\\\"}]" } } }));',
             'setInterval(() => {}, 1000);',
         ].join('\n'));
         await writeCommand(stubPath, 'npm', [
             'const fs = require("node:fs");',
             'const args = process.argv.slice(2);',
-            'fs.appendFileSync("npm-observed.jsonl", JSON.stringify({ args, runtime: process.env.OPENCODE_CONFIG_CONTENT, pure: process.env.OPENCODE_PURE, projectConfigDisabled: process.env.OPENCODE_DISABLE_PROJECT_CONFIG, basePath: process.env.NEXT_PUBLIC_BASE_PATH, environmentKeys: Object.keys(process.env) }) + "\\n");',
+            'fs.appendFileSync("npm-observed.jsonl", JSON.stringify({ args, runtime: process.env.OPENCODE_CONFIG_CONTENT, claudeSkillsDisabled: process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS, projectConfigDisabled: process.env.OPENCODE_DISABLE_PROJECT_CONFIG, basePath: process.env.NEXT_PUBLIC_BASE_PATH, environmentKeys: Object.keys(process.env) }) + "\\n");',
             'if (args[0] === "ci") { fs.mkdirSync("node_modules", { recursive: true }); process.exit(0); }',
             'if (args.join(" ") === "run lint") { console.log("fixture lint passed"); process.exit(0); }',
             'if (args.join(" ") === "run build") { console.log("fixture build failed without export"); process.exit(1); }',
@@ -92,8 +92,7 @@ test('wires a resumed model to its scoped policy and monitor without live servic
                 OPENCODE_CONFIG: '',
                 OPENCODE_CONFIG_CONTENT: '',
                 OPENCODE_DISABLE_PROJECT_CONFIG: '',
-                OPENCODE_PURE: '',
-                OPENCODE_DISABLE_EXTERNAL_SKILLS: '',
+                OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: '',
                 NEXT_PUBLIC_BASE_PATH: '',
             },
             stdio: 'ignore',
@@ -112,19 +111,19 @@ test('wires a resumed model to its scoped policy and monitor without live servic
             assert.equal(code, 0);
             assert.equal(signal, null);
             assert.equal(observed.cwd, canonicalWorkspace);
-            assert.equal(observed.args[observed.args.indexOf('--dir') + 1], canonicalWorkspace);
-            assert.equal(observed.args[observed.args.indexOf('--agent') + 1], 'benchforge-workspace');
-            assert.equal(observed.args[observed.args.indexOf('--format') + 1], 'json');
-            assert.equal(observed.args[observed.args.indexOf('--session') + 1], 'ses_fixtureSource');
-            assert.ok(observed.args.includes('--fork'));
+            assert.deepEqual(observed.args.slice(0, -1), [
+                'run', '--standalone', '--agent', 'benchforge-workspace', '--session', 'ses_fixtureSource', '--fork',
+                '--model', 'fixture/fake-model', '--title', 'benchforge:fixture-run:fixture-model:attempt-1', '--format', 'json',
+            ]);
             assert.match(observed.args.at(-1), /OWN_DIAGNOSTIC: src\/page\.tsx:31/);
             assert.match(observed.args.at(-1), /Work only inside the assigned workspace/);
             assert.equal(observed.runtime.permission.external_directory, 'deny');
             assert.equal(observed.runtime.agent['benchforge-workspace'].permission.external_directory, 'deny');
             assert.equal(observed.basePath, '/fixture-model');
             assert.equal(observed.projectConfigDisabled, '1');
-            assert.equal(observed.pure, '1');
-            assert.equal(observed.externalSkillsDisabled, '1');
+            assert.equal(observed.claudeSkillsDisabled, '1');
+            // OpenCode 2.x has no OPENCODE_PURE and the other 1.x switches; they are no longer set.
+            assert.deepEqual(observed.removedSwitches, []);
             assert.equal(observed.configPath, await realpath(providerConfigPath));
             assert.equal(metadata.policyVersion, 'workspace-boundary-v1');
             assert.equal(metadata.workspace, canonicalWorkspace);
@@ -135,7 +134,7 @@ test('wires a resumed model to its scoped policy and monitor without live servic
             assert.equal(result[10], 'fixture/fake-model');
             // The workspace was slimmed after the first run, so dependencies are reinstalled before the model runs.
             assert.deepEqual(npmCalls.map((call) => call.args), [['ci', '--prefer-offline', '--no-audit', '--no-fund'], ['run', 'lint'], ['run', 'build']]);
-            assert.ok(npmCalls.every((call) => call.runtime === undefined && call.pure === undefined && call.projectConfigDisabled === undefined));
+            assert.ok(npmCalls.every((call) => call.runtime === undefined && call.claudeSkillsDisabled === undefined && call.projectConfigDisabled === undefined));
             assert.equal(npmCalls[0].basePath, undefined);
             assert.equal(npmCalls[1].basePath, undefined);
             assert.equal(npmCalls[2].basePath, '/fixture-model');
@@ -157,4 +156,125 @@ test('wires a resumed model to its scoped policy and monitor without live servic
         if (runner?.exitCode === null && runner.signalCode === null) runner.kill('SIGTERM');
         await rm(fixtureRoot, { recursive: true, force: true });
     }
+});
+
+/**
+ * Runs resume-model.zsh (mode continue) around a scripted `opencode` stub and returns the fields it recorded in
+ * result.txt: mode, source session, result session, OpenCode exit code, then the validation exit codes.
+ */
+async function runRecoveryWithModel(opencodeLines, extraEnvironment = {}) {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'benchforge-recovery-limit-'));
+    const toolsPath = join(fixtureRoot, 'tools');
+    const stubPath = join(fixtureRoot, 'commands');
+    const runPath = join(fixtureRoot, 'runs', 'fixture-run');
+    const modelSlug = 'fixture-model';
+    const workspace = join(runPath, modelSlug);
+    const attemptPath = join(runPath, '_attempts', modelSlug, 'attempt-1');
+    const providerConfigPath = join(runPath, '_opencode.json');
+    const promptPath = join(attemptPath, 'continuation-prompt.txt');
+
+    try {
+        await Promise.all([
+            mkdir(join(toolsPath, 'browser-smoke'), { recursive: true }),
+            mkdir(stubPath, { recursive: true }),
+            mkdir(join(workspace, 'src'), { recursive: true }),
+            mkdir(attemptPath, { recursive: true }),
+            mkdir(join(runPath, '_gallery', modelSlug), { recursive: true }),
+        ]);
+        for (const name of ['resume-model.zsh', 'benchforge-process-environment.zsh', 'benchforge-model-policy.mjs', 'select-opencode-session.mjs', 'extract-opencode-event-session.mjs', 'classify-opencode-failure.mjs', 'run-with-timeout.mjs']) {
+            await copyFile(join(engineTools, name), join(toolsPath, name));
+        }
+        await writeFile(join(toolsPath, 'browser-smoke', 'check.mjs'), 'throw new Error("Browser must not run in this fixture");\n');
+        await writeFile(join(workspace, 'src', 'page.tsx'), 'fixture own source\n');
+        await writeFile(providerConfigPath, '{}\n');
+        await writeFile(promptPath, 'OWN_DIAGNOSTIC: src/page.tsx:31 fixture lint message\n');
+
+        await writeCommand(stubPath, 'opencode', ['const args = process.argv.slice(2);', 'if (args[0] !== "run") process.exit(93);', ...opencodeLines].join('\n'));
+        await writeCommand(stubPath, 'npm', [
+            'const fs = require("node:fs");',
+            'const args = process.argv.slice(2);',
+            'fs.appendFileSync("npm-observed.jsonl", JSON.stringify(args) + "\\n");',
+            'if (args[0] === "ci") { fs.mkdirSync("node_modules", { recursive: true }); process.exit(0); }',
+            'if (args.join(" ") === "run lint") process.exit(0);',
+            'process.exit(1);',
+        ].join('\n'));
+        await writeCommand(stubPath, 'rsync', 'process.exit(0);');
+        for (const name of ['curl', 'python3']) {
+            await writeCommand(stubPath, name, 'process.exit(96);');
+        }
+
+        const runner = spawn('/bin/zsh', ['-f', join(toolsPath, 'resume-model.zsh'), runPath, modelSlug, 'fixture/fake-model', '35551', '/', providerConfigPath, attemptPath, 'continue', 'ses_fixtureSource', promptPath], {
+            cwd: fixtureRoot,
+            env: { ...process.env, PATH: `${stubPath}:${dirname(process.execPath)}:${process.env.PATH}`, BENCHFORGE_BOUNDARY_MONITOR: monitorPath, ...extraEnvironment },
+            stdio: 'ignore',
+        });
+        const watchdog = setTimeout(() => runner.kill('SIGTERM'), 20_000);
+
+        try {
+            const [code] = await once(runner, 'exit');
+            const result = (await readFile(join(attemptPath, 'result.txt'), 'utf8')).trim().split('|');
+            const npmCalls = (await readFile(join(workspace, 'npm-observed.jsonl'), 'utf8')).trim().split('\n').map((line) => JSON.parse(line).join(' '));
+
+            const starts = Number(await readFile(join(runPath, 'start-count'), 'utf8').catch(() => '0'));
+
+            return { code, result, npmCalls, starts };
+        } finally {
+            clearTimeout(watchdog);
+        }
+    } finally {
+        await rm(fixtureRoot, { recursive: true, force: true });
+    }
+}
+
+// What OpenCode 2.2.5 wrote when a response was cut off three times: the error comes before the third cut-off step.
+const lengthStep = JSON.stringify({ type: 'step_finish', sessionID: 'ses_fixtureContinued', part: { reason: 'length', tokens: { output: 32000 } } });
+const outputLimitError = JSON.stringify({ type: 'error', sessionID: 'ses_fixtureContinued', error: { type: 'output-limit', message: 'Response still truncated after two output token limit continuations' } });
+
+test('records a recovery attempt that OpenCode 2.x ended with its output-limit error as an output-limit stop, not a model failure', async () => {
+    const { code, result, npmCalls } = await runRecoveryWithModel([
+        `console.log(${JSON.stringify(lengthStep)}); console.log(${JSON.stringify(outputLimitError)}); console.log(${JSON.stringify(lengthStep)});`,
+        'process.exit(1);',
+    ]);
+
+    assert.equal(code, 0);
+    assert.deepEqual(result.slice(0, 5), ['continue', 'ses_fixtureSource', 'ses_fixtureContinued', '0', '0']);
+    assert.deepEqual(npmCalls.slice(-2), ['run lint', 'run build']);
+});
+
+test('keeps any other exit 1 of a recovery attempt as the OpenCode exit code', async () => {
+    const otherError = JSON.stringify({ type: 'error', sessionID: 'ses_fixtureContinued', error: { type: 'unknown', message: 'Transport: ECONNRESET' } });
+    const { result } = await runRecoveryWithModel([`console.log(${JSON.stringify(otherError)});`, 'process.exit(1);']);
+
+    assert.deepEqual(result.slice(0, 4), ['continue', 'ses_fixtureSource', 'ses_fixtureContinued', '1']);
+});
+
+const startupFailure = JSON.stringify({ type: 'error', sessionID: '', error: { type: 'unknown', message: 'Standalone server exited before reporting readiness' } });
+
+/** An OpenCode stub whose first `failures` runs end with the start race (exit 1); later runs finish normally. */
+const failingStarts = (failures) => [
+    'const fs = require("node:fs");',
+    'const counter = require("node:path").join(process.cwd(), "..", "start-count");',
+    'let runs = 0;',
+    'try { runs = Number(fs.readFileSync(counter, "utf8")); } catch {}',
+    'fs.writeFileSync(counter, String(runs + 1));',
+    `if (runs < ${failures}) { console.log(${JSON.stringify(startupFailure)}); process.exit(1); }`,
+    'console.log(JSON.stringify({ type: "step_start", sessionID: "ses_fixtureContinued", part: { type: "step-start" } }));',
+    'process.exit(0);',
+];
+
+test('starts a recovery attempt again when its OpenCode server did not start', async () => {
+    const { code, result, npmCalls, starts } = await runRecoveryWithModel(failingStarts(2), { BENCHFORGE_BASLATMA_BEKLEME_SANIYE: '0' });
+
+    assert.equal(code, 0);
+    assert.equal(starts, 3);
+    assert.deepEqual(result.slice(0, 5), ['continue', 'ses_fixtureSource', 'ses_fixtureContinued', '0', '0']);
+    assert.deepEqual(npmCalls.slice(-2), ['run lint', 'run build']);
+});
+
+test('gives up on a recovery attempt whose start keeps failing after three new tries', async () => {
+    const { result, starts } = await runRecoveryWithModel(failingStarts(9), { BENCHFORGE_BASLATMA_BEKLEME_SANIYE: '0' });
+
+    // Recovery attempts keep OpenCode's own exit code; they do not map provider errors to the benchmark's codes.
+    assert.equal(starts, 4);
+    assert.equal(result[3], '1');
 });

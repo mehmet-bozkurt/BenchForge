@@ -195,3 +195,43 @@ test('it says when a validation step was stopped at its time limit', function ()
     expect($outcome)->toMatchArray(['tone' => 'fail', 'title' => 'Build süre sınırını aştı'])
         ->and($outcome['detail'])->toStartWith('Adım 15 dakikada bitmedi;');
 });
+
+test('it shows the message of OpenCode 2.x provider errors', function (int $code, string $tone, string $title) {
+    [$run, $model] = outcomeFixture(['opencode' => ['fail', $code]], [
+        'opencode.events.jsonl' => json_encode(['type' => 'error', 'sessionID' => 'ses_fixture', 'error' => ['type' => 'provider.auth', 'message' => 'An active OpenCode Go subscription is required to use Go models.', 'status' => 403]])."\n",
+    ]);
+
+    expect(app(ModelRunOutcome::class)->describe($run, $model))->toMatchArray([
+        'tone' => $tone,
+        'title' => $title,
+        'detail' => 'An active OpenCode Go subscription is required to use Go models.',
+    ]);
+})->with([
+    'provider error' => [StageResult::PROVIDER_ERROR_CODE, 'provider', 'Sağlayıcı veya hesap hatası · puanlanmaz'],
+    'cut off after submission' => [StageResult::INTERRUPTED_AFTER_SUBMISSION_CODE, 'warning', 'Bağlantı sonda koptu · teslim puanlandı'],
+]);
+
+test('it names the error type when a 2.x error carries no message', function () {
+    [$run, $model] = outcomeFixture(['opencode' => ['fail', StageResult::PROVIDER_ERROR_CODE]], [
+        'opencode.events.jsonl' => json_encode(['type' => 'error', 'error' => ['type' => 'provider.timeout', 'message' => '']])."\n",
+    ]);
+
+    expect(app(ModelRunOutcome::class)->describe($run, $model)['detail'])->toBe('provider.timeout');
+});
+
+test('it does not mistake a slow silent OpenCode 2.x step for a provider stall', function () {
+    $start = 1792000000000;
+    $events = collect([
+        ['type' => 'step_start', 'timestamp' => $start],
+        ['type' => 'step_finish', 'timestamp' => $start + 1_000],
+        // The next step starts only when its first content arrives, 30 minutes later, and then finishes.
+        ['type' => 'step_start', 'timestamp' => $start + 1_000 + 30 * 60_000],
+        ['type' => 'step_finish', 'timestamp' => $start + 1_000 + 31 * 60_000],
+    ])->map(fn (array $event): string => json_encode($event))->implode("\n");
+    [$run, $model] = outcomeFixture(['opencode' => ['fail', 124], 'lint' => ['pass', 0]], ['opencode.events.jsonl' => $events."\n"]);
+
+    $outcome = app(ModelRunOutcome::class)->describe($run, $model);
+
+    expect($outcome)->toMatchArray(['tone' => 'fail', 'title' => 'Süre sınırı doldu'])
+        ->and($outcome['detail'])->not->toContain('yanıt vermedi');
+});

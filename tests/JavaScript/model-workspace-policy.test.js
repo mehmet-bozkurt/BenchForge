@@ -69,6 +69,11 @@ test('allows own source and dependency reads while denying other workspaces, sec
             '.npmrc',
             'private.pem',
             'nested/auth.json',
+            // OpenCode 2.x keeps its credentials and sessions in this database.
+            '/Users/fixture/.local/share/opencode/opencode.db',
+            'opencode.db',
+            'opencode.db-wal',
+            'nested/opencode.db-shm',
             '.opencode/agents/unrestricted.md',
             'opencode.json',
             'history/_attempts/old.log',
@@ -79,6 +84,9 @@ test('allows own source and dependency reads while denying other workspaces, sec
     }
 
     assert.equal(config.permission.external_directory, 'deny');
+    // OpenCode 2.x has no OPENCODE_DISABLE_SHARE or auto-update switch; these config keys are the only guard.
+    assert.equal(config.share, 'disabled');
+    assert.equal(config.autoupdate, false);
     assert.equal(config.permission.grep, 'deny');
     assert.equal(config.permission.task, 'deny');
     assert.equal(config.permission.skill, 'deny');

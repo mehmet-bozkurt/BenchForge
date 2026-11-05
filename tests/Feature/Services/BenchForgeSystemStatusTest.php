@@ -47,7 +47,7 @@ function systemVersionFakes(string $root, array $overrides = []): array
 {
     $versions = array_replace([
         'node' => 'v22.22.2', 'zsh' => 'zsh 5.9', 'npm' => '10.9.4',
-        'opencode' => '1.18.31', 'rsync' => 'rsync version 2.6.9',
+        'opencode' => '2.2.5', 'rsync' => 'rsync version 2.6.9',
         'curl' => 'curl 8.7.1', 'python3' => 'Python 3.14.0', 'shasum' => '6.02',
     ], $overrides);
     $responses = [];
@@ -223,7 +223,7 @@ test('it hides raw command failure output and marks unknown OpenCode majors for 
     $root = createSystemStatusFixture();
     Process::fake(systemVersionFakes($root, [
         'npm' => Process::result(output: 'sensitive-value', errorOutput: 'sensitive-error', exitCode: 1),
-        'opencode' => '2.0.0',
+        'opencode' => '3.0.0',
     ]));
     Process::preventStrayProcesses();
 
@@ -258,3 +258,25 @@ test('it rejects a non zsh shell even when it returns a valid numeric version', 
         File::deleteDirectory($root);
     }
 });
+
+test('it accepts OpenCode 2.x and rejects 1.x, which does not know the commands the integration uses', function (string $version, string $status) {
+    $root = createSystemStatusFixture();
+    Process::fake(systemVersionFakes($root, ['opencode' => $version]));
+    Process::preventStrayProcesses();
+
+    try {
+        $result = app(BenchForgeSystemStatus::class)->inspect();
+        $check = collect($result['checks'])->keyBy('key')['opencode'];
+
+        expect($check['status'])->toBe($status);
+        expect($result['ready'])->toBe($status !== 'fail');
+        expect($check['message'])->toContain($version);
+    } finally {
+        File::deleteDirectory($root);
+    }
+})->with([
+    'current 2.x' => ['2.2.5', 'pass'],
+    'later 2.x' => ['2.10.0', 'pass'],
+    'old 1.x' => ['1.19.3', 'fail'],
+    'unknown 3.x' => ['3.0.0', 'warning'],
+]);

@@ -180,7 +180,9 @@ class ModelRunOutcome
 
     /**
      * Provider stalls: a step OpenCode restarted without ever finishing. Newer runs carry the boundary
-     * monitor's count; for older runs the same rule is applied to the saved event stream.
+     * monitor's count; for older runs the same rule is applied to the saved event stream. A step that starts
+     * late after a finished one is not a stall: OpenCode 2.x writes `step_start` at the first content, so a
+     * silently reasoning model or a buffering upstream looks like that.
      *
      * @return array{count: int, seconds: int, compensated: int, mostlyStalled: bool}|null
      */
@@ -306,8 +308,14 @@ class ModelRunOutcome
 
         foreach ($this->jsonLines($events) as $event) {
             if (($event['type'] ?? null) === 'error') {
-                $data = $event['error']['data'] ?? [];
-                $message = is_array($data) && is_string($data['message'] ?? null) ? $data['message'] : ($event['error']['name'] ?? null);
+                $error = is_array($event['error'] ?? null) ? $event['error'] : [];
+                $data = $error['data'] ?? [];
+                // OpenCode 1.x keeps the message in error.data.message; 2.x in error.message next to error.type.
+                $message = match (true) {
+                    is_array($data) && is_string($data['message'] ?? null) => $data['message'],
+                    is_string($error['message'] ?? null) && $error['message'] !== '' => $error['message'],
+                    default => $error['name'] ?? $error['type'] ?? null,
+                };
             }
         }
 

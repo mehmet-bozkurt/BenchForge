@@ -35,6 +35,11 @@ ADIM_CALISTIRICI="${ANA_DIZIN}/tools/run-with-timeout.mjs"
 BROWSER_SMOKE_DIZIN="${ANA_DIZIN}/tools/browser-smoke"
 SESSION_SECICI="${ANA_DIZIN}/tools/select-opencode-session.mjs"
 EVENT_SESSION_SECICI="${ANA_DIZIN}/tools/extract-opencode-event-session.mjs"
+HATA_SINIFLANDIRICI="${ANA_DIZIN}/tools/classify-opencode-failure.mjs"
+# Baslatma hatasinda en fazla bu kadar yeniden denenir; denemeler arasinda (deneme + 1) x bu kadar saniye beklenir.
+BASLATMA_YENIDEN_DENEME=3
+BASLATMA_BEKLEME_SANIYE="${BENCHFORGE_BASLATMA_BEKLEME_SANIYE:-2}"
+[[ "$BASLATMA_BEKLEME_SANIYE" == <-> ]] || BASLATMA_BEKLEME_SANIYE=2
 MODEL_POLICY="${ANA_DIZIN}/tools/benchforge-model-policy.mjs"
 BOUNDARY_MONITOR="${BENCHFORGE_BOUNDARY_MONITOR:-}"
 
@@ -63,7 +68,7 @@ if [[ "$DENEME_DIZIN" != "${RUN_DIZIN}/_attempts/${KLASOR}/"* ]]; then
   exit 65
 fi
 
-if [[ ! -f "$BROWSER_SMOKE" || ! -f "$SESSION_SECICI" || ! -f "$EVENT_SESSION_SECICI" ]]; then
+if [[ ! -f "$BROWSER_SMOKE" || ! -f "$SESSION_SECICI" || ! -f "$EVENT_SESSION_SECICI" || ! -f "$HATA_SINIFLANDIRICI" ]]; then
   echo "HATA: Benchmark yardimci araclari bulunamadi."
   exit 66
 fi
@@ -206,6 +211,25 @@ if [[ ! -d "${PROJE}/node_modules" ]]; then
   fi
 fi
 
+# OpenCode 2.x'in kendi sunucu sureci, birkac model ayni anda baslarken ara sira daha hazir olmadan olur
+# ("Standalone server exited before reporting readiness"). Modele hicbir sey sorulmamistir, ayni cagri yeniden
+# baslatilabilir. Argumanlar: olay gunlugu.
+baslatma_hatasi_mi() {
+  [[ "$(node "$HATA_SINIFLANDIRICI" --startup-failure "$1" 2>/dev/null)" == "yes" ]]
+}
+
+# Baslatma hatasiyla biten bir cagrinin gunlukleri silinir (izleyici var olan bir gunluge yazmaz) ve kisa bir
+# sure beklenir; yeniden denenecekse 0 doner. Argumanlar: cikis kodu, deneme sayisi, olay gunlugu, silinecek dosyalar.
+baslatma_yeniden_denensin() {
+  local RC="$1" DENEME="$2" GUNLUK="$3"
+  shift 3
+  [[ "$RC" == "1" ]] && (( DENEME < BASLATMA_YENIDEN_DENEME )) && baslatma_hatasi_mi "$GUNLUK" || return 1
+  rm -f "$GUNLUK" "$@"
+  # Birlikte dusen cagrilar yeniden birlikte baslamasin diye bekleme biraz farkli olur.
+  sleep $(( (DENEME + 1) * BASLATMA_BEKLEME_SANIYE + (BASLATMA_BEKLEME_SANIYE > 0 ? RANDOM % 3 : 0) ))
+  return 0
+}
+
 if [[ "$MOD" == "continue" ]]; then
   ONCEKI_CALISMA="${DENEME_DIZIN}/workspace-before"
   mkdir -p "$ONCEKI_CALISMA"
@@ -240,38 +264,59 @@ if [[ "$MOD" == "continue" ]]; then
     exit 65
   fi
 
-  (
-    cd "$PROJE"
-    node "$BOUNDARY_MONITOR" \
-      --workspace "$PROJE" \
-      --event-log "$EVENT_LOG" \
-      --stderr-log "$STDERR_LOG" \
-      --report "${DENEME_DIZIN}/boundary-report.json" \
-      --policy-version "workspace-boundary-v1" \
-      --opencode-config "$OPENCODE_CONFIG_DOSYASI" \
-      --runtime-config "${MODEL_POLICY_DIZIN}/opencode-runtime.json" \
-      --base-path "/${KLASOR}" \
-      --environment-profile "$ORTAM_PROFILI" \
-      --timeout-seconds "$MODEL_SURE_SINIRI_SANIYE" \
-      -- opencode run \
-      --dir "$PROJE" \
-      --agent benchforge-workspace \
-      --session "$KAYNAK_SESSION" \
-      --fork \
-      --model "$MODEL" \
-      --title "$SESSION_TITLE" \
-      --format json \
-      "$(<"${MODEL_POLICY_DIZIN}/instructions.txt")"$'\n\n'"$(<"$PROMPT_DOSYASI")"
-  )
+  BASLATMA_DENEMESI=0
+  while true; do
+    (
+      cd "$PROJE"
+      node "$BOUNDARY_MONITOR" \
+        --workspace "$PROJE" \
+        --event-log "$EVENT_LOG" \
+        --stderr-log "$STDERR_LOG" \
+        --report "${DENEME_DIZIN}/boundary-report.json" \
+        --policy-version "workspace-boundary-v1" \
+        --opencode-config "$OPENCODE_CONFIG_DOSYASI" \
+        --runtime-config "${MODEL_POLICY_DIZIN}/opencode-runtime.json" \
+        --base-path "/${KLASOR}" \
+        --environment-profile "$ORTAM_PROFILI" \
+        --timeout-seconds "$MODEL_SURE_SINIRI_SANIYE" \
+        -- opencode run \
+        --standalone \
+        --agent benchforge-workspace \
+        --session "$KAYNAK_SESSION" \
+        --fork \
+        --model "$MODEL" \
+        --title "$SESSION_TITLE" \
+        --format json \
+        "$(<"${MODEL_POLICY_DIZIN}/instructions.txt")"$'\n\n'"$(<"$PROMPT_DOSYASI")"
+    )
 
-  OPENCODE_RC=$?
+    OPENCODE_RC=$?
+
+    if baslatma_yeniden_denensin "$OPENCODE_RC" "$BASLATMA_DENEMESI" "$EVENT_LOG" "$STDERR_LOG" "${DENEME_DIZIN}/boundary-report.json"; then
+      BASLATMA_DENEMESI=$(( BASLATMA_DENEMESI + 1 ))
+      echo "OpenCode baslatilamadi (gecici); ${BASLATMA_DENEMESI}. yeniden deneme."
+      continue
+    fi
+    break
+  done
+
+  # OpenCode 2.x, cikti sinirina takilan bir yaniti kendisi iki kez surdurur; yanit yine kesilirse cikti-siniri
+  # hatasiyla 1 ile biter. 1.x bu durumu 0 ile biten "length" adimi olarak bildiriyordu: modelin hatasi degildir,
+  # dogrulamalar calisir.
+  if [[ "$OPENCODE_RC" == "1" && "$(node "$HATA_SINIFLANDIRICI" "$EVENT_LOG" 2>/dev/null)" == "output-limit" ]]; then
+    OPENCODE_RC=0
+  fi
+
   SONUC_SESSION=$(node "$EVENT_SESSION_SECICI" "$EVENT_LOG" 2>/dev/null)
 
   if [[ "$SONUC_SESSION" != ses_* ]]; then
     SONUC_SESSION=$(
       (
         cd "$PROJE"
-        OPENCODE_CONFIG="$OPENCODE_CONFIG_DOSYASI" opencode session list --format json -n 200 --pure
+        # --standalone kullanicinin arka plan OpenCode servisine gitmez. BenchForge'un ayar klasoru ve kapali
+        # proje ayari, kullanicinin ve calisma alaninin eklentilerini ve MCP sunucularini yuklemez.
+        XDG_CONFIG_HOME="${XDG_CACHE_HOME:-$HOME/.cache}/benchforge/opencode-config" OPENCODE_DISABLE_PROJECT_CONFIG=1 \
+          OPENCODE_CONFIG="$OPENCODE_CONFIG_DOSYASI" opencode session list --format json -n 200 --standalone < /dev/null
       ) 2>/dev/null | node "$SESSION_SECICI" "$PROJE" "$SESSION_TITLE" 2>/dev/null
     )
   fi
