@@ -19,7 +19,7 @@ Amaç: çok adımlı yapay zekâ iş akışlarını (fikir üret → değerlendi
 | Durum | `state.json`, geçici dosya ve `rename` ile atomik; yazımlar kuyrukla sıraya alınır | Aynı |
 | Uzlaştırma | Her yoklamada `reconcile()`: süreç canlılığı, ardından durum okuma | Aynı; ilerleme `_results` ve log işaretlerinden okunur |
 | Durdurma | Süreç grubuna SIGTERM; işçi OpenCode'a SIGTERM, 1,5 sn sonra SIGKILL | Süreç grubuna SIGTERM; izleyici OpenCode'a 4 sn sonra SIGKILL |
-| Model çağrısı | `opencode run --pure --format json --agent benchforge-preparation`; araçlar ve izinler kapalı, prompt stdin'den | İzleyici (`model-boundary-monitor.mjs`) üzerinden `opencode run --agent benchforge-workspace`; `isolated-v1` ortamı, izin politikası, süre sınırı, takılma bekçisi |
+| Model çağrısı | `opencode run --standalone --format json --agent benchforge-preparation`; araçlar ve izinler kapalı, prompt stdin'den | İzleyici (`model-boundary-monitor.mjs`) üzerinden `opencode run --standalone --agent benchforge-workspace`; `isolated-v1` ortamı, izin politikası, süre sınırı, takılma bekçisi |
 | Maliyet | `step_finish` olaylarındaki `cost` ve token toplamı; bilinmeyen `null` kalır | `OpenCodeUsageTracker`, opencode.db'den oturum kimliğiyle; koşu ve model klasör düzenine bağlı |
 | Canlı log | Yok | `readLogTail` (son 32 KB) |
 | Model seçimi | Tek sağlayıcı, 1–5 model, gruplar ve yönlendirme seçimi yok | Grup, OpenRouter, Go modları; yönlendirme modları; 1–16 model, aynı anda en fazla 5 |
@@ -215,7 +215,7 @@ Galeri ve özet bir model adımı değildir. Şablondaki `gallery` alanına gör
 
 **Çağrı türleri:**
 - **`llm_text` / `llm_json`:**
-  - Kısıtlı ajanla, araçsız `opencode run --pure --format json` çağrısı yapılır.
+  - Kısıtlı ajanla, araçsız `opencode run --standalone --format json` çağrısı yapılır. `--standalone` çağrıyı kullanıcının arka plandaki OpenCode servisine değil, bu ortamla açılan ayrı bir sunucuya gönderir.
   - Her çağrı yeni bir oturumdur. Oturum başlığı `benchforge:workflow:<çalıştırma>:<model>:<adım>:<öğe>:<deneme>` biçimindedir.
 - **`code_text`:**
   - Aynı çağrı yapılır. Yanıttaki ` ```html ` bloğu çıkarılır ve statik kontroller uygulanır.
@@ -275,7 +275,7 @@ Galeri ve özet bir model adımı değildir. Şablondaki `gallery` alanına gör
 - **Canlı sayfa:**
   - Adım grafiği: sıralı kutular, her kutuda durum, süre, token ve `foreach` ilerlemesi. Modeller sekme olarak ayrılır.
   - Adıma tıklayınca yan panel açılır: yerleştirilmiş prompt, çıktı (JSON ise biçimlendirilmiş), denemeler, hatalar, süre, token ve maliyet. Bu bilgiler ayrı bir uç noktadan, istek üzerine yüklenir.
-  - Canlı günlük, etkin çağrılar ve modelin son yanıtı. (Aşama 1'de görüldü: OpenCode 1.19.3 `--format json` metni yalnız bir yanıt parçası bitince bildiriyor; bu yüzden "o an yazılan metin" yerine çağrı bitince son yanıt gösteriliyor.)
+  - Canlı günlük, etkin çağrılar ve modelin son yanıtı. (Aşama 1'de görüldü; OpenCode 2.2.5'te de aynı: `--format json` metni yalnız bir yanıt parçası bitince bildiriyor; bu yüzden "o an yazılan metin" yerine çağrı bitince son yanıt gösteriliyor.)
   - Model bazında ve genel toplamlar; bilinmeyen değerler "bilinmiyor" olarak gösterilir.
   - Düğmeler: Durdur, Devam et, Başarısızları yeniden dene, Tek öğeyi yeniden çalıştır.
   - Sayfa 2 sn arayla yoklanır; çalıştırma bitince yoklama durur (`preparations.js` gibi). Sayfanın tamamı değil, yalnız değişen bölgeler güncellenir.
@@ -292,7 +292,15 @@ Galeri ve özet bir model adımı değildir. Şablondaki `gallery` alanına gör
 
 ## 8. Riskler ve açık sorular
 
-1. **Çağrı başına çıktı sınırı (Aşama 1'de doğrulandı):** `opencode run` komutunda böyle bir seçenek yok. OpenCode 1.19.3 her çağrıda `min(modelin limit.output değeri, OUTPUT_TOKEN_MAX)` kullanır. `OUTPUT_TOKEN_MAX` varsayılan olarak 32.000'dir ve `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` ortam değişkeniyle değişir. İşçi bu değişkeni adımın `maxOutputTokens` değeriyle her çağrıya ayrı ayrı geçirir; `maxOutputChars` sınırını da kendisi uygular. Değişkenin gerçek bir modelde çıktıyı gerçekten sınırladığı henüz elle denenmedi.
+1. **Çağrı başına çıktı sınırı (OpenCode 2.2.5'te yeniden çözüldü):**
+   - `opencode run` komutunda böyle bir seçenek yok. OpenCode 1.19.3'ün kullandığı `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` ortam değişkeni 2.2.5'te yok.
+   - 2.2.5 istekteki `max_completion_tokens` değerini modelin `limit.output` değerinden alır (bağlam penceresinin yaklaşık %90'ına kırpılır). Katalog modellerinde 32.000'lik varsayılan sınır yoktur.
+   - Çıktıyı sınırlamanın tek yolu modelin `limit` ayarını geçersiz kılmaktır. Bu ayar hem `context` hem `output` ister; yalnız `output` verilirse model kullanılamaz olur.
+   - İşçi bir modelin gerçek sınırlarını modelin ilk çağrısından önce bir kez, çağrının ortamıyla `opencode api --standalone GET /api/model` komutundan okur (yaklaşık 1 sn).
+   - Adımın `maxOutputTokens` değeri modelin kendi `limit.output` değerinin altındaysa çağrının ayarına `limit {context, output: maxOutputTokens}` eklenir. Değilse ayar olduğu gibi kalır.
+   - Sınırlar okunamazsa çağrı modelin kendi sınırıyla çalışır ve model başına bir kez `output_limit_unknown` uyarısı yazılır.
+   - `maxOutputChars` sınırını işçi kendisi uygular.
+   - Gerçek 2.2.5 ve yerel sahte bir sağlayıcıyla denendi: 5.000'lik sınır istekte `max_completion_tokens=5000` olarak gitti, yönlendirme ayarı korundu. Gerçek bir ücretli modelde denenmedi.
 2. **Hız sınırı:** Ücretsiz OpenRouter modelleri dakikada 20 istek ile sınırlı. Kategori başına 5 fikirle model başına yaklaşık 30–70 çağrı yapılır. Bunu genel eş zamanlılık sınırı ve artan bekleme karşılar.
 3. **Süre:** 20 demo tek tek yaklaşık 2–2,5 saat sürer; eş zamanlılık 2–3 olunca model başına yaklaşık 1 saate iner. Aşama 1 kabul testi kategori başına 1 fikirle (4 demo) yapılır.
 4. **`jsonrepair` bağımlılığı (karar: a, 3.15.0):** İşçilerin ilk npm bağımlılığı oldu. Değerlendirilen seçenekler:
@@ -339,23 +347,26 @@ Kabul ölçütü: Oyun Fikir Fabrikası kategori başına 1 fikir ve 2 modelle u
 
 ## 11. Aşama 1'de kesinleşen davranışlar
 
-- **Hata türleri** (`providerErrorKind`):
-  - **Geçici (429, 5xx, ağ hatası):**
+- **Hata türleri** (`providerErrorKind`). OpenCode 1.x hatayı `error.name` ve `error.data` altında, 2.x `error.type`, `error.status` ve `error.message` alanlarında yazar; ikisi de okunur:
+  - **Başlatma yarışı:** Birkaç OpenCode süreci aynı anda başlarken sunucu süreci ara sıra hazır olmadan kapanır ("Standalone server exited before reporting readiness", `sessionID` boş). Modele hiçbir şey sorulmadığı için `runOpenCodeText` çağrıyı 300, 900 ve 2000 ms beklemeyle en fazla üç kez yeniden başlatır (bekleme `backoffScale` ile ölçeklenir); bunlar deneme sayılmaz. Üç yeniden denemeden sonra da başlamazsa hata geçici sayılır ve aşağıdaki beklemeye girer.
+  - **Geçici (429, 5xx, ağ hatası; 2.x türleri `provider.rate-limit`, `provider.transport`, `provider.timeout`, `provider.internal`, `provider.unknown` (OpenCode'un 4xx durumu olmayan hatalar için genel türü; OpenCode kendisi de yeniden dener), "Transport: …" iletisi):**
     - Artan beklemeyle yeniden denenir: 15, 30, 60, 120, 240 ve 300 sn, çağrı başına en fazla 6 bekleme.
     - "Unexpected server error" hatasında çağrı başına en fazla 2 bekleme yapılır.
     - Bir model üst üste iki çağrıda bekleme hakkını bitirirse yalnız o model durur.
-  - **Hesap (401, 403, `ProviderAuthError`):** Bütün çalıştırma durur.
-  - **Kullanılamaz (404, 410, `ModelDeprecated`):** Yalnız o model başarısız olur.
+  - **Hesap (401, 403, `ProviderAuthError`; 2.x türleri `provider.auth`, `provider.quota`, `provider.free-limit`, `provider.go-limit`, `provider.budget-limit`, `provider.chatgpt-limit`):** Bütün çalıştırma durur.
+  - **Kullanılamaz (404, 410, `ModelDeprecated`; 2.x türü `provider.no-route`; OpenRouter'ın var olmayan model kimliğine verdiği 400 "… is not a valid model ID"):** Yalnız o model başarısız olur. Gerçek denemede bu son hata tanınmayınca çağrı her adımda 10 sn aralıkla 2–3 kez yeniden deneniyordu (5 çağrı, 36 sn); şimdi tek çağrıda duruyor.
+  - **Model harcama sınırı (2.x `provider.model-budget-limit`, 429 durumuyla gelir):** Yalnız o model başarısız olur ("Bu model için harcama sınırı doldu."); diğer modeller sürer. Hesabın sınırları (`provider.go-limit`, `provider.free-limit` gibi) bütün çalıştırmayı durdurur.
   - **Gizlilik reddi (400 veya 404, "trains on request data" ya da "data policy"):** Yalnız o model başarısız olur. Gerçek loglarda bu ret modele özgüdür; aynı anahtarla diğer modeller çalışmaya devam eder.
+  - **Modelin kendi hatası (tür yok):** `provider.content-filter`, `provider.invalid-output`, `provider.unsupported-operation`, `tool.*`, `permission.rejected`, `context-overflow` ve `compaction.failed` sağlayıcı hatası sayılmaz: çağrı başarısız sayılır ve adımın normal deneme hakkı içinde (`llm_text` 2, `llm_json` 3, `code_text` 1) yeniden denenir; sağlayıcı bekleme ve durdurma kuralları uygulanmaz.
 - **Çıktı sınırı:**
-  - Son `step_finish` olayının nedeni `length` ise `llm_text` ve `llm_json` denemeleri "Çıktı token sınırına ulaşıldı; yanıt kesildi." mesajıyla başarısız olur. Yanıt `jsonrepair` ile onarılabilse bile kabul edilmez.
+  - Çağrının herhangi bir adımı `length` ile bittiyse `llm_text` ve `llm_json` denemeleri "Çıktı token sınırına ulaşıldı; yanıt kesildi." mesajıyla başarısız olur. OpenCode 2.2.5 kesilen yanıtı kendisi iki kez sürdürür ve son adım `stop` ile bitebilir; yine de çağrı kesilmiş sayılır, çünkü birleşen metin tam bir yanıt değildir. Yanıt üçüncü kez kesilirse 2.2.5 `output-limit` hata olayıyla 1 koduyla biter; bu da aynı biçimde kesilmiş yanıttır. Yanıt `jsonrepair` ile onarılabilse bile kabul edilmez.
   - `code_text` adımında yanıt kesilmiş sayılır ve onarım prompt'u daha küçük bir sürüm ister.
   - Her denemenin `stopReason` alanı `result.json` dosyasına yazılır.
 - **Token:**
   - İş akışlarında girdi token'ı = `input` + `cache.read` + `cache.write`.
   - Çıktı token'ı = `output` + `reasoning`.
   - Hazırlık paketi akışının toplamları değişmedi.
-- **Canlı metin:** OpenCode 1.19.3 `--format json` metni yalnız bir yanıt parçası bitince bildirir. Bu yüzden durum dosyası her model için çağrı bitince `lastOutput` alanını tutar: son yanıtın son 4096 karakteri. Sayfa bunu "Son yanıt" olarak gösterir; etkin çağrılar için geçen süreyi gösterir.
+- **Canlı metin:** OpenCode `--format json` metni yalnız bir yanıt parçası bitince bildirir (1.19.3'te ve 2.2.5'te görüldü). Bu yüzden durum dosyası her model için çağrı bitince `lastOutput` alanını tutar: son yanıtın son 4096 karakteri. Sayfa bunu "Son yanıt" olarak gösterir; etkin çağrılar için geçen süreyi gösterir.
 - **Demolar:**
   - Kısıtlayıcı bir CSP ile sunulur: `sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; …; connect-src 'none'`.
   - WebRTC (`RTCPeerConnection`) ve sayfayı dışarı yönlendirme CSP kapsamında değildir; statik kontrol bunları kritik sorun sayar.
