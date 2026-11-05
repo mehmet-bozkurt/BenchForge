@@ -23,6 +23,12 @@ export const STALL_COMPENSATION_CAP_SECONDS = 45 * 60;
  * step without ever finishing is that retry — a slow but working model always finishes its step first.
  * The stalled time is not the model's fault, so it is added back to the time limit, and a provider that
  * keeps stalling ends the call.
+ *
+ * Only an unfinished step counts. A `step_start` that comes long after the previous `step_finish` is NOT a
+ * stall: OpenCode 2.x writes a step's `step_start` when the step's first content arrives, so a model that
+ * thinks silently for minutes, or an upstream that buffers its whole answer, produces exactly that gap
+ * (the real OpenCode history on this Mac has such steps of up to 8 minutes, about one in 300). Provider stalls
+ * that leave no unfinished step in the event stream are therefore not detected on 2.x.
  */
 export class ProviderStallTracker {
   constructor({ minimumSeconds = STALL_MINIMUM_SECONDS, stopAfter = STOP_AFTER_STALLS, compensationCapSeconds = STALL_COMPENSATION_CAP_SECONDS } = {}) {
@@ -77,17 +83,28 @@ function safeText(value, limit = 240) {
     .slice(0, limit);
 }
 
+/** Home-relative forms the shell and OpenCode 2.x expand outside the workspace: ~, ~/x, ~user/x, $HOME, ${HOME}. */
+const HOME_RELATIVE_PATH = /^(?:~(?:\/|$)|~[A-Za-z0-9._-]+\/|\$\{?HOME\}?(?:\/|$))/;
+
 function isOutside(workspace, target) {
+  if (HOME_RELATIVE_PATH.test(target)) return true;
   const localPath = relative(workspace, resolve(workspace, target));
 
   return localPath === ".." || localPath.startsWith("../") || isAbsolute(localPath);
 }
 
-function requestedPaths(input) {
-  const directPaths = [input?.filePath, input?.path, input?.directory]
+// OpenCode 1.x calls its shell tool "bash", 2.x calls it "shell".
+const SHELL_TOOLS = new Set(["bash", "shell"]);
+/** Shown instead of a path when OpenCode denied an outside target that no input field names. */
+const UNNAMED_OUTSIDE_PATH = "[çalışma alanı dışı]";
+
+function requestedPaths(input, tool = "") {
+  // OpenCode 2.x shell calls may also name a working directory (workdir), and a glob may escape
+  // through its pattern alone.
+  const directPaths = [input?.filePath, input?.path, input?.directory, input?.workdir, tool === "glob" ? input?.pattern : null]
     .filter((value) => typeof value === "string" && value.length <= 4096);
   const command = typeof input?.command === "string" ? input.command.slice(0, 16384) : "";
-  const commandPaths = [...command.matchAll(/(?:^|[\s'"=(])((?:\.\.\/|\/)[^\s'";|<>)]*)/g)]
+  const commandPaths = [...command.matchAll(/(?:^|[\s'"=(])((?:\.\.\/|\/|~|\$\{?HOME\}?)[^\s'";|<>)]*)/g)]
     .map((match) => match[1]);
 
   return [...directPaths, ...commandPaths];
@@ -260,7 +277,8 @@ export class ModelBoundaryMonitor {
     const { part } = event;
     const state = part.state;
     const tool = /^[a-zA-Z0-9_-]{1,40}$/.test(part.tool ?? "") ? part.tool : "unknown";
-    const eventKey = safeText(part.callID ?? part.id ?? `${event.timestamp}:${tool}:${state.status}`, 200);
+    // In OpenCode 2.x part.id is the provider's tool-call id, which some providers reuse; partID is unique.
+    const eventKey = safeText(part.partID ?? part.callID ?? part.id ?? `${event.timestamp}:${tool}:${state.status}`, 200);
 
     if (this.seenEvents.has(eventKey)) return;
     if (state.status !== "error" && state.status !== "completed") return;
@@ -273,18 +291,23 @@ export class ModelBoundaryMonitor {
     }
 
     const error = typeof state.error === "string" ? state.error.slice(0, 8192) : "";
-    const ruleDenial = /The user has specified a rule which prevents you from using this specific tool call\./i.test(error);
+    // OpenCode 1.x quotes the matching rule; 2.x answers "Permission denied: <permission>".
+    const ruleDenial = /The user has specified a rule which prevents you from using this specific tool call\./i.test(error)
+      || /^Permission denied: [a-z_]+$/i.test(error.trim());
     const permissionDenial = /(?:permission|external_directory)/i.test(error)
       && /(?:reject|denied|forbidden|not allowed|\bdeny\b)/i.test(error);
     if (!ruleDenial && !permissionDenial) return;
 
-    const paths = requestedPaths(state.input);
+    const paths = requestedPaths(state.input, tool);
     const outsidePath = paths.find((path) => isOutside(this.workspace, path));
     const now = this.now();
     const stderr = this.pendingStderr.find((item) => now - item.time <= DENIAL_PAIR_WINDOW_MS
       && (!outsidePath || matchesDirectory(this.workspace, outsidePath, item.path)));
     if (stderr) this.pendingStderr.splice(this.pendingStderr.indexOf(stderr), 1);
-    const target = outsidePath ?? stderr?.path;
+    // OpenCode 2.x has already decided that the target is outside when it denies external_directory, and it
+    // prints no stderr line to pair with, so the denial counts even when no requested path looks outside here.
+    const externalDenial = /^Permission denied: external_directory$/i.test(error.trim());
+    const target = outsidePath ?? stderr?.path ?? (externalDenial ? paths[0] ?? UNNAMED_OUTSIDE_PATH : undefined);
     if (!target && paths.length > 0) return;
     const denial = { time: now, tool, path: target, recorded: Boolean(target), paired: Boolean(stderr) };
     this.pendingDenials.push(denial);
@@ -317,10 +340,12 @@ export class ModelBoundaryMonitor {
   }
 
   inspectCompletedRead(tool, state) {
-    if (tool !== "read" && tool !== "bash") return;
-    const exitCode = state.metadata?.exit ?? state.metadata?.exitCode;
-    if (tool === "bash" && typeof exitCode === "number" && exitCode !== 0) return;
-    if (tool === "bash" && !/(?:^|[\s;|])(cat|head|tail|sed|grep|rg)(?:\s|$)/.test(state.input?.command ?? "")) return;
+    const isShell = SHELL_TOOLS.has(tool);
+    if (tool !== "read" && !isShell) return;
+    // OpenCode 2.x keeps the shell result one level deeper, in state.metadata.metadata.exit.
+    const exitCode = state.metadata?.metadata?.exit ?? state.metadata?.exit ?? state.metadata?.exitCode;
+    if (isShell && typeof exitCode === "number" && exitCode !== 0) return;
+    if (isShell && !/(?:^|[\s;|])(cat|head|tail|sed|grep|rg)(?:\s|$)/.test(state.input?.command ?? "")) return;
     const output = typeof state.output === "string" ? state.output.slice(0, MAX_LINE_BYTES) : "";
     if (!output.trim()) return;
     const paths = requestedPaths(state.input).filter((path) => isOutside(this.workspace, path));
@@ -342,7 +367,7 @@ export class ModelBoundaryMonitor {
       const outputSibling = outputMarkers.find((match) => match[1] !== this.modelSlug)?.[1];
       const otherSlug = sibling ?? attemptSibling ?? logSibling ?? outputSibling;
       if (!otherSlug || otherSlug === this.modelSlug) continue;
-      if (tool === "bash" && !output.includes(otherSlug) && !output.includes(target)) continue;
+      if (isShell && !output.includes(otherSlug) && !output.includes(target)) continue;
 
       this.observedCrossModelReadCount++;
       this.addEntry("observed_cross_model_read", tool, path, "Başka bir modele ait içerik bu araç çıktısında gözlemlendi.");
