@@ -8,6 +8,23 @@ use App\Models\ModelRunAttempt;
 
 class ModelRunBoundaryReport
 {
+    /**
+     * OpenCode 1.x calls its shell tool "bash", 2.x calls it "shell".
+     *
+     * @var list<string>
+     */
+    private const SHELL_TOOLS = ['bash', 'shell'];
+
+    /**
+     * Tools whose legacy log entries can name a path outside the workspace (opencode_worktree_remove is 2.x).
+     *
+     * @var list<string>
+     */
+    private const INSPECTED_TOOLS = ['bash', 'shell', 'read', 'glob', 'grep', 'write', 'edit', 'opencode_worktree_remove'];
+
+    /** Home-relative forms the shell and OpenCode 2.x expand outside the workspace: ~, ~/x, ~user/x, $HOME, ${HOME}. */
+    private const HOME_RELATIVE_PATH = '#^(?:~(?:/|$)|~[A-Za-z0-9._-]+/|\$\{?HOME\}?(?:/|$))#';
+
     public function __construct(private BenchmarkModelFiles $files) {}
 
     /** @return array<string, mixed> */
@@ -94,18 +111,18 @@ class ModelRunBoundaryReport
             $state = is_array($part['state'] ?? null) ? $part['state'] : [];
             $tool = is_string($part['tool'] ?? null) ? $part['tool'] : '';
 
-            if (! in_array($tool, ['bash', 'read', 'glob', 'grep'], true)) {
+            if (! in_array($tool, self::INSPECTED_TOOLS, true)) {
                 continue;
             }
 
             $input = is_array($state['input'] ?? null) ? $state['input'] : [];
-            $request = $input['command'] ?? $input['filePath'] ?? $input['path'] ?? '';
+            $error = is_string($state['error'] ?? null) ? $state['error'] : '';
+            // OpenCode 2.x has already decided that the target is outside when it denies external_directory.
+            $externalDenial = ($state['status'] ?? null) === 'error' && trim($error) === 'Permission denied: external_directory';
 
-            if (! is_string($request) || ! $this->isOutsideRequest($request, $runPath, $model->slug, $tool)) {
+            if (! $externalDenial && ! $this->requestsOutside($input, $tool, $runPath, $model->slug)) {
                 continue;
             }
-
-            $error = is_string($state['error'] ?? null) ? $state['error'] : '';
 
             if (($state['status'] ?? null) === 'error' && preg_match('/permission|not allowed|denied/i', $error) === 1) {
                 $result['blockedCount']++;
@@ -149,7 +166,31 @@ class ModelRunBoundaryReport
         return $result;
     }
 
-    private function isOutsideRequest(string $request, ?string $runPath, string $slug, string $tool): bool
+    /**
+     * A shell call names paths in its command and its working directory; a glob may escape through its
+     * pattern alone.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    private function requestsOutside(array $input, string $tool, ?string $runPath, string $slug): bool
+    {
+        $requests = in_array($tool, self::SHELL_TOOLS, true)
+            ? [[$input['command'] ?? null, true], [$input['workdir'] ?? null, false]]
+            : [
+                [$input['filePath'] ?? $input['path'] ?? $input['directory'] ?? null, false],
+                [$tool === 'glob' ? ($input['pattern'] ?? null) : null, false],
+            ];
+
+        foreach ($requests as [$request, $isCommand]) {
+            if (is_string($request) && $this->isOutsideRequest($request, $runPath, $slug, $isCommand)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isOutsideRequest(string $request, ?string $runPath, string $slug, bool $isCommand): bool
     {
         if ($runPath === null) {
             return false;
@@ -157,15 +198,15 @@ class ModelRunBoundaryReport
 
         $workspace = $runPath.'/'.$slug;
 
-        if ($tool === 'bash') {
-            preg_match_all('~(?:^|[\s"\'=])((?:/|\.{1,2}/|\~/)[^\s"\';&|<>]+)~', $request, $matches);
+        if ($isCommand) {
+            preg_match_all('#(?:^|[\s"\'=])((?:/|\.{1,2}/)[^\s"\';&|<>]+|(?:~|\$\{?HOME\}?)[^\s"\';&|<>]*)#', $request, $matches);
             $paths = $matches[1] ?? [];
         } else {
             $paths = [$request];
         }
 
         foreach ($paths as $path) {
-            if (str_starts_with($path, '~/')) {
+            if (preg_match(self::HOME_RELATIVE_PATH, $path) === 1) {
                 return true;
             }
 
@@ -215,7 +256,7 @@ class ModelRunBoundaryReport
 
             $result['entries'][] = $this->entry(
                 $entry['kind'],
-                in_array($entry['tool'] ?? null, ['bash', 'read', 'write', 'edit', 'glob', 'grep', 'external_directory'], true) ? $entry['tool'] : 'araç',
+                in_array($entry['tool'] ?? null, [...self::INSPECTED_TOOLS, 'external_directory'], true) ? $entry['tool'] : 'araç',
                 is_string($entry['path'] ?? null) ? mb_substr($this->files->sanitize($entry['path'], $runPath), 0, 240) : '[kayıt yok]',
                 $entry['kind'] === 'blocked'
                     ? 'Kapsam dışı erişim engellendi.'

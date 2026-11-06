@@ -20,6 +20,20 @@ function toolEvent(id, tool, status, input, output = '', error = '', metadata = 
     })}\n`;
 }
 
+/** A tool event as OpenCode 2.x writes it: `id` is the call id, the part id moved to `partID`. */
+function openCode2ToolEvent(id, tool, status, input, { output = '', error = '', exit = null } = {}) {
+    const state = status === 'error'
+        ? { status, input, error, metadata: { rawInput: JSON.stringify(input) } }
+        : { status, input, output, title: tool, metadata: { metadata: { status: 'completed', truncated: false, ...(exit === null ? {} : { exit }) }, rawInput: JSON.stringify(input) } };
+
+    return `${JSON.stringify({
+        type: 'tool_use',
+        timestamp: 1_800_000_000_000,
+        sessionID: 'ses_fixture2',
+        part: { partID: `prt_${id}`, sessionID: 'ses_fixture2', messageID: 'msg_fixture2', type: 'tool', id, tool, state },
+    })}\n`;
+}
+
 function rejectedEvent(id, path = '../_logs/model-two.build.log') {
     return toolEvent(id, 'bash', 'error', { command: `cat ${path}` }, '', 'The user rejected permission to use this specific tool call.');
 }
@@ -123,6 +137,87 @@ test('stops once after three distinct rejections including stderr-only incidents
     assert.equal(monitor.snapshot().blockedCount, 3);
     assert.equal(monitor.snapshot().stoppedForBoundary, true);
     assert.equal(stops, 1);
+});
+
+test('counts OpenCode 2.x denials outside the workspace, including a shell working directory, and stops after three', () => {
+    let stops = 0;
+    const monitor = new ModelBoundaryMonitor({ workspace: fixtureWorkspace, onStop: () => stops++ });
+    const denied = (permission) => ({ error: `Permission denied: ${permission}` });
+
+    monitor.consumeEvents(openCode2ToolEvent('call-own-shell', 'shell', 'error', { command: 'git push' }, denied('shell')));
+    monitor.consumeEvents(openCode2ToolEvent('call-skill', 'skill', 'error', { id: 'browser' }, denied('skill')));
+    monitor.consumeEvents(openCode2ToolEvent('call-read', 'read', 'error', { path: '../model-two/src/page.tsx' }, denied('external_directory')));
+    monitor.consumeEvents(openCode2ToolEvent('call-read', 'read', 'error', { path: '../model-two/src/page.tsx' }, denied('external_directory')));
+    assert.equal(monitor.snapshot().blockedCount, 1);
+
+    monitor.consumeEvents(openCode2ToolEvent('call-workdir', 'shell', 'error', { command: 'pwd', workdir: '../model-two' }, denied('external_directory')));
+    monitor.consumeEvents(openCode2ToolEvent('call-remove', 'opencode_worktree_remove', 'error', { directory: '../model-two', force: true }, denied('edit')));
+
+    const report = monitor.snapshot();
+    assert.equal(report.blockedCount, 3);
+    assert.equal(report.stoppedForBoundary, true);
+    assert.equal(stops, 1);
+    assert.deepEqual(report.entries.map((entry) => [entry.tool, entry.path]), [
+        ['read', '../model-two/src/page.tsx'],
+        ['shell', '../model-two'],
+        ['opencode_worktree_remove', '../model-two'],
+    ]);
+});
+
+test('counts OpenCode 2.x denials of home-relative, glob-pattern and unnamed outside targets', () => {
+    const monitor = new ModelBoundaryMonitor({ workspace: fixtureWorkspace, onStop: () => {} });
+    const denied = (permission) => ({ error: `Permission denied: ${permission}` });
+    const calls = [
+        ['call-home-read', 'read', { path: '~/secret.txt' }, 'external_directory'],
+        ['call-home-workdir', 'shell', { command: 'pwd', workdir: '~' }, 'external_directory'],
+        ['call-home-shell', 'shell', { command: 'cat $HOME/secret.txt' }, 'shell'],
+        ['call-user-read', 'read', { path: '~root/.profile' }, 'read'],
+        ['call-glob-pattern', 'glob', { pattern: '../model-two/*' }, 'glob'],
+        ['call-long-path', 'read', { path: `${'./'.repeat(2100)}../model-two/secret.txt` }, 'external_directory'],
+    ];
+
+    monitor.consumeEvents(openCode2ToolEvent('call-own-glob', 'glob', 'error', { pattern: 'src/**/*.tsx' }, denied('glob')));
+    for (const [id, tool, input, permission] of calls) {
+        monitor.consumeEvents(openCode2ToolEvent(id, tool, 'error', input, denied(permission)));
+    }
+
+    assert.deepEqual(monitor.snapshot().entries.map((entry) => [entry.tool, entry.path]), [
+        ['read', '~/secret.txt'],
+        ['shell', '~'],
+        ['shell', '$HOME/secret.txt'],
+        ['read', '~root/.profile'],
+        ['glob', '../model-two/*'],
+        ['read', '[çalışma alanı dışı]'],
+    ]);
+    assert.equal(monitor.snapshot().blockedCount, 6);
+});
+
+test('counts OpenCode 2.x tool parts separately when the provider reuses a tool-call id', () => {
+    const monitor = new ModelBoundaryMonitor({ workspace: fixtureWorkspace, onStop: () => {} });
+    const reused = (partID, path) => openCode2ToolEvent('call_dup', 'read', 'error', { path }, { error: 'Permission denied: external_directory' })
+        .replace('"partID":"prt_call_dup"', `"partID":"${partID}"`);
+
+    monitor.consumeEvents(reused('prt_one', '../model-two/secret.txt'));
+    monitor.consumeEvents(reused('prt_one', '../model-two/secret.txt'));
+    monitor.consumeEvents(reused('prt_two', '../model-two/package.json'));
+    monitor.consumeEvents(reused('prt_three', '../outside.txt'));
+
+    assert.equal(monitor.snapshot().blockedCount, 3);
+    assert.equal(monitor.snapshot().stoppedForBoundary, true);
+});
+
+test('reads an OpenCode 2.x shell call and its nested exit code when it observes another model', () => {
+    const monitor = new ModelBoundaryMonitor({ workspace: fixtureWorkspace });
+    const output = '/tmp/benchforge-fixture/run/_attempts/model-two/attempt-1/events.jsonl';
+
+    monitor.consumeEvents(openCode2ToolEvent('call-failed', 'shell', 'completed', { command: 'grep directory ../_attempts' }, { output, exit: 1 }));
+    assert.equal(monitor.snapshot().observedCrossModelReadCount, 0);
+
+    monitor.consumeEvents(openCode2ToolEvent('call-read', 'shell', 'completed', { command: 'grep directory ../_attempts' }, { output, exit: 0 }));
+    assert.equal(monitor.snapshot().observedCrossModelReadCount, 1);
+    assert.deepEqual(monitor.snapshot().entries.map((entry) => [entry.kind, entry.tool, entry.path]), [
+        ['observed_cross_model_read', 'shell', '../_attempts'],
+    ]);
 });
 
 test('parses split and final JSON lines and recovers after malformed oversized lines', () => {
@@ -564,4 +659,48 @@ test('ignores quick step restarts and events without a timestamp', () => {
     assert.equal(tracker.consume({ type: 'step_start' }), 0);
     assert.equal(tracker.consume({ type: 'tool_use', timestamp: start + 999_000 }), 0);
     assert.equal(tracker.count, 0);
+});
+
+test('does not mistake a slow silent step for a provider stall, however long it takes to start', () => {
+    const tracker = new ProviderStallTracker({ minimumSeconds: 120, stopAfter: 3 });
+    const at = (seconds) => Date.UTC(2026, 10, 5, 12, 0, 0) + seconds * 1000;
+
+    // OpenCode 2.x writes a step's step_start when its first content arrives: a model that reasons silently for
+    // minutes, or an upstream that buffers the whole answer, starts its step long after the previous one finished
+    // (real steps of 153 s and 483 s exist in the OpenCode history). The step then finishes: no stall, ever.
+    for (const gap of [150, 483, 900]) {
+        const previousFinish = at(0);
+        assert.equal(tracker.consume({ type: 'step_finish', timestamp: previousFinish }), 0);
+        assert.equal(tracker.consume({ type: 'step_start', timestamp: previousFinish + gap * 1000 }), 0);
+        assert.equal(tracker.consume({ type: 'step_finish', timestamp: previousFinish + gap * 1000 + 15 }), 0);
+    }
+
+    assert.equal(tracker.count, 0);
+    assert.equal(tracker.shouldStop, false);
+    assert.equal(tracker.summary(), 'BENCHFORGE_STALLS count=0 seconds=0 compensated=0');
+});
+
+test('does not count the first step of a call as a stall however late it starts', async () => {
+    const fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'benchforge-boundary-first-step-')));
+    const workspace = join(fixtureRoot, 'model-one');
+
+    try {
+        await mkdir(workspace);
+        // The model prints a first step_start stamped five minutes in the future, then finishes it.
+        const wrapper = spawn(process.execPath, [monitorPath,
+            '--workspace', workspace,
+            '--event-log', join(fixtureRoot, '_logs', 'model-one.opencode.events.jsonl'),
+            '--stderr-log', join(fixtureRoot, '_logs', 'model-one.opencode.stderr.log'),
+            '--report', join(fixtureRoot, '_boundary', 'model-one.json'),
+            '--', process.execPath, '-e', 'const at = Date.now() + 300000; console.log(JSON.stringify({ type: "step_start", timestamp: at })); console.log(JSON.stringify({ type: "step_finish", timestamp: at + 5 }));',
+        ], { stdio: ['ignore', 'pipe', 'ignore'] });
+        let output = '';
+        wrapper.stdout.on('data', (chunk) => { output += chunk; });
+        const [code] = await once(wrapper, 'exit');
+
+        assert.equal(code, 0);
+        assert.doesNotMatch(output, /BENCHFORGE_STALLS|yanıt vermedi/);
+    } finally {
+        await rm(fixtureRoot, { recursive: true, force: true });
+    }
 });

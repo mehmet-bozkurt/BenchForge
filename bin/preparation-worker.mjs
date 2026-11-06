@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access, lstat, mkdir } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { assertRestrictedConfig, runOpenCodeText } from "./opencode-text.mjs";
+import { OUTPUT_LIMIT_MESSAGE, assertRestrictedConfig, runOpenCodeText } from "./opencode-text.mjs";
 import { atomicWrite, checkPath, readBounded } from "./private-files.mjs";
 
 const MAX_JOB_BYTES = 256 * 1024;
@@ -192,6 +192,13 @@ async function main() {
     await queueState(root, { models: nextModels });
     if (stopRequested) break;
     const result = await runModel(model, prompt, timeoutSeconds);
+
+    // OpenCode 2.x continues a cut-off answer by itself and the parts are joined, so a call that was cut off at
+    // any point has no complete answer even when it finished normally.
+    if (result.status === "completed" && result.stopReason === "length") {
+      result.status = "failed";
+      result.errorMessage = OUTPUT_LIMIT_MESSAGE;
+    }
 
     if (result.status === "completed") {
       try {

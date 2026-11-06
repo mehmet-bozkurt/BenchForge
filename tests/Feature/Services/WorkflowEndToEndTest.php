@@ -33,6 +33,16 @@ function installWorkflowEndToEndFakeCli(string $root, array $rules): void
 if (process.env.APP_KEY !== undefined || process.env.BENCHFORGE_TEST_WORKFLOW_E2E_SECRET !== undefined) process.exit(91);
 const fakeDirectory = __FAKE_DIRECTORY__;
 const rules = __RULES__;
+if (process.argv[2] === "api") {
+  // The worker reads every model's real token limits once: `opencode api --standalone GET /api/model`.
+  (await import("node:fs")).writeFileSync(`${fakeDirectory}/lookups/${process.pid}.json`, JSON.stringify({ args: process.argv.slice(2), home: process.env.HOME }));
+  const limit = { context: 200000, output: 50000 };
+  const listed = (providerID, modelID) => ({ id: modelID, modelID, providerID, type: "chat", limit });
+  process.stdout.write(JSON.stringify({ location: { directory: process.cwd() }, data: [
+    listed("openrouter", "fixture/e2e-alpha"), listed("opencode-go", "e2e-beta"), listed("opencode-go", "e2e-stop"),
+  ] }));
+  process.exit(0);
+}
 let prompt = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => { prompt += chunk; });
@@ -41,6 +51,15 @@ process.stdin.on("end", async () => {
   const { spawn } = await import("node:child_process");
   const args = process.argv.slice(2);
   const model = args[args.indexOf("--model") + 1];
+  // The output limit the worker wrote into the call's configuration for this model, or null.
+  const outputLimitOf = (fullModel) => {
+    const slash = fullModel.indexOf("/");
+    try {
+      return JSON.parse(process.env.OPENCODE_CONFIG_CONTENT).provider[fullModel.slice(0, slash)].models[fullModel.slice(slash + 1)].limit.output ?? null;
+    } catch {
+      return null;
+    }
+  };
   const rule = rules.find((candidate) => candidate.match.every((text) => prompt.includes(text))
     && (candidate.model === undefined || model.includes(candidate.model)));
   writeFileSync(`${fakeDirectory}/calls/${process.pid}.json`, JSON.stringify({
@@ -49,6 +68,7 @@ process.stdin.on("end", async () => {
     title: args[args.indexOf("--title") + 1],
     home: process.env.HOME,
     config: process.env.OPENCODE_CONFIG,
+    outputLimit: outputLimitOf(model),
     matched: rule !== undefined,
   }));
   const emit = (event) => process.stdout.write(`${JSON.stringify({ sessionID: `ses_fake${process.pid}`, ...event })}\n`);
@@ -75,6 +95,7 @@ JS;
     $fakeDirectory = $root.'/fake';
     $nodeBinary = installWorkflowEndToEndNodeWrapper($root.'/bin');
     File::ensureDirectoryExists($fakeDirectory.'/calls', 0700, true);
+    File::ensureDirectoryExists($fakeDirectory.'/lookups', 0700, true);
     File::ensureDirectoryExists($fakeDirectory.'/grandchildren', 0700, true);
     File::put($root.'/bin/opencode', '#!'.$nodeBinary.PHP_EOL.str_replace(
         ['__FAKE_DIRECTORY__', '__RULES__'],
@@ -119,13 +140,26 @@ function workflowEndToEndJobOpenCodeBinary(WorkflowRun $run): mixed
 }
 
 /**
- * @return list<array{pid: int, model: string, title: string, home: string, config: string, matched: bool}>
+ * @return list<array{pid: int, model: string, title: string, home: string, config: string, outputLimit: int|null, matched: bool}>
  */
 function workflowEndToEndCalls(string $root): array
 {
     return collect(File::files($root.'/fake/calls'))
         ->map(fn (SplFileInfo $file): array => json_decode(File::get($file->getPathname()), true, flags: JSON_THROW_ON_ERROR))
         ->sortBy('pid')
+        ->values()
+        ->all();
+}
+
+/**
+ * The model-limit lookups (`opencode api`) the worker made: one per model, never one per call.
+ *
+ * @return list<array{args: list<string>, home: string}>
+ */
+function workflowEndToEndLookups(string $root): array
+{
+    return collect(File::files($root.'/fake/lookups'))
+        ->map(fn (SplFileInfo $file): array => json_decode(File::get($file->getPathname()), true, flags: JSON_THROW_ON_ERROR))
         ->values()
         ->all();
 }
@@ -326,7 +360,13 @@ test('it runs the built-in Game Idea Factory end to end for two models through t
             ])
             ->and($run->models->pluck('duration_seconds')->filter()->count())->toBe(2);
 
+        $outputLimits = collect($calls)->pluck('outputLimit')->filter()->unique()->values()->all();
+
         expect($calls)->toHaveCount(18)
+            ->and(workflowEndToEndLookups($root))->toHaveCount(2)
+            ->and(workflowEndToEndLookups($root)[0]['args'])->toBe(['api', '--standalone', 'GET', '/api/model'])
+            // The text steps carry the step's 32.000 token cap below the models' own 50.000; code steps keep the model's limit.
+            ->and($outputLimits)->toBe([32000])
             ->and(collect($calls)->every(fn (array $call): bool => $call['matched']))->toBeTrue()
             ->and(collect($calls)->countBy('model')->all())->toEqualCanonicalizing([
                 'openrouter/fixture/e2e-alpha' => 9,

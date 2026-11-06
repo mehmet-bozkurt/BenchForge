@@ -55,7 +55,7 @@ Laravel arayüzü ──► Node işçileri (bin/) ──► engine/tools/benchm
 3. Model, OpenCode ile yalnız kendi klasöründe çalışacak şekilde izin politikası ve sınır izleyicisiyle çalıştırılır.
    - Model başına 60 dakika süre sınırı vardır.
    - Sağlayıcının takıldığı süre bu sınıra geri eklenir (en fazla 45 dakika).
-   - Model çıktı sınırına takılıp hiçbir dosya yazamadıysa aynı oturumda bir kez otomatik olarak devam ettirilir.
+   - Model çıktı sınırına takılıp hiçbir dosya yazamadıysa aynı oturumda bir kez otomatik olarak devam ettirilir. OpenCode 2.x kesilen bir yanıtı zaten iki kez kendisi sürdürür; yanıt yine kesilirse çıktı-sınırı hatasıyla biter ve bu, modelin hatası değil çıktı sınırı durağı sayılır.
 4. Teslim doğrulanır, sonuçlar `runs/<koşu>/` altına yazılır ve veritabanına senkronlanır.
    - Bağımlılık kurulumu, lint ve build adımlarının her biri en fazla 15 dakika sürebilir. Süre dolunca komut ve başlattığı bütün süreçler durdurulur; böylece modelin build betiğine eklediği ve kapanmayan bir süreç koşuyu kilitleyemez.
    - Tarayıcı testi Chromium'u WebGPU ve GPU destekli WebGL açık çalıştırır (macOS'ta Metal). Böylece 3D çıktılar da gerçek sahneleriyle denetlenir.
@@ -81,14 +81,16 @@ Başlıktaki **Sorunlu** sayısı modelin kendi hatalarını, **Dış etken** sa
 | --- | --- | --- |
 | 0 | Model işini bitirdi. | Puanlanır |
 | 124 | Süre doldu; o ana kadar yazılanlar doğrulandı. | Puanlanır |
-| 75 | Sağlayıcı veya hesap hatası ve teslim yok. Örnekler: sunucu hatası, istek sınırı, süresi dolmuş API anahtarı, abonelik yok. | Puanlanmaz |
+| 75 | Sağlayıcı veya hesap hatası ve teslim yok. Örnekler: sunucu hatası, istek sınırı, kopan bağlantı, süresi dolmuş API anahtarı, abonelik yok, kullanım sınırı dolmuş. | Puanlanmaz |
 | 77 | Sağlayıcı hatası geldi ama model bir teslim bıraktı. | Puanlanır |
 | 86 | Teslim yok: model başlangıç şablonunda hiçbir dosyayı değiştirmedi. | Teknik puanı 0 |
+
+**OpenCode başlatma yarışı:** Birkaç model aynı anda başlarken OpenCode 2.x'in kendi sunucu süreci ara sıra hazır olmadan kapanır ("Standalone server exited before reporting readiness"). Modele hiçbir şey sorulmamıştır; betikler çağrıyı kısa beklemelerle en fazla üç kez yeniden başlatır ve başarısız denemenin günlüklerini siler. Üç yeniden denemeden sonra da başlamazsa sağlayıcı kaynaklı sayılır (75).
 
 **Lint ve build'de 124:** Kod 124 lint veya build aşamasında görünürse adım 15 dakikalık sınırı aşmış demektir. Koşu sayfası bunu "Build süre sınırını aştı" diye açıklar.
 
 **Sağlayıcı takılması:**
-- **Tanım:** OpenCode bir adımı bitirmeden en az 120 saniye sonra yeniden başlatırsa bu bir sağlayıcı takılması sayılır.
+- **Tanım:** OpenCode bir adımı bitirmeden en az 120 saniye sonra yeniden başlatırsa bu bir sağlayıcı takılması sayılır. Bitmiş bir adımdan çok sonra başlayan adım takılma sayılmaz: OpenCode 2.x bir adımın `step_start` olayını ilk içerik geldiğinde yazar; sessizce düşünen bir model ya da yanıtını tek parça gönderen bir sağlayıcı aynı boşluğu üretir (gerçek geçmişte 8 dakikaya varan adımlar var). Bu yüzden 2.x'te olay akışına iz bırakmayan bir sağlayıcı takılması tespit edilmez.
 - **Telafi:** Takılan süre modelin süresine geri eklenir.
 - **Durdurma:** Üç takılmadan sonra çağrı durdurulur. Teslim yoksa sonuç 75, varsa 77 olur.
 - **Süre aşımı:** Sürenin en az yarısı takılmayla geçen bir süre aşımı da sağlayıcıdan sayılır.
@@ -154,7 +156,7 @@ Başlıktaki **Sorunlu** sayısı modelin kendi hatalarını, **Dış etken** sa
 - **Modeller:** Araçsız adımlar hazırlık paketlerindeki kısıtlı ajan ayarıyla çalışır; araç ve izinler kapalıdır, süreç ortamı izin listesiyle temizlenir.
 - **Demolar:** Yalnız sandbox'lı çerçevede açılır ve uygulama oturumuna erişemez. Demo adresi kısıtlayıcı bir CSP ile sunulur; tarayıcı dış kaynak yüklemeyi ve bağlantı isteklerini engeller. WebRTC ve sayfa yönlendirmesi CSP kapsamında değildir; bunlar yalnız statik kontrolde yakalanır. Demoları yine de güvenilmeyen kod olarak düşünün.
 - **Aynı anda çalışma:** Aynı anda tek iş akışı çalışır. Bir iş akışı, bir benchmark koşusuyla aynı anda çalışabilir.
-- **Çıktı sınırı:** OpenCode bir çağrının çıktısını varsayılan olarak 32.000 token ile sınırlar. Demo adımları bu sınırı adım ayarındaki `maxOutputTokens` değerine yükseltir; bu değer `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` olarak geçirilir.
+- **Çıktı sınırı:** OpenCode 2.x bir çağrının çıktısını modelin kendi `limit.output` değeriyle sınırlar. İşçi her modelin gerçek sınırlarını bir kez OpenCode'dan okur; adım ayarındaki `maxOutputTokens` bu değerin altındaysa çağrının ayarına yazılır. Sınırlar okunamazsa model kendi sınırıyla çalışır ve olay günlüğüne uyarı yazılır. Çağrının herhangi bir adımı çıktı sınırında kesilmişse (OpenCode kesilen yanıtı kendisi sürdürse bile) yanıt kesilmiş sayılır.
 - **Canlı metin:** `opencode run` metni bir yanıt parçası tamamlanınca bildirir. Bu yüzden sayfa, çağrı sürerken yalnız çalışan çağrıyı ve geçen süreyi gösterir; modelin yazdığı metin çağrı bitince **Son yanıt** alanında görünür.
 - **Aşama 2 ve 3:** Durdurulan bir çalıştırmayı sürdürme, başarısız öğeleri yeniden deneme, modeller arası karşılaştırma, puanlama, zip dışa aktarma ve şablon editörü sonraki aşamalardadır.
 
@@ -166,7 +168,7 @@ Başlıktaki **Sorunlu** sayısı modelin kendi hatalarını, **Dış etken** sa
 | Composer | 2.x |
 | Node.js | 20.19+ veya 22.12+ |
 | zsh | Koşucu betikleri için |
-| OpenCode CLI | 1.x |
+| OpenCode CLI | 2.x |
 | rsync, curl, python3, shasum | Doğrulama aşamaları için |
 | Playwright + Chromium | Tarayıcı çalışma testi için |
 

@@ -176,8 +176,12 @@ class BenchForgeSystemStatus
                 return $this->check($key, $label, 'fail', $version.' — mevcut Vite/Next araçları için Node 20.19+ veya 22.12+ gerekli.', $resolved);
             }
 
-            if ($key === 'opencode' && ! str_starts_with($version, '1.')) {
-                return $this->check($key, $label, 'warning', $version.' — mevcut entegrasyon OpenCode 1.x ile doğrulandı; bu sürümün uyumluluğu ayrıca test edilmeli.', $resolved);
+            if ($key === 'opencode' && str_starts_with($version, '1.')) {
+                return $this->check($key, $label, 'fail', $version.' — entegrasyon OpenCode 2.x için yazıldı (komutlar --standalone kullanır); 1.x ile çalışmaz. OpenCode 2.x kurun.', $resolved);
+            }
+
+            if ($key === 'opencode' && ! str_starts_with($version, '2.')) {
+                return $this->check($key, $label, 'warning', $version.' — mevcut entegrasyon OpenCode 2.x ile doğrulandı; bu sürümün uyumluluğu ayrıca test edilmeli.', $resolved);
             }
 
             return $this->check($key, $label, 'pass', 'Sürüm: '.$version, $resolved);

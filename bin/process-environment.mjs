@@ -26,12 +26,16 @@ export function subprocessEnvironment(additions = {}, source = process.env) {
   return { ...inheritedEnvironment(source), ...additions };
 }
 
+// OpenCode 2.x dropped OPENCODE_PURE, OPENCODE_DISABLE_EXTERNAL_SKILLS, OPENCODE_DISABLE_CLAUDE_CODE_PROMPT and
+// OPENCODE_DISABLE_SHARE. The model policy config disables sharing and the disabled project config keeps a
+// workspace's own plugins and skills out. Host plugins, MCP servers, skills and instructions are kept out only
+// by the private HOME and BenchForge's own config directory of the "isolated-v1" profile (see
+// isolatedModelEnvironment); the "legacy" profile, which is this environment alone, sees the host configuration
+// and has no guard against host plugins any more.
 export function modelEnvironment(additions = {}, source = process.env) {
   return {
     ...subprocessEnvironment(additions, source),
     OPENCODE_DISABLE_PROJECT_CONFIG: "1",
-    OPENCODE_PURE: "1",
-    OPENCODE_DISABLE_EXTERNAL_SKILLS: "1",
     OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: "1",
   };
 }
@@ -61,8 +65,6 @@ export function isolatedModelEnvironment(additions = {}, privateHome, source = p
     NEXT_TELEMETRY_DISABLED: "1",
     OPENCODE_DISABLE_AUTOUPDATE: "1",
     OPENCODE_DISABLE_CLAUDE_CODE: "1",
-    OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: "1",
-    OPENCODE_DISABLE_SHARE: "1",
   }, source);
 }
 

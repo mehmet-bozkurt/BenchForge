@@ -109,3 +109,25 @@ test('it rejects unknown keys from every inheritance source and invalid safe val
         $_SERVER = $originalServer;
     }
 });
+
+test('it gives OpenCode commands the BenchForge config directory and keeps the user data directory', function () {
+    $configuredHome = (string) config('benchforge.home_path');
+    $fixture = [
+        'XDG_CACHE_HOME' => '/private/tmp/benchforge-test-cache', 'XDG_CONFIG_HOME' => '/private/tmp/benchforge-test-config',
+        'XDG_DATA_HOME' => '/private/tmp/benchforge-test-data', 'OPENCODE_DISABLE_PROJECT_CONFIG' => '',
+    ];
+
+    withBenchmarkEnvironmentFixture($fixture, function () use ($configuredHome): void {
+        expect(app(BenchmarkProcessEnvironment::class)->openCodeCommand())->toMatchArray([
+            'XDG_CONFIG_HOME' => '/private/tmp/benchforge-test-cache/benchforge/opencode-config',
+            'XDG_DATA_HOME' => '/private/tmp/benchforge-test-data',
+            'OPENCODE_DISABLE_PROJECT_CONFIG' => '1',
+            'HOME' => $configuredHome,
+        ]);
+    });
+
+    withBenchmarkEnvironmentFixture(['XDG_CACHE_HOME' => ''], function () use ($configuredHome): void {
+        expect(app(BenchmarkProcessEnvironment::class)->openCodeCommand()['XDG_CONFIG_HOME'])
+            ->toBe(rtrim($configuredHome, '/').'/.cache/benchforge/opencode-config');
+    });
+});

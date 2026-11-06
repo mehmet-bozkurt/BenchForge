@@ -16,6 +16,8 @@ const protectedFilePatterns = [
     '*.pfx',
     '*.npmrc',
     '*auth.json',
+    // OpenCode 2.x keeps its credentials and every session in this SQLite database (and its -wal/-shm files).
+    '*opencode.db*',
     '*credentials*',
     '*id_rsa*',
     '*id_ed25519*',

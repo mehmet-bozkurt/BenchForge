@@ -56,7 +56,9 @@ test('inherits only exact operational keys and drops future secrets and executio
     const model = modelEnvironment({ OPENCODE_CONFIG_CONTENT: '{"permission":{"*":"deny"}}' }, source);
     assert.equal(model.OPENCODE_CONFIG_CONTENT, '{"permission":{"*":"deny"}}');
     assert.equal(model.OPENCODE_DISABLE_PROJECT_CONFIG, '1');
-    assert.equal(model.OPENCODE_PURE, '1');
+    assert.equal(model.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS, '1');
+    assert.equal(model.OPENCODE_PURE, undefined);
+    assert.equal(model.OPENCODE_DISABLE_EXTERNAL_SKILLS, undefined);
     assert.equal(model.OPENCODE_PERMISSION, undefined);
     assert.equal(model.APP_KEY, undefined);
     assert.equal(modelEnvironment({}, source).OPENCODE_CONFIG_CONTENT, undefined);
@@ -74,8 +76,12 @@ test('isolates the model from host OpenCode configuration while keeping shared a
     assert.equal(model.XDG_CACHE_HOME, '/fixture/home/.cache');
     assert.equal(model.npm_config_cache, '/fixture/home/.npm');
     assert.equal(model.OPENCODE_CONFIG, '/fixture/run/config.json');
-    for (const flag of ['OPENCODE_DISABLE_PROJECT_CONFIG', 'OPENCODE_PURE', 'OPENCODE_DISABLE_AUTOUPDATE', 'OPENCODE_DISABLE_CLAUDE_CODE', 'OPENCODE_DISABLE_CLAUDE_CODE_PROMPT', 'OPENCODE_DISABLE_SHARE']) {
+    for (const flag of ['OPENCODE_DISABLE_PROJECT_CONFIG', 'OPENCODE_DISABLE_CLAUDE_CODE_SKILLS', 'OPENCODE_DISABLE_AUTOUPDATE', 'OPENCODE_DISABLE_CLAUDE_CODE']) {
         assert.equal(model[flag], '1', flag);
+    }
+    // OpenCode 2.x has none of these switches; the policy config (sharing disabled) and the private HOME replace them.
+    for (const flag of ['OPENCODE_PURE', 'OPENCODE_DISABLE_EXTERNAL_SKILLS', 'OPENCODE_DISABLE_CLAUDE_CODE_PROMPT', 'OPENCODE_DISABLE_SHARE']) {
+        assert.equal(model[flag], undefined, flag);
     }
     assert.equal(model.OPENCODE_DISABLE_MODELS_FETCH, undefined);
     assertNoInheritedSecrets(Object.keys(model));
@@ -208,7 +214,7 @@ test('monitor ignores inherited OpenCode overrides and uses only explicit model 
             '--stderr-log', join(root, '_logs', 'fixture-model.opencode.stderr.log'),
             '--report', join(root, '_boundary', 'fixture-model.json'),
             '--opencode-config', configPath, '--runtime-config', runtimePath, '--base-path', '/fixture-model',
-            '--', process.execPath, '-e', 'console.log(JSON.stringify({ keys: Object.keys(process.env), config: process.env.OPENCODE_CONFIG_CONTENT, configPath: process.env.OPENCODE_CONFIG, basePath: process.env.NEXT_PUBLIC_BASE_PATH, pure: process.env.OPENCODE_PURE }))',
+            '--', process.execPath, '-e', 'console.log(JSON.stringify({ keys: Object.keys(process.env), config: process.env.OPENCODE_CONFIG_CONTENT, configPath: process.env.OPENCODE_CONFIG, basePath: process.env.NEXT_PUBLIC_BASE_PATH, claudeSkillsDisabled: process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS, projectConfigDisabled: process.env.OPENCODE_DISABLE_PROJECT_CONFIG }))',
         ], { env: { ...process.env, ...fakeSecrets } });
         const observed = JSON.parse(stdout);
 
@@ -216,7 +222,9 @@ test('monitor ignores inherited OpenCode overrides and uses only explicit model 
         assert.equal(observed.config, '{"permission":{"*":"deny"}}');
         assert.equal(observed.configPath, configPath);
         assert.equal(observed.basePath, '/fixture-model');
-        assert.equal(observed.pure, '1');
+        assert.equal(observed.claudeSkillsDisabled, '1');
+        assert.equal(observed.projectConfigDisabled, '1');
+        assert.ok(!observed.keys.includes('OPENCODE_PURE') && !observed.keys.includes('OPENCODE_PERMISSION'));
     } finally {
         await rm(root, { recursive: true, force: true });
     }

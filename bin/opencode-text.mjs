@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { performance } from "node:perf_hooks";
-import { providerErrorKind } from "../engine/tools/classify-opencode-failure.mjs";
+import { isOutputLimitError, isStartupFailure, providerErrorKind } from "../engine/tools/classify-opencode-failure.mjs";
 import { subprocessEnvironment } from "./process-environment.mjs";
 
 // A tool-less OpenCode call: the prompt goes in on stdin, the model may only answer with text, and any
@@ -17,10 +17,15 @@ const MAX_STOP_REASON_CHARS = 64;
 /** Turkish message for a model the provider refuses under the account's privacy or data policy. */
 export const POLICY_REFUSAL_MESSAGE = "Sağlayıcı bu modeli hesabınızın gizlilik ayarı nedeniyle reddetti (model istek verisiyle eğitim yapıyor). OpenCode Console veya OpenRouter gizlilik ayarını kontrol edin.";
 
+/** Shown when a response was cut off at the output token limit. */
+export const OUTPUT_LIMIT_MESSAGE = "Çıktı token sınırına ulaşıldı; yanıt kesildi.";
+
+/** The spend limit of one model is used up (OpenCode 2.x `provider.model-budget-limit`). */
+export const LIMIT_MESSAGE = "Bu model için harcama sınırı doldu.";
+
 /** Keys that keep the call isolated from the host OpenCode setup; `extra` may not replace them. */
 const ISOLATION_KEYS = new Set([
-  "HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "OPENCODE_CONFIG_DIR", "OPENCODE_TUI_CONFIG",
-  "OPENCODE_PERMISSION", "OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_PURE",
+  "HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT",
 ]);
 
 export function isForbiddenEvent(event) {
@@ -89,7 +94,13 @@ export function assertRestrictedConfig(config, agentName = "benchforge-preparati
 /**
  * The environment of a tool-less call: a private HOME and config directory, the host's data directory
  * (shared authentication and session database), the restricted config, and every optional OpenCode
- * feature switched off. `extra` is added last, for example OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX.
+ * feature switched off. `extra` is added last.
+ *
+ * OpenCode 2.x dropped several switches this once set (OPENCODE_PURE, OPENCODE_PERMISSION,
+ * OPENCODE_TUI_CONFIG, OPENCODE_DISABLE_DEFAULT_PLUGINS, OPENCODE_DISABLE_EXTERNAL_SKILLS,
+ * OPENCODE_DISABLE_LSP_DOWNLOAD, OPENCODE_DISABLE_CLAUDE_CODE_PROMPT, OPENCODE_DISABLE_SHARE). Its replacements
+ * are the restricted config (no plugins, instructions or MCP servers, sharing disabled), the disabled project
+ * config and the empty private HOME, which has no external skill folders.
  */
 export function textModelEnvironment({ privateHome, configPath, configContent, extra = {} }) {
   if (typeof privateHome !== "string" || !isAbsolute(privateHome)) {
@@ -111,36 +122,32 @@ export function textModelEnvironment({ privateHome, configPath, configContent, e
     XDG_CONFIG_HOME: join(privateHome, ".config"),
     XDG_DATA_HOME: authDataHome,
     OPENCODE_CONFIG_DIR: "",
-    OPENCODE_TUI_CONFIG: "",
-    OPENCODE_PERMISSION: "",
     OPENCODE_CONFIG: configPath,
     OPENCODE_CONFIG_CONTENT: configContent,
     OPENCODE_DISABLE_PROJECT_CONFIG: "1",
-    OPENCODE_PURE: "1",
-    OPENCODE_DISABLE_EXTERNAL_SKILLS: "1",
     OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: "1",
-    OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
     OPENCODE_DISABLE_AUTOUPDATE: "1",
-    OPENCODE_DISABLE_LSP_DOWNLOAD: "1",
-    OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: "1",
     OPENCODE_DISABLE_CLAUDE_CODE: "1",
     OPENCODE_DISABLE_MODELS_FETCH: "1",
-    OPENCODE_DISABLE_SHARE: "1",
     ...additions,
   });
 }
 
 /** Turkish message for the first error event of a call, by what the provider error means. */
 export function defaultDescribeError(event) {
+  if (isStartupFailure(event)) return "OpenCode başlatılamadı (geçici bir başlatma hatası).";
+
   switch (providerErrorKind(event)) {
     case "transient":
       return "Sağlayıcı geçici bir hata verdi (istek sınırı veya sunucu hatası).";
     case "account":
-      return "Sağlayıcı hesabı isteği reddetti (401/403). Anahtarı veya aboneliği kontrol edin.";
+      return "Sağlayıcı hesabı isteği reddetti (anahtar, abonelik veya kullanım sınırı). Anahtarı, aboneliği ve sınırı kontrol edin.";
     case "policy":
       return POLICY_REFUSAL_MESSAGE;
     case "unavailable":
       return "Model sağlayıcıda bulunamadı veya kaldırıldı.";
+    case "limit":
+      return LIMIT_MESSAGE;
     default:
       return "Model isteği hata verdi.";
   }
@@ -174,9 +181,11 @@ function addTokens(total, value) {
  * `tokens.output` alone; `reasoningTokens`, `cacheReadTokens` and `cacheWriteTokens` are the other parts of
  * its total (a step that reports `tokens.input` without them counts 0 for them). Each stays null until a
  * valid value arrives. `stopReason` is the `reason` of the last step_finish ("length" means the answer hit
- * the output token limit), or null.
+ * the output token limit), or null. OpenCode 2.x continues a cut-off answer by itself, so the last step can
+ * look normal; `stopReason` is "length" whenever any step of the call was cut off or the call ended with
+ * OpenCode's output-limit error, and the joined text of such a call is never a complete answer.
  */
-export async function runOpenCodeText({
+async function runOpenCodeTextOnce({
   opencodeBinary,
   agent,
   model,
@@ -201,7 +210,9 @@ export async function runOpenCodeText({
   }
 
   const env = textModelEnvironment({ privateHome, configPath, configContent, extra: extraEnv });
-  const args = ["run", "--pure", "--format", "json", "--agent", agent, "--model", model, "--dir", directory];
+  // --standalone keeps the call in its own server process with this environment instead of handing it to
+  // the user's background OpenCode service; the working directory is the spawn cwd.
+  const args = ["run", "--standalone", "--format", "json", "--agent", agent, "--model", model];
   if (typeof title === "string" && title !== "") {
     args.push("--title", title);
   }
@@ -222,6 +233,7 @@ export async function runOpenCodeText({
     let cacheReadTokens = null;
     let cacheWriteTokens = null;
     let stopReason = null;
+    let cutOff = false;
     let partCounter = 0;
     let closed = false;
     const started = Date.now();
@@ -270,6 +282,11 @@ export async function runOpenCodeText({
       if (isForbiddenEvent(event)) {
         errorMessage = "Model araç veya izin kullanımı denedi.";
         abort("forbidden-activity");
+      } else if (isOutputLimitError(event)) {
+        // OpenCode gave up after continuing the cut-off answer twice. The call ends by itself (exit 1); it is a
+        // cut-off answer, not a provider error, so it is neither aborted nor reported as errorEvent.
+        cutOff = true;
+        errorMessage ??= OUTPUT_LIMIT_MESSAGE;
       } else if (event.type === "error") {
         errorEvent ??= event;
         errorMessage = describeError(event);
@@ -307,6 +324,7 @@ export async function runOpenCodeText({
         cacheWriteTokens = addTokens(cacheWriteTokens, part(tokens?.cache?.write));
         const reason = event.part?.reason;
         stopReason = typeof reason === "string" && reason !== "" && reason.length <= MAX_STOP_REASON_CHARS ? reason : null;
+        if (stopReason === "length") cutOff = true;
       }
     }
 
@@ -366,7 +384,7 @@ export async function runOpenCodeText({
         reasoningTokens,
         cacheReadTokens,
         cacheWriteTokens,
-        stopReason,
+        stopReason: cutOff ? "length" : stopReason,
         abortReason,
         exitCode: code,
         signal,
@@ -375,4 +393,188 @@ export async function runOpenCodeText({
       });
     });
   });
+}
+
+/**
+ * Waits before the 1st, 2nd and 3rd new try of a call whose OpenCode server did not start (see
+ * runOpenCodeText). The waits differ so that calls that failed together do not start together again.
+ */
+export const STARTUP_RETRY_DELAYS_MS = Object.freeze([300, 900, 2000]);
+
+/**
+ * Runs one tool-less OpenCode call (see runOpenCodeTextOnce). When the call's own server process dies while
+ * it starts, which happens now and then when several standalone OpenCode processes start at the same moment,
+ * the call is run again after a short wait, at most `startupRetryDelaysMs.length` times. Nothing was sent to
+ * the provider and no session exists, so the new try cannot spend or repeat anything. After the last try the
+ * failure is returned like any other (`errorEvent` is the startup error). A stop request (`isStopRequested()` or
+ * an aborted `signal`) during the wait ends the call as stopped without starting another process.
+ */
+export async function runOpenCodeText({ startupRetryDelaysMs = STARTUP_RETRY_DELAYS_MS, signal = undefined, ...options }) {
+  const stopRequested = () => signal?.aborted === true || options.isStopRequested?.() === true;
+
+  for (let retry = 0; ; retry += 1) {
+    const result = await runOpenCodeTextOnce(options);
+    const startedNothing = result.status === "failed" && result.errorEvent !== null && isStartupFailure(result.errorEvent)
+      && result.sessionId === null && result.text === "";
+
+    if (!startedNothing || retry >= startupRetryDelaysMs.length) return result;
+
+    // A stop request ends the call without starting anything new; `signal` also wakes the wait.
+    await pause(startupRetryDelaysMs[retry], signal);
+    if (stopRequested()) return { ...result, status: "stopped", errorMessage: "Kullanıcı tarafından durduruldu." };
+  }
+}
+
+const MAX_MODEL_LIST_BYTES = 16 * 1024 * 1024;
+
+/** Splits "provider/model" at the first slash; the model id may contain slashes itself. */
+function splitModel(model) {
+  const slash = typeof model === "string" ? model.indexOf("/") : -1;
+
+  return slash > 0 && slash < model.length - 1 ? { providerId: model.slice(0, slash), modelId: model.slice(slash + 1) } : null;
+}
+
+const positiveInteger = (value) => Number.isSafeInteger(value) && value > 0;
+
+/**
+ * The token limits OpenCode resolved for `model` from the JSON of `opencode api GET /api/model`, or null.
+ * An override needs the context size as well as the output size, so a model without both is unknown.
+ */
+export function modelLimitFrom(json, model) {
+  const parts = splitModel(model);
+  if (parts === null) return null;
+
+  let models;
+  try {
+    models = JSON.parse(json)?.data;
+  } catch {
+    return null;
+  }
+
+  const entry = Array.isArray(models)
+    ? models.find((candidate) => candidate?.providerID === parts.providerId && candidate?.modelID === parts.modelId)
+    : null;
+  const limit = entry?.limit;
+  if (!positiveInteger(limit?.context) || !positiveInteger(limit?.output)) return null;
+
+  return { context: limit.context, output: limit.output, ...(positiveInteger(limit.input) ? { input: limit.input } : {}) };
+}
+
+/** Pauses before the next lookup try; resolves early when `signal` aborts. */
+function pause(milliseconds, signal) {
+  return new Promise((resolvePause) => {
+    const timer = setTimeout(done, milliseconds);
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolvePause();
+    }
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
+
+/**
+ * One `opencode api GET /api/model` run. `retry` is true only when the process itself failed (it exited with an
+ * error on its own): several standalone OpenCode processes started at the same moment sometimes fail with
+ * "Standalone server exited before reporting readiness", and a second try works.
+ */
+function listModels({ opencodeBinary, model, directory, env, timeoutSeconds, stopGraceMs, signal }) {
+  return new Promise((resolveList) => {
+    if (signal?.aborted) {
+      resolveList({ limit: null, retry: false });
+      return;
+    }
+
+    let output = "";
+    let stopped = false;
+    let killTimer;
+    let child;
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      signalChildGroup(child, "SIGTERM");
+      killTimer = setTimeout(() => {
+        if (isChildGroupAlive(child)) signalChildGroup(child, "SIGKILL");
+      }, stopGraceMs);
+    };
+
+    try {
+      child = spawn(opencodeBinary, ["api", "--standalone", "GET", "/api/model"], { cwd: directory, detached: true, env, stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      resolveList({ limit: null, retry: false });
+      return;
+    }
+
+    const timeoutTimer = setTimeout(stop, timeoutSeconds * 1000);
+    signal?.addEventListener("abort", stop, { once: true });
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      if (stopped) return;
+      output += chunk;
+      if (output.length > MAX_MODEL_LIST_BYTES) stop();
+    });
+    child.once("error", () => {
+      clearTimeout(timeoutTimer);
+      signal?.removeEventListener("abort", stop);
+      resolveList({ limit: null, retry: false });
+    });
+    child.once("close", (code, closeSignal) => {
+      clearTimeout(timeoutTimer);
+      signal?.removeEventListener("abort", stop);
+      if (killTimer) clearTimeout(killTimer);
+      // Whatever of the process group outlived the process (a stopped lookup may leave a child that ignored SIGTERM).
+      if (isChildGroupAlive(child)) signalChildGroup(child, "SIGKILL");
+      const finished = code === 0 && closeSignal === null && !stopped;
+      resolveList({ limit: finished ? modelLimitFrom(output, model) : null, retry: !finished && !stopped && closeSignal === null });
+    });
+  });
+}
+
+/** Waits before the second and third try of a failed model limit lookup. */
+export const LOOKUP_RETRY_DELAYS_MS = Object.freeze([400, 1200]);
+
+/**
+ * Asks OpenCode for the real context and output limits of `model`, with the environment a call of that model
+ * runs in (the host's credentials are needed to list a provider's models). Resolves null when the limits cannot
+ * be read: the model is not listed, the lookup runs past `timeoutSeconds`, `signal` aborts, or the process kept
+ * failing. A process that failed by itself is tried again after each of `retryDelaysMs`. Never rejects.
+ */
+export async function lookupModelLimit({
+  opencodeBinary, model, directory, privateHome, configPath, configContent,
+  timeoutSeconds = 30, stopGraceMs = STOP_GRACE_MS, retryDelaysMs = LOOKUP_RETRY_DELAYS_MS, signal,
+}) {
+  if (splitModel(model) === null) return null;
+
+  let env;
+  try {
+    env = textModelEnvironment({ privateHome, configPath, configContent });
+  } catch {
+    return null;
+  }
+
+  for (let attempt = 0; ; attempt += 1) {
+    const { limit, retry } = await listModels({ opencodeBinary, model, directory, env, timeoutSeconds, stopGraceMs, signal });
+    if (limit !== null || !retry || attempt >= retryDelaysMs.length || signal?.aborted) return limit;
+
+    await pause(retryDelaysMs[attempt], signal);
+  }
+}
+
+/**
+ * The call configuration with the model's answer limited to `cap` tokens. OpenCode 2.x has no switch that caps
+ * one answer (1.x had OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX); an answer is limited by the model's
+ * `limit.output`, and a limit override needs the model's real `limit.context` too. A cap that is not below the
+ * model's own limit changes nothing, so the configuration is returned as it is.
+ */
+export function withOutputCap(configContent, model, limit, cap) {
+  const parts = splitModel(model);
+  if (parts === null || limit === null || !positiveInteger(cap) || cap >= limit.output) return configContent;
+
+  const config = JSON.parse(configContent);
+  const providers = (config.provider ??= {});
+  const provider = (providers[parts.providerId] ??= {});
+  const models = (provider.models ??= {});
+  models[parts.modelId] = { ...models[parts.modelId], limit: { ...limit, output: cap } };
+
+  return JSON.stringify(config);
 }

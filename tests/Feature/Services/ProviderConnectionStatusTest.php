@@ -11,7 +11,8 @@ test('it reports the CLI and configured providers without exposing credential ou
     File::ensureDirectoryExists($binPath);
     File::put(
         $binPath.'/opencode',
-        "#!/bin/sh\nif [ \"\$1 \$2\" = \"auth list\" ]; then printf 'OpenRouter\\nOpenCode Go\\n'; else echo 1.18.31; fi\n",
+        "#!/bin/sh\nprintf '%s|%s|%s\\n' \"\$*\" \"\$XDG_CONFIG_HOME\" \"\$OPENCODE_DISABLE_PROJECT_CONFIG\" >> '{$root}/calls.log'\n"
+            ."if [ \"\$1 \$2\" = \"auth list\" ]; then printf 'OpenRouter\\nOpenCode Go\\n'; else echo 1.18.31; fi\n",
     );
     chmod($binPath.'/opencode', 0755);
     config()->set('benchforge.command_path', $binPath);
@@ -33,6 +34,14 @@ test('it reports the CLI and configured providers without exposing credential ou
             'label' => 'OpenCode Go',
             'message' => 'OpenCode kimlik deposunda bağlantı hazır.',
         ])->and(json_encode($status))->not->toContain('auth list');
+
+        $authenticationCall = collect(File::lines($root.'/calls.log'))
+            ->first(fn (string $line): bool => str_starts_with($line, 'auth list'));
+        [$arguments, $configHome, $projectConfigDisabled] = explode('|', (string) $authenticationCall);
+
+        expect($arguments)->toBe('auth list --standalone')
+            ->and($configHome)->toEndWith('/benchforge/opencode-config')
+            ->and($projectConfigDisabled)->toBe('1');
     } finally {
         File::deleteDirectory($root);
     }

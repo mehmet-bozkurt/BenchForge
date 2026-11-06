@@ -10,8 +10,13 @@ class OpenCodeSessionLocator
 {
     public function __construct(private BenchmarkProcessEnvironment $processEnvironment) {}
 
-    /** @var list<array<string, mixed>>|null */
-    private ?array $sessions = null;
+    /**
+     * OpenCode 2.x lists only the current project's sessions, and every model workspace outside a git
+     * repository is its own project, so each workspace keeps its own list.
+     *
+     * @var array<string, list<array<string, mixed>>>
+     */
+    private array $sessionsByDirectory = [];
 
     public function locate(string $workspace, ?string $preferredSessionId = null, ?string $title = null): ?string
     {
@@ -86,19 +91,21 @@ class OpenCodeSessionLocator
     /** @return list<array<string, mixed>> */
     private function sessionList(string $workingDirectory): array
     {
-        if ($this->sessions !== null) {
-            return $this->sessions;
-        }
+        return $this->sessionsByDirectory[$workingDirectory] ??= $this->listSessions($workingDirectory);
+    }
 
+    /** @return list<array<string, mixed>> */
+    private function listSessions(string $workingDirectory): array
+    {
         $binary = $this->openCodeBinary();
 
         if ($binary === null) {
-            return $this->sessions = [];
+            return [];
         }
 
         try {
             $process = new Process(
-                [$binary, 'session', 'list', '--format', 'json', '-n', '200', '--pure'],
+                [$binary, 'session', 'list', '--format', 'json', '-n', '200', '--standalone'],
                 $workingDirectory,
                 $this->environment(),
             );
@@ -106,16 +113,16 @@ class OpenCodeSessionLocator
             $process->run();
 
             if (! $process->isSuccessful()) {
-                return $this->sessions = [];
+                return [];
             }
 
             $decoded = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
 
-            return $this->sessions = is_array($decoded)
+            return is_array($decoded)
                 ? array_values(array_filter($decoded, 'is_array'))
                 : [];
         } catch (Throwable) {
-            return $this->sessions = [];
+            return [];
         }
     }
 
@@ -135,6 +142,6 @@ class OpenCodeSessionLocator
     /** @return array<string, string|false> */
     private function environment(): array
     {
-        return $this->processEnvironment->make();
+        return $this->processEnvironment->openCodeCommand();
     }
 }

@@ -157,3 +157,65 @@ test('it normalizes own paths and identifies absolute external permission failur
         File::deleteDirectory($root);
     }
 });
+
+test('it reads OpenCode 2.x shell events, working directories and tool names', function () {
+    ['root' => $root, 'runPath' => $runPath, 'run' => $run, 'model' => $model, 'attempt' => $attempt, 'attemptPath' => $attemptPath] = ownModelBoundaryFixture();
+    $events = [
+        ['type' => 'tool_use', 'part' => ['id' => 'call-1', 'tool' => 'shell', 'state' => [
+            'status' => 'error', 'input' => ['command' => 'pwd', 'workdir' => '../model-b'], 'error' => 'Permission denied: external_directory',
+        ]]],
+        ['type' => 'tool_use', 'part' => ['id' => 'call-2', 'tool' => 'read', 'state' => [
+            'status' => 'error', 'input' => ['path' => '../_logs/model-b.build.log'], 'error' => 'Permission denied: external_directory',
+        ]]],
+        ['type' => 'tool_use', 'part' => ['id' => 'call-3', 'tool' => 'shell', 'state' => [
+            'status' => 'error', 'input' => ['command' => 'git push', 'workdir' => '.'], 'error' => 'Permission denied: shell',
+        ]]],
+        ['type' => 'tool_use', 'part' => ['id' => 'call-4', 'tool' => 'shell', 'state' => [
+            'status' => 'completed', 'input' => ['command' => 'grep basePath ../_attempts'],
+            'output' => $runPath.'/_attempts/model-b/attempt-1/opencode.events.jsonl:other data',
+        ]]],
+        ['type' => 'tool_use', 'part' => ['id' => 'call-5', 'tool' => 'edit', 'state' => [
+            'status' => 'error', 'input' => ['path' => '../outside.txt', 'oldString' => 'a', 'newString' => 'b'], 'error' => 'Permission denied: external_directory',
+        ]]],
+        ['type' => 'tool_use', 'part' => ['id' => 'call-6', 'tool' => 'opencode_worktree_remove', 'state' => [
+            'status' => 'error', 'input' => ['directory' => '../model-b', 'force' => true], 'error' => 'Permission denied: edit',
+        ]]],
+        ['type' => 'tool_use', 'part' => ['id' => 'call-7', 'tool' => 'glob', 'state' => [
+            'status' => 'error', 'input' => ['pattern' => '../model-b/*'], 'error' => 'Permission denied: glob',
+        ]]],
+        ['type' => 'tool_use', 'part' => ['id' => 'call-8', 'tool' => 'glob', 'state' => [
+            'status' => 'error', 'input' => ['pattern' => 'src/**'], 'error' => 'Permission denied: glob',
+        ]]],
+        ['type' => 'tool_use', 'part' => ['id' => 'call-9', 'tool' => 'shell', 'state' => [
+            'status' => 'error', 'input' => ['command' => 'cat $HOME/secret.txt'], 'error' => 'Permission denied: shell',
+        ]]],
+        ['type' => 'tool_use', 'part' => ['id' => 'call-10', 'tool' => 'shell', 'state' => [
+            'status' => 'error', 'input' => ['command' => 'pwd', 'workdir' => '~'], 'error' => 'Permission denied: external_directory',
+        ]]],
+        ['type' => 'tool_use', 'part' => ['id' => 'call-11', 'tool' => 'write', 'state' => [
+            'status' => 'error', 'input' => ['path' => str_repeat('./', 2100).'notes.txt', 'content' => 'x'], 'error' => 'Permission denied: external_directory',
+        ]]],
+    ];
+    File::put($attemptPath.'/opencode.events.jsonl', implode("\n", array_map(fn ($event) => json_encode($event, JSON_THROW_ON_ERROR), $events)));
+
+    try {
+        $service = app(ModelRunBoundaryReport::class);
+        $legacy = $service->forAttempt($run, $model, $attempt);
+
+        expect($legacy['blockedCount'])->toBe(8)
+            ->and($legacy['observedCrossModelReadCount'])->toBe(1)
+            ->and(array_column($legacy['entries'], 'tool'))->toBe([
+                'shell', 'read', 'shell', 'edit', 'opencode_worktree_remove', 'glob', 'shell', 'shell', 'write',
+            ]);
+
+        File::put($attemptPath.'/boundary-report.json', json_encode([
+            'version' => 1,
+            'blockedCount' => 1,
+            'entries' => [['kind' => 'blocked', 'tool' => 'shell', 'path' => '../model-b']],
+        ], JSON_THROW_ON_ERROR));
+
+        expect($service->forAttempt($run, $model, $attempt)['entries'][0]['tool'])->toBe('shell');
+    } finally {
+        File::deleteDirectory($root);
+    }
+});
