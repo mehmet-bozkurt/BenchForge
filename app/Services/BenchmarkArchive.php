@@ -27,7 +27,7 @@ class BenchmarkArchive
      *     slug: string,
      *     name: string,
      *     date: CarbonImmutable,
-     *     schema: 'legacy'|'extended'|'incomplete',
+     *     schema: 'legacy'|'extended'|'algorithm'|'incomplete',
      *     stageNames: list<string>,
      *     models: list<array<string, mixed>>,
      *     counts: array{pass: int, fail: int, skip: int, unknown: int, total: int},
@@ -115,6 +115,7 @@ class BenchmarkArchive
             'routes' => array_values(array_filter(array_map('trim', explode(',', $meta['routes'] ?? '')))),
             'schema' => match (true) {
                 ! $hasSummary => 'incomplete',
+                ($meta['task_type'] ?? null) === 'algorithm' => 'algorithm',
                 count(array_intersect($summary['stageNames'], self::EXTENDED_STAGES)) > 0 => 'extended',
                 default => 'legacy',
             },
@@ -276,6 +277,10 @@ class BenchmarkArchive
         }
 
         foreach ($model['stages'] as $stageName => &$stage) {
+            if ($stageName === 'tests') {
+                $this->attachTestCounts($stage, $runPath.'/_results/'.$model['slug'].'.tests.json');
+            }
+
             $logPath = $runPath.'/_logs/'.$model['slug'].'.'.$stageName.'.log';
 
             if (! File::isFile($logPath)) {
@@ -300,6 +305,31 @@ class BenchmarkArchive
         $model['artifacts'] = $artifacts;
 
         return $model;
+    }
+
+    /**
+     * An algorithm task's `tests` stage carries how many unit tests passed, written by the test runner.
+     *
+     * @param  array<string, mixed>  $stage
+     */
+    private function attachTestCounts(array &$stage, string $resultPath): void
+    {
+        if (! File::isFile($resultPath) || is_link($resultPath)) {
+            return;
+        }
+
+        $result = json_decode(File::get($resultPath), true);
+
+        if (! is_array($result) || ! is_int($result['passed'] ?? null) || ! is_int($result['total'] ?? null) || $result['total'] < 1) {
+            return;
+        }
+
+        $stage['metrics'] = [
+            'passed' => max(0, $result['passed']),
+            'total' => $result['total'],
+            'tampered' => array_values(array_filter((array) ($result['tampered'] ?? []), 'is_string')),
+        ];
+        $stage['message'] ??= "{$stage['metrics']['passed']}/{$stage['metrics']['total']} test geçti.";
     }
 
     /**

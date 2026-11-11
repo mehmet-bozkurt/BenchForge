@@ -29,12 +29,14 @@ class ModelRunOutcome
         'export' => 'Static export üretilmedi',
         'routes' => 'İstenen rota açılmadı',
         'runtime' => 'Sayfa tarayıcıda hata verdi',
+        'tests' => 'Birim testler geçmedi',
     ];
 
     /** A validation step the engine stopped at its time limit (exit code 124). */
     private const STAGE_TIMEOUT_TITLES = [
         'lint' => 'Lint süre sınırını aştı',
         'build' => 'Build süre sınırını aştı',
+        'tests' => 'Birim testler süre sınırını aştı',
     ];
 
     public function __construct(private BenchmarkModelFiles $files) {}

@@ -62,6 +62,7 @@ function initializeRunner() {
     const configSelect = panel.querySelector('[data-runner-config]');
     const modelModeInputs = [...panel.querySelectorAll('[data-model-mode]')];
     const promptModeInputs = [...panel.querySelectorAll('[data-prompt-mode]')];
+    const taskTypeInputs = [...panel.querySelectorAll('[data-task-type]')];
     const customModelInputs = [...panel.querySelectorAll('[data-custom-model]')];
     const modelCards = [...panel.querySelectorAll('[data-model-card]')];
     const modelSearch = panel.querySelector('[data-model-search]');
@@ -110,6 +111,7 @@ function initializeRunner() {
 
     const selectedModelMode = () => modelModeInputs.find((input) => input.checked)?.value || 'group';
     const selectedPromptMode = () => promptModeInputs.find((input) => input.checked)?.value || 'saved';
+    const selectedTaskType = () => taskTypeInputs.find((input) => input.checked)?.value || 'site';
     const checkedCustomModels = () => customModelInputs.filter((input) => input.checked);
     const checkedGoModels = () => goModelInputs.filter((input) => input.checked);
     const isFixedRouting = () => selectedModelMode() === 'custom' && routingModeSelect?.value === 'fixed';
@@ -436,6 +438,20 @@ function initializeRunner() {
         if (modelCount) modelCount.textContent = String(selectedModels.length);
     }
 
+    function updateTaskPanels() {
+        const taskType = selectedTaskType();
+
+        // Gizli panelin alanları gönderilmez ve doğrulamayı engellemez.
+        panel.querySelectorAll('[data-task-panel]').forEach((element) => {
+            const hidden = element.dataset.taskPanel !== taskType;
+
+            element.classList.toggle('hidden', hidden);
+            element.querySelectorAll('input, select, textarea').forEach((field) => {
+                field.disabled = hidden || runnerActive;
+            });
+        });
+    }
+
     function updateModePanels() {
         const modelMode = selectedModelMode();
         const promptMode = selectedPromptMode();
@@ -578,6 +594,7 @@ function initializeRunner() {
         try {
             const url = new URL(panel.dataset.preflightUrl, window.location.origin);
             url.searchParams.set('model_mode', modelMode);
+            url.searchParams.set('task_type', selectedTaskType());
 
             if (modelMode === 'custom') {
                 selectedModels.forEach((model) => url.searchParams.append('models[]', model));
@@ -745,6 +762,7 @@ function initializeRunner() {
             field.disabled = state.active;
         });
         runnerActive = state.active;
+        updateTaskPanels();
         updateCustomModelSelection();
         updateGoModelSelection();
         if (routingModeSelect) routingModeSelect.disabled = state.active || selectedModelMode() !== 'custom';
@@ -808,6 +826,10 @@ function initializeRunner() {
         schedulePreflight();
     }));
     promptModeInputs.forEach((input) => input.addEventListener('change', updateModePanels));
+    taskTypeInputs.forEach((input) => input.addEventListener('change', () => {
+        updateTaskPanels();
+        schedulePreflight();
+    }));
     customModelInputs.forEach((input) => input.addEventListener('change', () => {
         if (checkedCustomModels().length > modelLimit) input.checked = false;
         updateCustomModelSelection();
@@ -863,6 +885,7 @@ function initializeRunner() {
     });
 
     updateModePanels();
+    updateTaskPanels();
     updateCustomModelSelection();
     updateGoModelSelection();
     updateRoutingControls();

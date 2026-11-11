@@ -21,6 +21,7 @@ class BenchmarkComparisonController extends Controller
         'export' => 'Export',
         'routes' => 'Rotalar',
         'runtime' => 'Runtime',
+        'tests' => 'Birim testler',
     ];
 
     public function __invoke(

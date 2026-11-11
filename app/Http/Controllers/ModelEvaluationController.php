@@ -17,6 +17,12 @@ class ModelEvaluationController extends Controller
         ModelRun $modelRun,
         BenchmarkPreview $benchmarkPreview,
     ): RedirectResponse {
+        if ($benchmarkRun->taskType() === 'algorithm') {
+            throw ValidationException::withMessages([
+                'evaluation' => 'Algoritma görevleri birim testle puanlanır; manuel puan verilmez.',
+            ]);
+        }
+
         if (! $benchmarkPreview->isAvailable($benchmarkRun, $modelRun)) {
             throw ValidationException::withMessages([
                 'evaluation' => 'Manuel puan yalnız ilk teslim çıktısına verilir; bu modelin ilk teslimine ait görüntülenebilir çıktı yok.',

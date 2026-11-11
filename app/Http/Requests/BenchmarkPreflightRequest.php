@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\BenchmarkRun;
 use App\Services\BenchmarkRunner;
 use App\Services\OpenRouterProviderRouting;
 use Closure;
@@ -20,6 +21,7 @@ class BenchmarkPreflightRequest extends FormRequest
     public function rules(BenchmarkRunner $benchmarkRunner): array
     {
         return [
+            'task_type' => ['required', Rule::in(array_keys(BenchmarkRun::TASK_TYPES))],
             'model_mode' => ['required', Rule::in(['group', 'custom', 'opencode_go'])],
             'config' => [Rule::requiredIf(fn (): bool => $this->input('model_mode') === 'group'), 'nullable', 'string', Rule::in(array_column($benchmarkRunner->options()['configs'], 'value'))],
             'models' => [Rule::requiredIf(fn (): bool => $this->input('model_mode') === 'custom'), 'nullable', 'array', 'min:1', 'max:'.BenchmarkRunner::CUSTOM_MODEL_LIMIT],
@@ -54,6 +56,7 @@ class BenchmarkPreflightRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $this->merge([
+            'task_type' => $this->string('task_type', BenchmarkRun::DEFAULT_TASK_TYPE)->trim()->toString() ?: BenchmarkRun::DEFAULT_TASK_TYPE,
             'model_mode' => $this->string('model_mode', 'group')->trim()->toString() ?: 'group',
             'config' => $this->string('config')->trim()->toString(),
             'routing_mode' => $this->input('routing_mode', 'auto'),

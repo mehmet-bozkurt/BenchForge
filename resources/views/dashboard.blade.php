@@ -9,6 +9,7 @@
         'export' => 'Export',
         'routes' => 'Rotalar',
         'runtime' => 'Runtime',
+        'tests' => 'Birim testler',
     ];
     $statusLabels = [
         'pass' => 'Başarılı',
@@ -19,6 +20,7 @@
     $schemaLabel = static fn (string $schema, bool $detailed = false): string => match ($schema) {
         'legacy' => 'Legacy',
         'incomplete' => 'Tamamlanmamış',
+        'algorithm' => 'Algoritma',
         default => $detailed ? 'V2 · Genişletilmiş' : 'V2',
     };
     $formatDuration = static function (int $seconds): string {

@@ -157,6 +157,7 @@ class SyncBenchmarkArchive
                         'exit_code' => $stage['code'],
                         'raw_value' => $stage['rawValue'],
                         'message' => $stage['message'],
+                        'metrics' => $stage['metrics'] ?? null,
                         'log_path' => $stage['logPath'] ?? null,
                         'log_size_bytes' => $stage['logSizeBytes'] ?? null,
                     ],

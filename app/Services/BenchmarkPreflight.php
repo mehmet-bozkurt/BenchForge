@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\BenchmarkRun;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\Process\Process;
 use Throwable;
@@ -23,15 +24,16 @@ class BenchmarkPreflight
      *     checks: list<array{key: string, label: string, status: 'pass'|'fail', message: string}>
      * }
      */
-    public function inspect(array $ports, array $providers = []): array
+    public function inspect(array $ports, array $providers = [], string $taskType = BenchmarkRun::DEFAULT_TASK_TYPE): array
     {
+        $algorithm = $taskType === 'algorithm';
         $checks = [
             $this->databaseCheck(),
-            $this->projectCheck(),
+            $this->projectCheck($algorithm),
             $this->storageCheck(),
             $this->nodeCheck(),
             $this->openCodeCheck(),
-            $this->requiredCommandsCheck(),
+            $this->requiredCommandsCheck($algorithm),
             $this->processControlCheck(),
         ];
 
@@ -43,7 +45,11 @@ class BenchmarkPreflight
             $checks[] = $this->providerCredentialCheck('opencode-go');
         }
 
-        $checks[] = $this->portsCheck($ports);
+        // Algoritma görevleri sunucu başlatmaz; model portları kullanılmaz.
+        if (! $algorithm) {
+            $checks[] = $this->portsCheck($ports);
+        }
+
         $passed = count(array_filter($checks, fn (array $check): bool => $check['status'] === 'pass'));
         $total = count($checks);
 
@@ -81,7 +87,7 @@ class BenchmarkPreflight
     /**
      * @return array{key: string, label: string, status: 'pass'|'fail', message: string}
      */
-    private function projectCheck(): array
+    private function projectCheck(bool $algorithm = false): array
     {
         $root = realpath((string) config('benchforge.root_path'));
 
@@ -103,7 +109,7 @@ class BenchmarkPreflight
 
         $enginePath = rtrim((string) config('benchforge.engine_path'), DIRECTORY_SEPARATOR);
 
-        if (! is_dir($enginePath.DIRECTORY_SEPARATOR.'sablon')) {
+        if (! $algorithm && ! is_dir($enginePath.DIRECTORY_SEPARATOR.'sablon')) {
             return $this->fail('project', 'Benchmark projesi', 'sablon klasörü bulunamadı.');
         }
 
@@ -112,6 +118,10 @@ class BenchmarkPreflight
             (string) config('benchforge.resume_script'),
             ...array_map(fn (string $file): string => $enginePath.'/'.$file, BenchForgeSettings::REQUIRED_ENGINE_FILES),
         ];
+
+        if ($algorithm) {
+            $requiredFiles[] = $enginePath.'/tools/algorithm-test-runner.mjs';
+        }
 
         foreach ($requiredFiles as $file) {
             if (! is_file($file) || ! is_readable($file)) {
@@ -194,9 +204,10 @@ class BenchmarkPreflight
     /**
      * @return array{key: string, label: string, status: 'pass'|'fail', message: string}
      */
-    private function requiredCommandsCheck(): array
+    private function requiredCommandsCheck(bool $algorithm = false): array
     {
-        $missing = collect(['npm', 'rsync', 'curl', 'python3', 'shasum'])
+        $commands = $algorithm ? ['rsync', 'shasum'] : ['npm', 'rsync', 'curl', 'python3', 'shasum'];
+        $missing = collect($commands)
             ->reject(fn (string $command): bool => $this->findExecutable($command) !== null)
             ->values()
             ->all();
@@ -205,7 +216,7 @@ class BenchmarkPreflight
             return $this->fail('commands', 'Gerekli komutlar', 'Eksik: '.implode(', ', $missing));
         }
 
-        return $this->pass('commands', 'Gerekli komutlar', 'npm, rsync, curl, python3 ve shasum hazır.');
+        return $this->pass('commands', 'Gerekli komutlar', $algorithm ? 'rsync ve shasum hazır.' : 'npm, rsync, curl, python3 ve shasum hazır.');
     }
 
     /**

@@ -87,7 +87,53 @@ PROMPT;
             'configs' => $this->modelSelection->groupOptions(),
             ...$this->modelSelection->catalogOptions(),
             'suggestedRoutes' => ['/'],
+            'algorithmTasks' => $this->algorithmTasks(),
         ];
+    }
+
+    /**
+     * Imported algorithm tasks (see engine/tools/import-exercism.mjs) under the data root's algorithm-tasks folder.
+     *
+     * @return list<array{value: string, label: string, testCount: int, directory: string}>
+     */
+    public function algorithmTasks(): array
+    {
+        $directory = $this->projectRoot().'/algorithm-tasks';
+        $realDirectory = realpath($directory);
+
+        if ($realDirectory === false || ! is_dir($realDirectory)) {
+            return [];
+        }
+
+        $tasks = [];
+
+        foreach (File::directories($realDirectory) as $taskDirectory) {
+            $slug = basename($taskDirectory);
+            $realTask = realpath($taskDirectory);
+
+            if (is_link($taskDirectory) || $realTask === false || ! $this->isWithin($realDirectory, $realTask)
+                || preg_match('/^[a-z0-9][a-z0-9-]{0,63}$/', $slug) !== 1
+                || ! is_file($realTask.'/prompt.txt') || ! is_dir($realTask.'/workspace') || ! is_file($realTask.'/task.json')) {
+                continue;
+            }
+
+            $task = json_decode((string) file_get_contents($realTask.'/task.json'), true);
+
+            if (! is_array($task) || ($task['slug'] ?? null) !== $slug || ! is_string($task['solutionFile'] ?? null) || ! is_string($task['testFile'] ?? null)) {
+                continue;
+            }
+
+            $tasks[] = [
+                'value' => $slug,
+                'label' => is_string($task['title'] ?? null) && $task['title'] !== '' ? $task['title'] : $this->titleFromFilename($slug),
+                'testCount' => max(0, (int) ($task['testCount'] ?? 0)),
+                'directory' => $realTask,
+            ];
+        }
+
+        usort($tasks, fn (array $left, array $right): int => strcoll($left['label'], $right['label']));
+
+        return $tasks;
     }
 
     /**
@@ -98,7 +144,7 @@ PROMPT;
      *     checks: list<array{key: string, label: string, status: 'pass'|'fail', message: string}>
      * }
      */
-    public function preflight(?string $selectedConfig, array $selectedModels = [], string $modelMode = 'group', string $routingMode = 'auto', array $fixedProviders = []): array
+    public function preflight(?string $selectedConfig, array $selectedModels = [], string $modelMode = 'group', string $routingMode = 'auto', array $fixedProviders = [], string $taskType = BenchmarkRun::DEFAULT_TASK_TYPE): array
     {
         $parsedConfig = match ($modelMode) {
             'custom' => $this->customModelSelection($selectedModels, $routingMode, $fixedProviders),
@@ -109,6 +155,7 @@ PROMPT;
         return $this->benchmarkPreflight->inspect(
             $parsedConfig['option']['ports'],
             $parsedConfig['option']['providers'],
+            ...($taskType === 'algorithm' ? [$taskType] : []),
         );
     }
 
@@ -176,13 +223,33 @@ PROMPT;
         }
 
         $options = $this->options();
-        $promptSelection = $this->resolvePromptSelection($input, $options['prompts']);
+        $taskType = ($input['task_type'] ?? BenchmarkRun::DEFAULT_TASK_TYPE) === 'algorithm' ? 'algorithm' : BenchmarkRun::DEFAULT_TASK_TYPE;
+        $algorithmTask = null;
+
+        if ($taskType === 'algorithm') {
+            $algorithmTask = collect($options['algorithmTasks'] ?? [])->firstWhere('value', (string) ($input['algorithm_task'] ?? ''));
+
+            if ($algorithmTask === null) {
+                throw new BenchmarkRunnerException('Listeden geçerli bir algoritma görevi seçin.');
+            }
+
+            $promptSelection = [
+                'absolutePath' => $algorithmTask['directory'].'/prompt.txt',
+                'reference' => 'algorithm:'.$algorithmTask['value'],
+                'content' => null,
+            ];
+            $routes = [];
+        } else {
+            $promptSelection = $this->resolvePromptSelection($input, $options['prompts']);
+            $routes = $this->validateRoutes($input['routes']);
+        }
+
         $parsedConfig = $this->modelSelection->resolve($input, refreshProviders: true, groupOptions: $options['configs']);
         $parsedConfig = $this->modelSelection->withMaxParallel($parsedConfig, $input['max_parallel'] ?? 1);
-        $routes = $this->validateRoutes($input['routes']);
         $preflight = $this->benchmarkPreflight->inspect(
             $parsedConfig['option']['ports'],
             $parsedConfig['option']['providers'],
+            ...($taskType === 'algorithm' ? [$taskType] : []),
         );
 
         if (! $preflight['ready']) {
@@ -194,7 +261,8 @@ PROMPT;
             throw new BenchmarkRunnerException("Sistem ön kontrolü başarısız: {$failedChecks}.");
         }
 
-        foreach ($parsedConfig['option']['ports'] as $port) {
+        // Algoritma görevleri sunucu başlatmaz; model portlarının boş olması gerekmez.
+        foreach ($taskType === 'algorithm' ? [] : $parsedConfig['option']['ports'] as $port) {
             $this->ensurePortAvailable($port);
         }
 
@@ -254,6 +322,8 @@ PROMPT;
                 'configRelative' => $parsedConfig['reference'],
                 'openCodeConfigPath' => $openCodeConfigPath,
                 'routes' => $routes,
+                'taskType' => $taskType,
+                'algorithmTaskDirectory' => $algorithmTask['directory'] ?? null,
                 'modelCount' => $parsedConfig['option']['modelCount'],
                 'startedAt' => now()->toIso8601String(),
             ];

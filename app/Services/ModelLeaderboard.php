@@ -35,16 +35,19 @@ class ModelLeaderboard
      *
      * @return Collection<int, array<string, mixed>>
      */
-    public function all(string $environmentProfile = BenchmarkRun::CURRENT_ENVIRONMENT_PROFILE): Collection
+    public function all(string $environmentProfile = BenchmarkRun::CURRENT_ENVIRONMENT_PROFILE, string $taskType = BenchmarkRun::DEFAULT_TASK_TYPE): Collection
     {
+        // Unit-test tasks have no human review, so every measured model is ranked; site tasks need a review first.
+        $needsReview = $taskType !== 'algorithm';
+
         return ModelRun::query()
             ->with(['benchmarkRun', 'stageResults', 'evaluation', 'modelRunAttempts'])
             ->get()
-            ->filter(fn (ModelRun $run): bool => $run->benchmarkRun->environmentProfile() === $environmentProfile)
+            ->filter(fn (ModelRun $run): bool => $run->benchmarkRun->environmentProfile() === $environmentProfile && $run->benchmarkRun->taskType() === $taskType)
             ->groupBy(fn (ModelRun $run): string => $this->identity($run))
-            ->map(fn (Collection $runs, string $identity): array => $this->summarize($identity, $runs))
-            ->sort(function (array $left, array $right): int {
-                $reviewComparison = ($right['manual']['count'] > 0) <=> ($left['manual']['count'] > 0);
+            ->map(fn (Collection $runs, string $identity): array => $this->summarize($identity, $runs, $taskType))
+            ->sort(function (array $left, array $right) use ($needsReview): int {
+                $reviewComparison = $needsReview ? ($right['manual']['count'] > 0) <=> ($left['manual']['count'] > 0) : 0;
 
                 if ($reviewComparison !== 0) {
                     return $reviewComparison;
@@ -63,8 +66,8 @@ class ModelLeaderboard
                     : strcmp($left['display_name'], $right['display_name']);
             })
             ->values()
-            ->map(function (array $model, int $index): array {
-                $model['rank'] = $model['manual']['count'] > 0 ? $index + 1 : null;
+            ->map(function (array $model, int $index) use ($needsReview): array {
+                $model['rank'] = ! $needsReview || $model['manual']['count'] > 0 ? $index + 1 : null;
 
                 return $model;
             });
@@ -75,14 +78,14 @@ class ModelLeaderboard
      *
      * @return array<string, mixed>|null
      */
-    public function find(string $key, string $environmentProfile = BenchmarkRun::CURRENT_ENVIRONMENT_PROFILE): ?array
+    public function find(string $key, string $environmentProfile = BenchmarkRun::CURRENT_ENVIRONMENT_PROFILE, string $taskType = BenchmarkRun::DEFAULT_TASK_TYPE): ?array
     {
         if ($key === '' || $key === '.' || $key === '..' || basename($key) !== $key) {
             return null;
         }
 
         $identity = str_replace(self::KEY_SEPARATOR, '/', $key);
-        $runs = $this->runsFor($identity, $environmentProfile);
+        $runs = $this->runsFor($identity, $environmentProfile, $taskType);
 
         if ($runs->isEmpty()) {
             $legacyRun = ModelRun::query()->where('slug', $key)->first();
@@ -92,10 +95,10 @@ class ModelLeaderboard
             }
 
             $identity = $this->identity($legacyRun);
-            $runs = $this->runsFor($identity, $environmentProfile);
+            $runs = $this->runsFor($identity, $environmentProfile, $taskType);
         }
 
-        return $runs->isEmpty() ? null : $this->summarize($identity, $runs);
+        return $runs->isEmpty() ? null : $this->summarize($identity, $runs, $taskType);
     }
 
     /**
@@ -133,11 +136,18 @@ class ModelLeaderboard
             return 0.0;
         }
 
+        // Algoritma görevi: puan, geçen birim test oranıdır (aşama sayısı yalnızca iki olduğu için kaba kalırdı).
+        $testRate = $run->stageResults->firstWhere('stage', 'tests')?->testPassRate();
+
+        if ($testRate !== null) {
+            return $testRate;
+        }
+
         return round(($run->stageResults->where('status', 'pass')->count() / $run->stageResults->count()) * 100, 1);
     }
 
     /** @return Collection<int, ModelRun> */
-    private function runsFor(string $identity, string $environmentProfile): Collection
+    private function runsFor(string $identity, string $environmentProfile, string $taskType): Collection
     {
         return ModelRun::query()
             ->where(fn (Builder $query): Builder => $query
@@ -145,7 +155,7 @@ class ModelLeaderboard
                 ->orWhere(fn (Builder $query): Builder => $query->where('model', '')->where('slug', $identity)))
             ->with(['benchmarkRun', 'stageResults', 'evaluation', 'modelRunAttempts'])
             ->get()
-            ->filter(fn (ModelRun $run): bool => $run->benchmarkRun->environmentProfile() === $environmentProfile)
+            ->filter(fn (ModelRun $run): bool => $run->benchmarkRun->environmentProfile() === $environmentProfile && $run->benchmarkRun->taskType() === $taskType)
             ->values();
     }
 
@@ -153,7 +163,7 @@ class ModelLeaderboard
      * @param  Collection<int, ModelRun>  $runs
      * @return array<string, mixed>
      */
-    private function summarize(string $identity, Collection $runs): array
+    private function summarize(string $identity, Collection $runs, string $taskType = BenchmarkRun::DEFAULT_TASK_TYPE): array
     {
         $measuredRuns = $runs->filter(fn (ModelRun $run): bool => $this->runTechnicalScore($run) !== null)->values();
         $stageResults = $measuredRuns->flatMap(fn (ModelRun $run): Collection => $run->stageResults);
@@ -184,9 +194,12 @@ class ModelLeaderboard
                 : round(($measuredRuns->where('status', 'pass')->count() / $measuredRuns->count()) * 100, 1),
             'average_duration_seconds' => (int) round((float) $measuredRuns->avg('duration_seconds')),
             'latest_run_at' => $runs->pluck('benchmarkRun.started_at')->filter()->max(),
-            'composite_score' => $manualScore === null
-                ? null
-                : round(($technicalScore * 0.6) + (($manualScore * 10) * 0.4), 1),
+            'task_type' => $taskType,
+            'composite_score' => match (true) {
+                $taskType === 'algorithm' => $measuredRuns->isEmpty() ? null : $technicalScore,
+                $manualScore === null => null,
+                default => round(($technicalScore * 0.6) + (($manualScore * 10) * 0.4), 1),
+            },
             'technical' => [
                 'score' => $technicalScore,
                 'passed' => $passedStages,

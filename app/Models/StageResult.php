@@ -39,9 +39,32 @@ class StageResult extends Model
         'exit_code',
         'raw_value',
         'message',
+        'metrics',
         'log_path',
         'log_size_bytes',
     ];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return ['metrics' => 'array'];
+    }
+
+    /**
+     * The share of an algorithm task's unit tests that passed (0–100), or null when the stage has no test counts.
+     */
+    public function testPassRate(): ?float
+    {
+        $total = (int) ($this->metrics['total'] ?? 0);
+
+        if ($this->stage !== 'tests' || $total <= 0) {
+            return null;
+        }
+
+        return round(min(100, max(0, (int) ($this->metrics['passed'] ?? 0)) / $total * 100), 1);
+    }
 
     /**
      * @return BelongsTo<ModelRun, $this>
