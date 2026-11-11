@@ -79,6 +79,7 @@ Thumbs.db
 /engine/runs/*
 !/engine/runs/.gitkeep
 /engine/workflows/
+/engine/algorithm-tasks/
 /engine/workflow-runs/
 /engine/prompts/*
 !/engine/prompts/example.txt
