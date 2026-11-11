@@ -2,7 +2,7 @@
 
 @section('content')
 @php
-    $stageLabels = ['opencode' => 'Üretim', 'lint' => 'Lint', 'build' => 'Build', 'export' => 'Export', 'routes' => 'Rotalar', 'runtime' => 'Runtime'];
+    $stageLabels = ['opencode' => 'Üretim', 'lint' => 'Lint', 'build' => 'Build', 'export' => 'Export', 'routes' => 'Rotalar', 'runtime' => 'Runtime', 'tests' => 'Birim testler'];
     $severityLabels = ['none' => 'Sorun yok', 'minor' => 'Küçük', 'major' => 'Önemli', 'critical' => 'Kritik'];
     $formatDuration = static function (int $seconds): string {
         if ($seconds < 60) return $seconds.' sn';
@@ -14,7 +14,7 @@
 
 <div class="content-frame">
     <nav class="mb-6 flex items-center gap-2 text-xs font-semibold text-[var(--muted)]" aria-label="Sayfa yolu">
-        <a class="hover:text-[var(--forest)]" href="{{ route('models.index', ['condition' => $environmentProfile]) }}">Modeller · {{ $environmentProfiles[$environmentProfile] }}</a>
+        <a class="hover:text-[var(--forest)]" href="{{ route('models.index', ['condition' => $environmentProfile, 'type' => $taskType]) }}">Modeller · {{ $taskTypes[$taskType] }} · {{ $environmentProfiles[$environmentProfile] }}</a>
         <span aria-hidden="true">/</span>
         <span class="text-[var(--ink)]" aria-current="page">{{ $model['display_name'] }}</span>
     </nav>
@@ -25,10 +25,10 @@
                 <p class="text-[10px] font-extrabold tracking-[0.14em] text-[#67e8f9] uppercase">Model karnesi</p>
                 <h1 class="mt-4 text-3xl font-black tracking-[-0.05em] sm:text-[42px]">{{ $model['display_name'] }}</h1>
                 <code class="mt-2 block text-xs text-[#8f9ab6]">{{ $model['provider_model'] }}</code>
-                <p class="mt-5 max-w-2xl text-sm leading-6 text-[#b7c0d5]">{{ $environmentProfiles[$environmentProfile] }} altındaki {{ $model['run_count'] }} benchmark koşusunun teknik ve manuel sonuçlarının birleştirilmiş görünümü.</p>
+                <p class="mt-5 max-w-2xl text-sm leading-6 text-[#b7c0d5]">{{ $environmentProfiles[$environmentProfile] }} altındaki {{ $model['run_count'] }} benchmark koşusunun {{ $taskType === 'algorithm' ? 'birim test sonuçlarının birleştirilmiş görünümü.' : 'teknik ve manuel sonuçlarının birleştirilmiş görünümü.' }}</p>
             </div>
             <div class="min-w-44 rounded-2xl border border-white/10 bg-white/5 p-5 text-center backdrop-blur-sm">
-                <span class="block text-[9px] font-extrabold tracking-[0.12em] text-[#8f9ab6] uppercase">Birleşik puan</span>
+                <span class="block text-[9px] font-extrabold tracking-[0.12em] text-[#8f9ab6] uppercase">{{ $taskType === 'algorithm' ? 'Test başarısı' : 'Birleşik puan' }}</span>
                 @if ($model['composite_score'] !== null)
                     <strong class="mt-2 block text-4xl font-black text-[#67e8f9]">{{ number_format($model['composite_score'], 1, ',', '.') }}</strong>
                     <span class="text-[10px] font-bold text-[#8f9ab6]">100 üzerinden</span>
@@ -42,12 +42,13 @@
 
     <section class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Karne metrikleri">
         <article class="metric-card metric-positive"><p class="metric-label">Teknik güvenilirlik</p><p class="metric-value">%{{ number_format($model['technical']['score'], 1, ',', '.') }}</p><p class="metric-detail">{{ $model['measured_run_count'] }} koşunun eşit ağırlıklı ortalaması{{ $model['mixed_stage_sets'] ? ' · farklı aşama setleri' : '' }}</p></article>
-        <article class="metric-card metric-neutral"><p class="metric-label">Manuel kalite</p><p class="metric-value">{{ $model['manual']['average'] === null ? '—' : number_format($model['manual']['average'], 1, ',', '.') }}</p><p class="metric-detail">{{ $model['manual']['count'] }}/{{ $model['run_count'] }} koşu incelendi</p></article>
+        @if ($taskType !== 'algorithm')<article class="metric-card metric-neutral"><p class="metric-label">Manuel kalite</p><p class="metric-value">{{ $model['manual']['average'] === null ? '—' : number_format($model['manual']['average'], 1, ',', '.') }}</p><p class="metric-detail">{{ $model['manual']['count'] }}/{{ $model['run_count'] }} koşu incelendi</p></article>@endif
         <article class="metric-card metric-neutral"><p class="metric-label">Tam başarılı koşu</p><p class="metric-value">%{{ number_format($model['passed_run_rate'], 1, ',', '.') }}</p><p class="metric-detail">{{ $model['passed_run_count'] }}/{{ $model['measured_run_count'] }} teslim tamamen temiz</p></article>
         <article class="metric-card metric-neutral"><p class="metric-label">Ortalama süre</p><p class="metric-value text-[26px]">{{ $formatDuration($model['average_duration_seconds']) }}</p><p class="metric-detail">Model başına üretim ve kontrol süresi</p></article>
     </section>
 
     <div class="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        @if ($taskType !== 'algorithm')
         <section class="data-panel rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" aria-labelledby="criteria-title">
             <p class="eyebrow">Kalite profili</p>
             <h2 id="criteria-title" class="mt-1 text-xl font-black tracking-[-0.035em]">Manuel puanlar</h2>
@@ -64,6 +65,7 @@
                 </div>
             @endif
         </section>
+        @endif
 
         <section class="data-panel rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6" aria-labelledby="stages-title">
             <p class="eyebrow">Teknik profil</p>
@@ -108,6 +110,7 @@
         </div>
     </section>
 
+    @if ($taskType !== 'algorithm')
     <div class="mt-8 grid gap-6 xl:grid-cols-[0.65fr_1.35fr]">
         <section class="data-panel rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6">
             <p class="eyebrow">Sorun dağılımı</p><h2 class="mt-1 text-lg font-black">Manuel önem seviyeleri</h2>
@@ -124,5 +127,6 @@
             </div>
         </section>
     </div>
+    @endif
 </div>
 @endsection

@@ -81,7 +81,13 @@ try {
     ["-f", job.scriptPath, job.runId, job.promptPath, job.configPath, job.routes.join(","), job.openCodeConfigPath],
     {
       cwd: job.projectRoot,
-      env: subprocessEnvironment({ BENCHFORGE_BOUNDARY_MONITOR: boundaryMonitorPath, BENCHFORGE_DATA_ROOT: job.projectRoot }),
+      env: subprocessEnvironment({
+        BENCHFORGE_BOUNDARY_MONITOR: boundaryMonitorPath,
+        BENCHFORGE_DATA_ROOT: job.projectRoot,
+        ...(job.taskType === "algorithm"
+          ? { BENCHFORGE_TASK_TYPE: "algorithm", BENCHFORGE_ALGORITHM_TASK_DIR: job.algorithmTaskDirectory }
+          : {}),
+      }),
       stdio: ["ignore", logFd, logFd],
     },
   );

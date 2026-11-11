@@ -28,6 +28,9 @@
     $requestedPrompt = collect($options['prompts'])->firstWhere('value', request()->query('prompt'));
     $defaultPrompt = old('prompt', $requestedPrompt['value'] ?? $options['prompts'][0]['value'] ?? '');
     $defaultPromptMode = old('prompt_mode', 'saved');
+    $defaultTaskType = array_key_exists(old('task_type', 'site'), \App\Models\BenchmarkRun::TASK_TYPES) ? old('task_type', 'site') : 'site';
+    $algorithmTasks = $options['algorithmTasks'] ?? [];
+    $defaultAlgorithmTask = old('algorithm_task', $algorithmTasks[0]['value'] ?? '');
     $defaultConfig = old('config', $options['configs'][0]['value'] ?? '');
     $defaultModelMode = old('model_mode', 'group');
     $defaultRoutingMode = in_array(old('routing_mode', 'auto'), ['auto', 'price', 'throughput', 'fixed'], true) ? old('routing_mode', 'auto') : 'auto';
@@ -199,6 +202,38 @@
                     <span class="font-normal leading-5 text-[var(--muted)]">Küçük harf, sayı ve tire. Var olan bir ad yeniden kullanılamaz.</span>
                 </label>
 
+                <fieldset class="grid gap-3" data-task-type-fieldset>
+                    <legend class="text-xs font-extrabold text-[var(--ink)]">Görev türü</legend>
+                    <div class="grid grid-cols-2 gap-2 rounded-xl bg-[var(--surface-subtle)] p-1">
+                        @foreach (\App\Models\BenchmarkRun::TASK_TYPES as $type => $typeLabel)
+                            <label class="cursor-pointer rounded-lg px-3 py-2 text-center text-xs font-extrabold has-checked:bg-[var(--surface)] has-checked:text-[var(--forest)] has-checked:shadow-sm">
+                                <input class="sr-only" type="radio" name="task_type" value="{{ $type }}" data-task-type data-runner-input @checked($defaultTaskType === $type) @disabled($active)>
+                                {{ $type === 'site' ? 'Web sitesi (Next.js)' : 'Algoritma (birim test)' }}
+                            </label>
+                        @endforeach
+                    </div>
+                    <p class="text-[10px] leading-4 text-[var(--muted)]" data-task-type-help>
+                        Web sitesi görevleri lint, build, static export, rota ve tarayıcı kontrolüyle; algoritma görevleri yalnızca birim testlerle puanlanır.
+                    </p>
+                </fieldset>
+
+                <div class="grid gap-3" data-task-panel="algorithm" @class(['hidden' => $defaultTaskType !== 'algorithm'])>
+                    <label class="grid gap-2 text-xs font-extrabold text-[var(--ink)]">
+                        Algoritma görevi
+                        <select class="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-sm font-semibold outline-none transition focus:border-[var(--forest)] focus:ring-3 focus:ring-[var(--mint-soft)]" name="algorithm_task" data-runner-input @disabled($active)>
+                            @forelse ($algorithmTasks as $task)
+                                <option value="{{ $task['value'] }}" @selected($defaultAlgorithmTask === $task['value'])>{{ $task['label'] }} · {{ $task['testCount'] }} test</option>
+                            @empty
+                                <option value="">Henüz içe aktarılmış görev yok</option>
+                            @endforelse
+                        </select>
+                        <span class="font-normal leading-5 text-[var(--muted)]">
+                            Görevler Exercism JavaScript alıştırmalarından gelir. Eklemek için terminalde <code class="font-mono text-[11px]">node engine/tools/import-exercism.mjs</code> komutunu çalıştırın. Her koşu tek bir görevi seçilen modellere verir.
+                        </span>
+                    </label>
+                </div>
+
+                <div class="grid gap-3" data-task-panel="site" @class(['hidden' => $defaultTaskType !== 'site'])>
                 <fieldset class="grid gap-3" data-prompt-mode-fieldset>
                     <legend class="text-xs font-extrabold text-[var(--ink)]">Görev promptu</legend>
                     <div class="grid grid-cols-3 gap-2 rounded-xl bg-[var(--surface-subtle)] p-1">
@@ -237,6 +272,7 @@
                         </label>
                     </div>
                 </fieldset>
+                </div>
 
                 <fieldset class="grid gap-3" data-model-mode-fieldset>
                     <legend class="text-xs font-extrabold text-[var(--ink)]">Modeller</legend>
@@ -549,6 +585,7 @@
                     </span>
                 </label>
 
+                <div data-task-panel="site" @class(['hidden' => $defaultTaskType !== 'site'])>
                 <label class="grid gap-2 text-xs font-extrabold text-[var(--ink)]">
                     Doğrulanacak rotalar
                     <textarea
@@ -562,6 +599,7 @@
                     >{{ $defaultRoutes }}</textarea>
                     <span class="font-normal leading-5 text-[var(--muted)]">Her satıra bir rota yazın. En fazla 20 rota.</span>
                 </label>
+                </div>
             </div>
 
             <div class="mt-6 rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] p-4">

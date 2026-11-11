@@ -12,10 +12,12 @@ class BenchmarkPreflightController extends Controller
     public function __invoke(BenchmarkPreflightRequest $request, BenchmarkRunner $benchmarkRunner): JsonResponse
     {
         try {
+            // Web sitesi görevleri eski çağrı biçimini korur; yalnızca algoritma görevi tür bilgisini ekler.
+            $taskType = $request->string('task_type')->toString() === 'algorithm' ? ['taskType' => 'algorithm'] : [];
             $preflight = match ($request->string('model_mode')->toString()) {
-                'custom' => $benchmarkRunner->preflight(null, $request->selectedModels(), 'custom', $request->input('routing_mode', 'auto'), (array) $request->input('fixed_providers', [])),
-                'opencode_go' => $benchmarkRunner->preflight(null, $request->selectedGoModels(), 'opencode_go'),
-                default => $benchmarkRunner->preflight($request->string('config')->toString()),
+                'custom' => $benchmarkRunner->preflight(null, $request->selectedModels(), 'custom', $request->input('routing_mode', 'auto'), (array) $request->input('fixed_providers', []), ...$taskType),
+                'opencode_go' => $benchmarkRunner->preflight(null, $request->selectedGoModels(), 'opencode_go', ...$taskType),
+                default => $benchmarkRunner->preflight($request->string('config')->toString(), ...$taskType),
             };
         } catch (BenchmarkRunnerException $exception) {
             return response()->json(['message' => $exception->getMessage(), 'ready' => false], 422)->header('Cache-Control', 'no-store');

@@ -9,6 +9,7 @@
         'export' => 'Export',
         'routes' => 'Rotalar',
         'runtime' => 'Runtime',
+        'tests' => 'Birim testler',
     ];
     $statusLabels = [
         'pass' => 'Başarılı',
@@ -32,6 +33,7 @@
     $schemaLabel = match ($run->schema) {
         'legacy' => 'Legacy',
         'incomplete' => 'Tamamlanmamış',
+        'algorithm' => 'Algoritma',
         default => 'V2 · Genişletilmiş',
     };
     $metaLabels = [

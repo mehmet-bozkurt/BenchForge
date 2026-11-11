@@ -34,7 +34,7 @@ class BenchmarkModelFiles
         bool $tail = true,
     ): string {
         $slug = preg_quote($model->slug, '~');
-        $stage = '(?:lint|build|export|routes|runtime|opencode)';
+        $stage = '(?:lint|build|export|routes|runtime|tests|opencode)';
         $allowed = '~^(?:_logs/'.$slug.'\.(?:'.$stage.'\.log|opencode\.(?:stderr\.log|events\.jsonl|continue\.events\.jsonl|continue\.log)|auto-continue\.log)'
             .'|_attempts/'.$slug.'/attempt-[1-9][0-9]*/(?:'.$stage.'\.log|opencode\.(?:stderr\.log|events\.jsonl)|boundary-report\.json|model-policy/metadata\.json)'
             .'|_boundary/'.$slug.'\.json|_policies/'.$slug.'/metadata\.json)$~';

@@ -13,6 +13,7 @@ BenchForge, yapay zekâ kodlama modellerini gerçek ürün geliştirmeye benzeye
 ## Ne yapar?
 
 - **Kod benchmarkı:** Seçtiğiniz 1–16 modeli [OpenCode](https://opencode.ai) üzerinden aynı görevle çalıştırır; aynı anda en fazla 5 model çalışır. Her teslim altı aşamada doğrulanır: model adımı, lint, production build, static export, rota kontrolü ve tarayıcıda çalışma testi.
+- **Algoritma görevleri:** Yeni Benchmark ekranında görev türü olarak "Algoritma (birim test)" seçilir. Görevler Exercism JavaScript alıştırmalarıdır; model yalnız çözüm dosyasını düzenler, puan geçen birim test oranıdır (model adımı + `tests` aşaması). Doğrulamadan önce test dosyası orijinaliyle değiştirilir, modelin testlere dokunması sonucu etkilemez. Bu görevlerde insan puanı, kurtarma denemesi ve önizleme yoktur; liderlik tablosunda ayrı bir sekmedir ve web sitesi sonuçlarıyla karışmaz. Görevleri eklemek için bkz. [Algoritma görevlerini içe aktarma](#algoritma-görevlerini-içe-aktarma).
 - **Görev promptları ve model grupları:** **Promptlar** ve **Model Grupları** ekranlarından eklenir, düzenlenir ve silinir. Promptlar veri kökündeki `prompts/`, gruplar `config/` klasöründe dosya olarak durur. Silinen veya yeniden adlandırılan dosya kalıcı silinmez, `.silinen/` alt klasörüne taşınır. Çalışan bir koşunun kullandığı prompt değiştirilemez.
 - **Model katalogları:** OpenRouter ve OpenCode Go kataloglarından model seçimi; OpenRouter için sağlayıcı yönlendirme tercihleri (otomatik, fiyat, hız, sabit endpoint).
 - **Sonuç tablosu:** Her model tek satırdır. Aşama işaretleri logu açar, sonuç düz bir cümleyle açıklanır, satırlar süreye ve maliyete göre sıralanabilir. Renklerin ve kodların anlamı [Sonuçları okumak](#sonuçları-okumak) bölümündedir.
@@ -74,6 +75,18 @@ Kod üreten modeller `isolated-v1` koşulunda çalışır: her model kendi boş 
 - **Gri:** Puanlanmayan bir modelin işaretleridir. Model hiç çalışamadığı için yalnız başlangıç şablonu doğrulanmıştır.
 
 Başlıktaki **Sorunlu** sayısı modelin kendi hatalarını, **Dış etken** sayısı turuncu satırları gösterir.
+
+### Algoritma görevlerini içe aktarma
+
+Görevler veri kökündeki `algorithm-tasks/<görev>/` klasörlerinde durur (varsayılan kökte `engine/algorithm-tasks/`, git'e eklenmez). [Exercism JavaScript](https://github.com/exercism/javascript) alıştırmalarını içe aktarmak için:
+
+```bash
+node engine/tools/import-exercism.mjs [--only two-fer,leap] [--limit 20] [--ref <dal-veya-etiket>]
+```
+
+Komut depoyu bir kez sığ klonlar (ağ yalnız bu adımda kullanılır). Her alıştırma Jest yerine Node'un `node:test` çalıştırıcısına (`engine/tools/algorithm-jest-shim.mjs`) uyarlanır ve kendi kendini sınar: başlangıç dosyası testleri geçmemeli, Exercism'in örnek çözümü hepsini geçmeli. Desteklenmeyen eşleştirici veya yardımcı kullanan alıştırmalar atlanır ve nedeniyle listelenir. Alıştırmaların kaynağı ve lisansı her görevin `task.json` dosyasında yazılıdır; Exercism içeriğini dağıtmadan önce lisansını ayrıca denetleyin.
+
+Algoritma görevinde model yalnız `node --test <test dosyası>` komutunu çalıştırabilir. Test dosyası, Jest kabuğu ve `package.json` dosyaları doğrulamadan önce görevden geri yazılır; değiştirildiyse `tests` aşaması bunu notla bildirir. Çözüm dosyası değişmediyse sonuç "teslim yok" (86) sayılır.
 
 **Model adımının sonuç kodları:**
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\BenchmarkRun;
 use App\Services\BenchmarkRunner;
 use App\Services\ModelGroupStore;
 use App\Services\OpenRouterProviderRouting;
@@ -25,10 +26,12 @@ class StoreBenchmarkExecutionRequest extends FormRequest
 
         return [
             'run_id' => ['required', 'string', 'min:3', 'max:64', 'regex:/^[a-z0-9][a-z0-9-]+$/', 'unique:benchmark_executions,run_id'],
+            'task_type' => ['required', Rule::in(array_keys(BenchmarkRun::TASK_TYPES))],
+            'algorithm_task' => [Rule::requiredIf(fn (): bool => $this->isAlgorithmTask()), 'nullable', 'string', Rule::in(array_column($options['algorithmTasks'] ?? [], 'value'))],
             'prompt_mode' => ['required', Rule::in(['saved', 'custom'])],
-            'prompt' => [Rule::requiredIf(fn (): bool => $this->input('prompt_mode') === 'saved'), 'nullable', 'string', Rule::in(array_column($options['prompts'], 'value'))],
-            'custom_prompt_content' => [Rule::requiredIf(fn (): bool => $this->input('prompt_mode') === 'custom'), 'nullable', 'string', 'min:20', 'max:60000'],
-            'custom_prompt_title' => [Rule::requiredIf(fn (): bool => $this->input('prompt_mode') === 'custom' && $this->boolean('save_prompt')), 'nullable', 'string', 'max:120'],
+            'prompt' => [Rule::requiredIf(fn (): bool => ! $this->isAlgorithmTask() && $this->input('prompt_mode') === 'saved'), 'nullable', 'string', Rule::in(array_column($options['prompts'], 'value'))],
+            'custom_prompt_content' => [Rule::requiredIf(fn (): bool => ! $this->isAlgorithmTask() && $this->input('prompt_mode') === 'custom'), 'nullable', 'string', 'min:20', 'max:60000'],
+            'custom_prompt_title' => [Rule::requiredIf(fn (): bool => ! $this->isAlgorithmTask() && $this->input('prompt_mode') === 'custom' && $this->boolean('save_prompt')), 'nullable', 'string', 'max:120'],
             'save_prompt' => ['nullable', 'boolean'],
             'model_mode' => ['required', Rule::in(['group', 'custom', 'opencode_go'])],
             'config' => [Rule::requiredIf(fn (): bool => $this->input('model_mode') === 'group'), 'nullable', 'string', Rule::in(array_column($options['configs'], 'value'))],
@@ -59,7 +62,7 @@ class StoreBenchmarkExecutionRequest extends FormRequest
                     }
                 }],
             'max_parallel' => ['required', 'integer', 'between:1,5'],
-            'routes' => ['required', 'string', 'max:4000'],
+            'routes' => [Rule::requiredIf(fn (): bool => ! $this->isAlgorithmTask()), 'nullable', 'string', 'max:4000'],
             'group_name' => ['exclude_unless:model_mode,custom,opencode_go', 'nullable', 'string', 'max:63', 'regex:'.ModelGroupStore::NAME_PATTERN,
                 function (string $attribute, mixed $value, Closure $fail): void {
                     if (is_string($value) && $value !== '' && app(ModelGroupStore::class)->exists($value)) {
@@ -78,6 +81,9 @@ class StoreBenchmarkExecutionRequest extends FormRequest
             'run_id.max' => 'Koşu adı en fazla 64 karakter olabilir.',
             'run_id.regex' => 'Koşu adında yalnızca küçük harf, sayı ve tire kullanın.',
             'run_id.unique' => 'Bu koşu adı daha önce kullanılmış.',
+            'task_type.in' => 'Geçerli bir görev türü seçin.',
+            'algorithm_task.required' => 'Bir algoritma görevi seçin. Görev yoksa önce içe aktarın: node engine/tools/import-exercism.mjs',
+            'algorithm_task.in' => 'Listeden geçerli bir algoritma görevi seçin.',
             'prompt.required' => 'Görev promptu seçin.',
             'prompt.in' => 'Listeden geçerli bir görev promptu seçin.',
             'custom_prompt_content.required' => 'Özel görev promptunu yazın.',
@@ -109,6 +115,11 @@ class StoreBenchmarkExecutionRequest extends FormRequest
         ];
     }
 
+    public function isAlgorithmTask(): bool
+    {
+        return $this->input('task_type') === 'algorithm';
+    }
+
     /** @return list<string> */
     public function routeValues(): array
     {
@@ -125,6 +136,10 @@ class StoreBenchmarkExecutionRequest extends FormRequest
     {
         return [
             'run_id' => $this->string('run_id')->toString(),
+            ...($this->isAlgorithmTask() ? [
+                'task_type' => 'algorithm',
+                'algorithm_task' => $this->string('algorithm_task')->toString(),
+            ] : []),
             'prompt_mode' => $this->string('prompt_mode')->toString(),
             'prompt' => $this->string('prompt')->toString(),
             'custom_prompt_title' => $this->string('custom_prompt_title')->toString(),
@@ -139,7 +154,7 @@ class StoreBenchmarkExecutionRequest extends FormRequest
                 'fixed_providers' => (array) $this->input('fixed_providers', []),
             ] : []),
             'max_parallel' => $this->integer('max_parallel'),
-            'routes' => $this->routeValues(),
+            'routes' => $this->isAlgorithmTask() ? [] : $this->routeValues(),
         ];
     }
 
@@ -174,6 +189,8 @@ class StoreBenchmarkExecutionRequest extends FormRequest
 
         $this->merge([
             'run_id' => $this->string('run_id')->trim()->lower()->toString(),
+            'task_type' => $this->string('task_type', BenchmarkRun::DEFAULT_TASK_TYPE)->trim()->toString() ?: BenchmarkRun::DEFAULT_TASK_TYPE,
+            'algorithm_task' => $this->string('algorithm_task')->trim()->toString(),
             'prompt_mode' => $this->string('prompt_mode', 'saved')->trim()->toString() ?: 'saved',
             'prompt' => $this->string('prompt')->trim()->toString(),
             'custom_prompt_title' => $this->string('custom_prompt_title')->trim()->toString(),
@@ -193,23 +210,25 @@ class StoreBenchmarkExecutionRequest extends FormRequest
     {
         return [
             function (Validator $validator): void {
-                if ($validator->errors()->has('routes')) {
-                    return;
-                }
+                if (! $this->isAlgorithmTask()) {
+                    if ($validator->errors()->has('routes')) {
+                        return;
+                    }
 
-                $routes = $this->routeValues();
+                    $routes = $this->routeValues();
 
-                if ($routes === [] || count($routes) > 20) {
-                    $validator->errors()->add('routes', '1–20 arasında rota girin.');
-
-                    return;
-                }
-
-                foreach ($routes as $route) {
-                    if (mb_strlen($route) > 180 || preg_match("/^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%\/]*$/", $route) !== 1 || str_contains($route, '//')) {
-                        $validator->errors()->add('routes', "Geçersiz rota: {$route}");
+                    if ($routes === [] || count($routes) > 20) {
+                        $validator->errors()->add('routes', '1–20 arasında rota girin.');
 
                         return;
+                    }
+
+                    foreach ($routes as $route) {
+                        if (mb_strlen($route) > 180 || preg_match("/^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%\/]*$/", $route) !== 1 || str_contains($route, '//')) {
+                            $validator->errors()->add('routes', "Geçersiz rota: {$route}");
+
+                            return;
+                        }
                     }
                 }
 

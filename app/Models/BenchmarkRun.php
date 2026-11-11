@@ -24,6 +24,14 @@ class BenchmarkRun extends Model
         'manual' => 'Harness dışı',
     ];
 
+    public const DEFAULT_TASK_TYPE = 'site';
+
+    /** @var array<string, string> */
+    public const TASK_TYPES = [
+        'site' => 'Web sitesi',
+        'algorithm' => 'Algoritma',
+    ];
+
     protected $fillable = [
         'slug',
         'name',
@@ -59,6 +67,16 @@ class BenchmarkRun extends Model
         $profile = $this->metadata['environment_profile'] ?? null;
 
         return is_string($profile) && array_key_exists($profile, self::ENVIRONMENT_PROFILES) ? $profile : 'legacy';
+    }
+
+    /**
+     * The kind of task the run measured, recorded in `_meta.txt`; runs without it are site benchmarks.
+     */
+    public function taskType(): string
+    {
+        $type = $this->metadata['task_type'] ?? null;
+
+        return is_string($type) && array_key_exists($type, self::TASK_TYPES) ? $type : self::DEFAULT_TASK_TYPE;
     }
 
     /**

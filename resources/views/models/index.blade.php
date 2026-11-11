@@ -18,11 +18,20 @@
             <p class="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
                 Aynı çalışma koşulundaki benchmark koşularının teknik güvenilirliğini, hızını ve manuel kalite değerlendirmelerini birlikte görün. Farklı koşullar tek tabloda karıştırılmaz.
             </p>
-            <nav class="mt-4 inline-flex overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[11px] font-extrabold" aria-label="Çalışma koşulu">
+            <nav class="mt-4 inline-flex overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[11px] font-extrabold" aria-label="Görev türü">
+                @foreach ($taskTypes as $type => $typeLabel)
+                    <a
+                        class="px-3 py-2 transition {{ $type === $taskType ? 'bg-[var(--forest)] text-white' : 'text-[var(--muted)] hover:text-[var(--forest)]' }} {{ $loop->first ? '' : 'border-l border-[var(--line)]' }}"
+                        href="{{ route('models.index', ['type' => $type, 'condition' => $environmentProfile]) }}"
+                        @if ($type === $taskType) aria-current="page" @endif
+                    >{{ $typeLabel }}</a>
+                @endforeach
+            </nav>
+            <nav class="mt-3 inline-flex overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[11px] font-extrabold" aria-label="Çalışma koşulu">
                 @foreach ($environmentProfiles as $profile => $profileLabel)
                     <a
                         class="px-3 py-2 transition {{ $profile === $environmentProfile ? 'bg-[var(--forest)] text-white' : 'text-[var(--muted)] hover:text-[var(--forest)]' }} {{ $loop->first ? '' : 'border-l border-[var(--line)]' }}"
-                        href="{{ route('models.index', ['condition' => $profile]) }}"
+                        href="{{ route('models.index', ['condition' => $profile, 'type' => $taskType]) }}"
                         @if ($profile === $environmentProfile) aria-current="page" @endif
                     >{{ $profileLabel }}</a>
                 @endforeach
@@ -45,16 +54,29 @@
             <p class="metric-value">{{ $summary['runs'] }}</p>
             <p class="metric-detail">Geçmiş suite’lerdeki teslimler</p>
         </article>
-        <article class="metric-card metric-positive">
-            <p class="metric-label">Manuel inceleme</p>
-            <p class="metric-value">{{ $summary['reviews'] }}</p>
-            <p class="metric-detail">Kaydedilmiş kalite değerlendirmesi</p>
-        </article>
-        <article class="metric-card {{ $summary['reviewed_models'] === $summary['models'] && $summary['models'] > 0 ? 'metric-positive' : 'metric-warning' }}">
-            <p class="metric-label">Puanlanan model</p>
-            <p class="metric-value">{{ $summary['reviewed_models'] }}/{{ $summary['models'] }}</p>
-            <p class="metric-detail">Liderlik için değerlendirme kapsamı</p>
-        </article>
+        @if ($taskType === 'algorithm')
+            <article class="metric-card metric-positive">
+                <p class="metric-label">Ortalama test başarısı</p>
+                <p class="metric-value">%{{ number_format($models->avg('technical.score') ?? 0, 1, ',', '.') }}</p>
+                <p class="metric-detail">Birim testlerin geçen oranı</p>
+            </article>
+            <article class="metric-card metric-neutral">
+                <p class="metric-label">Manuel inceleme</p>
+                <p class="metric-value">—</p>
+                <p class="metric-detail">Algoritma görevleri yalnız testle puanlanır</p>
+            </article>
+        @else
+            <article class="metric-card metric-positive">
+                <p class="metric-label">Manuel inceleme</p>
+                <p class="metric-value">{{ $summary['reviews'] }}</p>
+                <p class="metric-detail">Kaydedilmiş kalite değerlendirmesi</p>
+            </article>
+            <article class="metric-card {{ $summary['reviewed_models'] === $summary['models'] && $summary['models'] > 0 ? 'metric-positive' : 'metric-warning' }}">
+                <p class="metric-label">Puanlanan model</p>
+                <p class="metric-value">{{ $summary['reviewed_models'] }}/{{ $summary['models'] }}</p>
+                <p class="metric-detail">Liderlik için değerlendirme kapsamı</p>
+            </article>
+        @endif
     </section>
 
     <section class="mt-8 overflow-hidden rounded-[26px] border border-[var(--line)] bg-[var(--surface)] shadow-[0_20px_60px_rgb(26_32_65/7%)]" aria-labelledby="ranking-title">
@@ -64,13 +86,17 @@
                 <h2 id="ranking-title" class="mt-1 text-xl font-black tracking-[-0.035em]">Modellerin birleşik performansı</h2>
             </div>
             <div class="max-w-xl rounded-xl border border-[var(--violet-line)] bg-[var(--violet-soft)] px-4 py-3 text-[11px] leading-5 text-[var(--muted)]">
+                @if ($taskType === 'algorithm')
+                    <strong class="text-[var(--violet)]">Puan formülü:</strong> Her koşunun puanı, görevin birim testlerinden geçenlerin oranıdır; model adımı başarısız olan koşu 0 sayılır, sağlayıcı kaynaklı hatalar hesaba katılmaz. Modelin puanı koşularının ortalamasıdır. Farklı görevlerin zorluğu farklıdır; çok az görevle yapılan sıralama kesin bir sonuç değildir.
+                @else
                 <strong class="text-[var(--violet)]">Puan formülü:</strong> %60 teknik başarı + %40 manuel ilk teslim puanı. Teknik başarı, her koşunun kendi aşama oranının eşit ağırlıklı ortalamasıdır; model adımı başarısız olan koşu 0 sayılır. Manuel değerlendirmesi olmayan modeller sıralamaya alınmaz. Koşular farklı görev ve aşama setleri içerebildiği için bu tablo evrensel ve tam adil bir sıralama değildir.
+                @endif
             </div>
         </div>
 
         @if ($models->isEmpty())
             <div class="px-6 py-20 text-center">
-                <h3 class="text-lg font-black">Bu koşulda henüz model sonucu yok</h3>
+                <h3 class="text-lg font-black">{{ $taskType === 'algorithm' ? 'Bu koşulda henüz algoritma sonucu yok' : 'Bu koşulda henüz model sonucu yok' }}</h3>
                 <p class="mt-2 text-sm text-[var(--muted)]">{{ $environmentProfiles[$environmentProfile] }} ile ilk benchmark tamamlandığında model karneleri burada oluşacak. Önceki koşulların sonuçları üstteki seçiciden ayrı görülebilir.</p>
             </div>
         @else
@@ -81,9 +107,11 @@
                         <tr class="border-b border-[var(--line)] bg-[var(--surface-subtle)]">
                             <th class="table-heading w-20 px-6 py-4 text-center" scope="col">Sıra</th>
                             <th class="table-heading px-4 py-4" scope="col">Model</th>
-                            <th class="table-heading px-4 py-4 text-center" scope="col">Birleşik</th>
+                            <th class="table-heading px-4 py-4 text-center" scope="col">{{ $taskType === 'algorithm' ? 'Test başarısı' : 'Birleşik' }}</th>
                             <th class="table-heading px-4 py-4" scope="col">Teknik güven</th>
-                            <th class="table-heading px-4 py-4 text-center" scope="col">Manuel</th>
+                            @if ($taskType !== 'algorithm')
+                                <th class="table-heading px-4 py-4 text-center" scope="col">Manuel</th>
+                            @endif
                             <th class="table-heading px-4 py-4 text-center" scope="col">Koşu</th>
                             <th class="table-heading px-4 py-4 text-right" scope="col">Ort. süre</th>
                             <th class="table-heading w-20 px-6 py-4" scope="col"></th>
@@ -100,7 +128,7 @@
                                     @endif
                                 </td>
                                 <th class="px-4 py-5" scope="row">
-                                    <a class="text-sm font-black text-[var(--ink)] transition-colors hover:text-[var(--forest)]" href="{{ route('models.show', [$model['slug'], 'condition' => $environmentProfile]) }}">{{ $model['display_name'] }}</a>
+                                    <a class="text-sm font-black text-[var(--ink)] transition-colors hover:text-[var(--forest)]" href="{{ route('models.show', [$model['slug'], 'condition' => $environmentProfile, 'type' => $taskType]) }}">{{ $model['display_name'] }}</a>
                                     <code class="mt-1 block text-[10px] font-medium text-[var(--muted)]">{{ $model['provider_model'] }}</code>
                                     @if ($model['mixed_stage_sets'])
                                         <span class="mt-1.5 inline-flex rounded-full bg-[var(--amber-soft)] px-2 py-0.5 text-[9px] font-extrabold text-[var(--amber)]" title="Bu modelin koşuları farklı doğrulama aşamalarıyla ölçüldü; teknik oranlar birebir karşılaştırılabilir değildir.">Farklı aşama setleri</span>
@@ -122,13 +150,15 @@
                                         <div class="h-full rounded-full bg-[var(--success)]" style="width: {{ $model['technical']['score'] }}%"></div>
                                     </div>
                                 </td>
+                                @if ($taskType !== 'algorithm')
                                 <td class="px-4 py-5 text-center">
                                     <strong class="block text-sm">{{ $model['manual']['average'] === null ? '—' : number_format($model['manual']['average'], 1, ',', '.').'/10' }}</strong>
                                     <span class="text-[10px] text-[var(--muted)]">{{ $model['manual']['count'] }}/{{ $model['run_count'] }} incelendi</span>
                                 </td>
+                                @endif
                                 <td class="px-4 py-5 text-center text-sm font-black">{{ $model['run_count'] }}</td>
                                 <td class="px-4 py-5 text-right font-mono text-[11px] font-bold whitespace-nowrap">{{ $formatDuration($model['average_duration_seconds']) }}</td>
-                                <td class="px-6 py-5 text-right"><a class="text-xs font-black text-[var(--forest)]" href="{{ route('models.show', [$model['slug'], 'condition' => $environmentProfile]) }}" aria-label="{{ $model['display_name'] }} karnesini aç">Karne →</a></td>
+                                <td class="px-6 py-5 text-right"><a class="text-xs font-black text-[var(--forest)]" href="{{ route('models.show', [$model['slug'], 'condition' => $environmentProfile, 'type' => $taskType]) }}" aria-label="{{ $model['display_name'] }} karnesini aç">Karne →</a></td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -137,6 +167,6 @@
         @endif
     </section>
 
-    <p class="mt-5 text-[10px] leading-5 text-[var(--muted)]">Teknik puan, kaydedilmiş tüm aşama sonuçlarının başarı oranıdır. Farklı kapsamdaki legacy ve genişletilmiş koşular ayrıntılı model karnesinde görünür.</p>
+    <p class="mt-5 text-[10px] leading-5 text-[var(--muted)]">{{ $taskType === 'algorithm' ? 'Teknik puan, birim testlerin geçen oranıdır.' : 'Teknik puan, kaydedilmiş tüm aşama sonuçlarının başarı oranıdır.' }} Farklı kapsamdaki legacy ve genişletilmiş koşular ayrıntılı model karnesinde görünür.</p>
 </div>
 @endsection

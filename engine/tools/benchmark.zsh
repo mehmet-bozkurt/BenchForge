@@ -77,6 +77,11 @@ saglayici_takilmalari() {
 
 # Calisma alani baslangic sablonuyla ayniysa (model hicbir sey teslim etmediyse) basarili doner.
 sablon_ayni() {
+  # Algoritma gorevinde teslim, yalnizca cozum dosyasidir; testlerde yapilan degisiklik teslim sayilmaz.
+  if [[ "$GOREV_TURU" == "algorithm" ]]; then
+    cmp -s "${SABLON}/${ALGORITMA_COZUM_DOSYASI}" "${1}/${ALGORITMA_COZUM_DOSYASI}"
+    return
+  fi
   diff -rq -x node_modules -x .next -x out -x next-env.d.ts -x '*.tsbuildinfo' -x .DS_Store \
     "$SABLON" "$1" >/dev/null 2>&1
 }
@@ -112,7 +117,34 @@ OPENCODE_CONFIG_GIRIS="${5:-${VERI_DIZIN}/config/opencode-benchmark.json}"
   && OPENCODE_CONFIG_DOSYASI="$OPENCODE_CONFIG_GIRIS" \
   || OPENCODE_CONFIG_DOSYASI="${VERI_DIZIN}/${OPENCODE_CONFIG_GIRIS}"
 
+# Gorev turu: "site" (Next.js sitesi, varsayilan) ya da "algorithm" (birim testle puanlanan alistirma).
+GOREV_TURU="${BENCHFORGE_TASK_TYPE:-site}"
+if [[ "$GOREV_TURU" != (site|algorithm) ]]; then
+  echo "HATA: Gecersiz gorev turu -> $GOREV_TURU"
+  exit 1
+fi
+
 SABLON="${ANA_DIZIN}/sablon"
+ALGORITMA_GOREV=""
+ALGORITMA_TEST_DOSYASI=""
+ALGORITMA_COZUM_DOSYASI=""
+ALGORITMA_TEST_CALISTIRICI="${ANA_DIZIN}/tools/algorithm-test-runner.mjs"
+if [[ "$GOREV_TURU" == "algorithm" ]]; then
+  ALGORITMA_GOREV="${BENCHFORGE_ALGORITHM_TASK_DIR:-}"
+  if [[ "$ALGORITMA_GOREV" != /* || ! -f "${ALGORITMA_GOREV}/task.json" || ! -d "${ALGORITMA_GOREV}/workspace" ]]; then
+    echo "HATA: Algoritma gorevi bulunamadi -> $ALGORITMA_GOREV"
+    exit 1
+  fi
+  SABLON="${ALGORITMA_GOREV}/workspace"
+  ALGORITMA_TEST_DOSYASI="$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).testFile ?? ""))' "${ALGORITMA_GOREV}/task.json")"
+  ALGORITMA_COZUM_DOSYASI="$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).solutionFile ?? ""))' "${ALGORITMA_GOREV}/task.json")"
+  if [[ -z "$ALGORITMA_TEST_DOSYASI" || -z "$ALGORITMA_COZUM_DOSYASI" || ! -f "${SABLON}/${ALGORITMA_TEST_DOSYASI}" || ! -f "${SABLON}/${ALGORITMA_COZUM_DOSYASI}" ]]; then
+    echo "HATA: Algoritma gorevinin test veya cozum dosyasi bulunamadi."
+    exit 1
+  fi
+  # Model politikasi bu degerleri ortamdan okur.
+  export BENCHFORGE_TASK_TYPE="$GOREV_TURU" BENCHFORGE_ALGORITHM_TEST_FILE="$ALGORITMA_TEST_DOSYASI"
+fi
 RUN_DIZIN="${VERI_DIZIN}/runs/${TEST_ADI}"
 LOG_DIZIN="${RUN_DIZIN}/_logs"
 RESULT_DIZIN="${RUN_DIZIN}/_results"
@@ -150,14 +182,16 @@ for DOSYA in "$SABLON" "$PROMPT_DOSYASI" "$MODEL_CONFIG" "$OPENCODE_CONFIG_DOSYA
   fi
 done
 
-for KOMUT in node npm opencode rsync curl python3 shasum; do
+GEREKLI_KOMUTLAR=(node npm opencode rsync curl python3 shasum)
+[[ "$GOREV_TURU" == "algorithm" ]] && GEREKLI_KOMUTLAR=(node opencode rsync shasum)
+for KOMUT in "${GEREKLI_KOMUTLAR[@]}"; do
   if ! command -v "$KOMUT" >/dev/null 2>&1; then
     echo "HATA: Komut bulunamadi -> $KOMUT"
     exit 1
   fi
 done
 
-if [[ ! -f "$BROWSER_SMOKE" || ! -f "$SESSION_SECICI" || ! -f "$MODEL_POLICY" || ! -f "$HATA_SINIFLANDIRICI" ]]; then
+if [[ ( "$GOREV_TURU" == "site" && ! -f "$BROWSER_SMOKE" ) || ( "$GOREV_TURU" == "algorithm" && ! -f "$ALGORITMA_TEST_CALISTIRICI" ) || ! -f "$SESSION_SECICI" || ! -f "$MODEL_POLICY" || ! -f "$HATA_SINIFLANDIRICI" ]]; then
   echo "HATA: Benchmark yardimci araci bulunamadi."
   exit 1
 fi
@@ -214,6 +248,8 @@ fi
   echo "node=$(node -v)"
   echo "npm=$(npm -v)"
   echo "opencode=$(opencode --version)"
+  echo "task_type=${GOREV_TURU}"
+  [[ "$GOREV_TURU" == "algorithm" ]] && echo "algorithm_task=${ALGORITMA_GOREV:t}"
   echo "routes=${ROTA_CSV}"
   echo "prompt_sha256=$(shasum -a 256 "$PROMPT_DOSYASI" | awk '{print $1}')"
   echo "models_sha256=$(shasum -a 256 "$MODEL_CONFIG" | awk '{print $1}')"
@@ -235,7 +271,11 @@ echo "Test:      $TEST_ADI"
 echo "Node:      $(node -v)"
 echo "OpenCode:  $(opencode --version)"
 echo "Model:     ${#KLASORLER} adet"
-echo "Kontrol:   lint + export build + routes + browser runtime"
+if [[ "$GOREV_TURU" == "algorithm" ]]; then
+  echo "Kontrol:   birim testler (${ALGORITMA_GOREV:t})"
+else
+  echo "Kontrol:   lint + export build + routes + browser runtime"
+fi
 echo ""
 
 echo "Projeler hazirlaniyor..."
@@ -243,8 +283,6 @@ echo "Projeler hazirlaniyor..."
 for (( i = 1; i <= ${#KLASORLER}; i++ )); do
   KLASOR="${KLASORLER[$i]}"
   PROJE="${RUN_DIZIN}/${KLASOR}"
-
-  echo "[$KLASOR] npm ci"
 
   rm -rf "$PROJE"
   mkdir -p "$PROJE"
@@ -255,6 +293,11 @@ for (( i = 1; i <= ${#KLASORLER}; i++ )); do
     --exclude='node_modules' \
     "$SABLON/" \
     "$PROJE/"
+
+  # Algoritma gorevlerinde bagimlilik yoktur; kurulacak bir sey olmadan hazirdir.
+  [[ "$GOREV_TURU" == "algorithm" ]] && continue
+
+  echo "[$KLASOR] npm ci"
 
   (
     cd "$PROJE"
@@ -438,6 +481,17 @@ model_calistir() {
 
   echo "[$(date +%H:%M:%S)] $KLASOR: OpenCode tamamlandi. Kontroller basliyor."
 
+  local TESTS_RC=1
+
+  if [[ "$GOREV_TURU" == "algorithm" ]]; then
+    # Test dosyasi, Jest kabugu ve package.json dogrulamadan once gorevin orijinalleriyle degistirilir.
+    (
+      cd "$PROJE"
+      node "$ADIM_CALISTIRICI" "$ADIM_SURE_SINIRI_SANIYE" node "$ALGORITMA_TEST_CALISTIRICI" "$ALGORITMA_GOREV" "$PROJE" "${RESULT_DIZIN}/${KLASOR}.tests.json"
+    ) > "${LOG_DIZIN}/${KLASOR}.tests.log" 2>&1
+
+    TESTS_RC=$?
+  else
   (
     cd "$PROJE"
     node "$ADIM_CALISTIRICI" "$ADIM_SURE_SINIRI_SANIYE" npm run lint
@@ -532,11 +586,17 @@ model_calistir() {
     wait "$SERVER_PID" >/dev/null 2>&1 || true
   fi
 
+  fi
+
   local BITIS=$(date +%s)
   local SURE=$((BITIS - BASLANGIC))
 
-  echo "${KLASOR}|${MODEL}|${OPENCODE_RC}|${LINT_RC}|${BUILD_RC}|${EXPORT_RC}|${ROUTES_RC}|${RUNTIME_RC}|${SURE}" \
-    > "${RESULT_DIZIN}/${KLASOR}.result"
+  if [[ "$GOREV_TURU" == "algorithm" ]]; then
+    echo "${KLASOR}|${MODEL}|${OPENCODE_RC}|${TESTS_RC}|${SURE}" > "${RESULT_DIZIN}/${KLASOR}.result"
+  else
+    echo "${KLASOR}|${MODEL}|${OPENCODE_RC}|${LINT_RC}|${BUILD_RC}|${EXPORT_RC}|${ROUTES_RC}|${RUNTIME_RC}|${SURE}" \
+      > "${RESULT_DIZIN}/${KLASOR}.result"
+  fi
 
   # Ilk teslimin onizlemesi, asama sonucu ne olursa olsun sonuc arsivine (_gallery) kopyalanir; calisma alani
   # hafifletildiginde ya da silindiginde onizleme ve puanlama bu kopyadan devam eder.
@@ -584,8 +644,11 @@ done
 
 SUMMARY="${RUN_DIZIN}/_summary.tsv"
 
-echo "klasor|model|opencode|lint|build|export|routes|runtime|sure_sn" \
-  > "$SUMMARY"
+if [[ "$GOREV_TURU" == "algorithm" ]]; then
+  echo "klasor|model|opencode|tests|sure_sn" > "$SUMMARY"
+else
+  echo "klasor|model|opencode|lint|build|export|routes|runtime|sure_sn" > "$SUMMARY"
+fi
 
 for (( i = 1; i <= ${#KLASORLER}; i++ )); do
   KLASOR="${KLASORLER[$i]}"
@@ -597,6 +660,7 @@ done
 
 mkdir -p "$GALLERY_DIZIN"
 
+if [[ "$GOREV_TURU" == "site" ]]; then
 cat > "${GALLERY_DIZIN}/index.html" <<HTML
 <!doctype html>
 <html lang="tr">
@@ -656,6 +720,7 @@ cat >> "${GALLERY_DIZIN}/index.html" <<'HTML'
 </body>
 </html>
 HTML
+fi
 
 echo ""
 echo "=========================================="
