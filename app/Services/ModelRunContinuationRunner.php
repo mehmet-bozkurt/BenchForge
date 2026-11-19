@@ -17,6 +17,8 @@ class ModelRunContinuationRunner
 {
     public const MAX_PARALLEL_ATTEMPTS = 2;
 
+    public const ALGORITHM_UNAVAILABLE_MESSAGE = 'Algoritma görevlerinde kurtarma denemesi yok. Aynı görevi yeni bir koşuyla yeniden çalıştırabilirsiniz.';
+
     private const MAX_LOG_TAIL_BYTES = 32768;
 
     private const SAFE_SEGMENT_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9._-]*$/';
@@ -56,6 +58,10 @@ class ModelRunContinuationRunner
             'reason' => $reason,
             'sessionId' => null,
         ];
+
+        if ($benchmarkRun->taskType() === 'algorithm') {
+            return $unavailable(self::ALGORITHM_UNAVAILABLE_MESSAGE);
+        }
 
         if ($modelRun->benchmark_run_id !== $benchmarkRun->id || $modelRun->status !== 'fail') {
             return $unavailable('Yalnızca ilk teslimi sorunlu modeller kurtarma denemesine açılır.');
@@ -260,6 +266,12 @@ class ModelRunContinuationRunner
 
         if ($modelRun->benchmark_run_id !== $benchmarkRun->id) {
             throw new BenchmarkRunnerException('Seçilen model bu benchmark koşusuna ait değil.');
+        }
+
+        // The recovery script runs the website checks (dependencies, lint, build, routes), which mean nothing
+        // for a unit-test task and would spend tokens under the wrong instructions.
+        if ($benchmarkRun->taskType() === 'algorithm') {
+            throw new BenchmarkRunnerException(self::ALGORITHM_UNAVAILABLE_MESSAGE);
         }
 
         $this->reconcileActiveAttempts();

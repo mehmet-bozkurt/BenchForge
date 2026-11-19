@@ -76,6 +76,7 @@ class ModelRunOutcome
             $failed = $model->stageResults->first(fn (StageResult $stage): bool => $stage->status === 'fail' && $stage->stage !== 'opencode' && ! in_array($stage->stage, $remeasured, true));
             $outcome = match (true) {
                 $failed !== null && $failed->exit_code === 124 && isset(self::STAGE_TIMEOUT_TITLES[$failed->stage]) => ['fail', self::STAGE_TIMEOUT_TITLES[$failed->stage], $this->stepTimeoutDetail($run, $model, $failed->stage)],
+                $failed !== null && $failed->stage === 'tests' => ['fail', self::STAGE_TITLES['tests'], $this->testsDetail($run, $model, $failed)],
                 $failed !== null => ['fail', self::STAGE_TITLES[$failed->stage] ?? 'Doğrulama başarısız', $this->firstLogError($run, $model, $failed->stage)],
                 $model->status === 'pass' => ['pass', 'Tüm kontroller geçti', null],
                 $remeasured !== [] => ['warning', 'Ölçüm hatası · yeniden doğrulamada geçti', 'İlk teslimdeki hata aynı kod yeniden doğrulanınca çıkmadı; sorun modelde değil ölçüm ortamındaydı.'],
@@ -333,6 +334,33 @@ class ModelRunOutcome
             : '';
 
         return "Adım{$limit} bitmedi; komut ve başlattığı süreçler durduruldu. Modelin komutu kapanmayan bir süreç (örneğin bir test sunucusu) başlatmış olabilir.";
+    }
+
+    /**
+     * An algorithm task's failed `tests` stage: how many unit tests passed and the first one that did not.
+     */
+    private function testsDetail(BenchmarkRun $run, ModelRun $model, StageResult $stage): ?string
+    {
+        $parts = [];
+        $total = (int) ($stage->metrics['total'] ?? 0);
+
+        if ($total > 0) {
+            $parts[] = (int) ($stage->metrics['passed'] ?? 0)."/{$total} test geçti.";
+        }
+
+        $log = $this->files->read($run, $model, '_logs/'.$model->slug.'.tests.log', 16384, false);
+
+        if (preg_match('/^BASARISIZ: (.+)$/mu', $log, $match) === 1) {
+            $parts[] = 'İlk başarısız test: '.$this->excerpt($match[1], $run, $model);
+        } elseif ($total === 0) {
+            return $this->firstLogError($run, $model, 'tests');
+        }
+
+        if (($stage->metrics['tampered'] ?? []) !== []) {
+            $parts[] = 'Model test dosyalarını değiştirdi; doğrulamada orijinalleri kullanıldı.';
+        }
+
+        return implode(' ', $parts);
     }
 
     private function firstLogError(BenchmarkRun $run, ModelRun $model, string $stage): ?string
