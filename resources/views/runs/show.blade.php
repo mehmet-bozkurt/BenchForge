@@ -91,7 +91,16 @@
     $ownFailureCount = $run->modelRuns->filter(fn ($modelRun) => ($outcomes[$modelRun->id]['tone'] ?? null) === 'fail')->count();
     $outsideCauseCount = $run->modelRuns->filter(fn ($modelRun) => in_array($outcomes[$modelRun->id]['tone'] ?? null, ['provider', 'warning'], true))->count();
     $viewableModelCount = $previewableModelIds->merge($recoveredPreviewModelIds)->unique()->count();
-    $recoverableModels = $run->modelRuns->filter(fn ($modelRun) => $modelRun->status === 'fail' || $modelRun->modelRunAttempts->isNotEmpty());
+    $isAlgorithmRun = $run->taskType() === 'algorithm';
+    // Algoritma görevlerinde kurtarma denemesi yoktur; kurtarma betiği web sitesi kontrollerini çalıştırır.
+    $recoverableModels = $run->modelRuns->filter(fn ($modelRun) => ! $isAlgorithmRun && ($modelRun->status === 'fail' || $modelRun->modelRunAttempts->isNotEmpty()));
+    $testCounts = static function ($modelRun): ?array {
+        $metrics = $modelRun->stageResults->firstWhere('stage', 'tests')?->metrics;
+
+        return is_array($metrics) && (int) ($metrics['total'] ?? 0) > 0
+            ? ['passed' => (int) ($metrics['passed'] ?? 0), 'total' => (int) $metrics['total']]
+            : null;
+    };
     $boundaryTotals = $run->modelRuns->reduce(function (array $carry, $modelRun) use ($modelBoundaryReports, $attemptBoundaryReports) {
         $reports = collect([$modelBoundaryReports[$modelRun->id] ?? []])->concat($modelRun->modelRunAttempts->map(fn ($attempt) => $attemptBoundaryReports[$attempt->id] ?? []));
 
@@ -202,7 +211,7 @@
                                 <button class="sort-button" type="button" data-sort-key="cost" title="Maliyete göre sırala">Maliyet<span class="sort-indicator" aria-hidden="true"></span></button>
                             </th>
                         @endif
-                        <th class="result-score" scope="col" role="columnheader">Puan</th>
+                        <th class="result-score" scope="col" role="columnheader">{{ $isAlgorithmRun ? 'Test' : 'Puan' }}</th>
                         <th class="result-actions" scope="col" role="columnheader"><span class="sr-only">Eylemler</span></th>
                     </tr>
                 </thead>
@@ -303,7 +312,13 @@
                             @endif
 
                             <td class="result-score" role="cell">
-                                @if ($modelRun->evaluation)
+                                @if ($isAlgorithmRun)
+                                    @if ($counts = $testCounts($modelRun))
+                                        <span class="text-[13px] font-bold tabular-nums {{ $counts['passed'] === $counts['total'] ? 'text-[var(--success)]' : 'text-[var(--ink)]' }}" title="Geçen birim test / toplam birim test">{{ $counts['passed'] }}/{{ $counts['total'] }}</span> <span class="text-[11px] font-semibold text-[var(--muted)]">test<span class="sr-only"> geçti</span></span>
+                                    @else
+                                        <span class="text-[var(--muted)]" aria-hidden="true">—</span><span class="sr-only">Test sonucu yok</span>
+                                    @endif
+                                @elseif ($modelRun->evaluation)
                                     <a class="score-chip" href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'review' => 1]) }}" target="_blank" rel="noopener noreferrer" title="Değerlendirmeyi düzenle" aria-label="Puan {{ $modelRun->evaluation->overall_score }}/10, değerlendirmeyi düzenle"><strong>{{ $modelRun->evaluation->overall_score }}</strong>/10</a>
                                 @elseif ($isPreviewable)
                                     <a class="btn-ghost btn-xs" href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'review' => 1]) }}" target="_blank" rel="noopener noreferrer">Puanla</a>
@@ -319,6 +334,15 @@
                                         <a class="btn-ghost btn-xs btn-icon" href="{{ route('runs.models.preview', [$run, $modelRun]) }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $modelName }} çıktısını yeni sekmede aç">↗</a>
                                     @elseif ($recoveredPreviewModelIds->contains($modelRun->id))
                                         <a class="btn-ghost btn-xs" href="{{ route('runs.models.preview', ['benchmarkRun' => $run, 'modelRun' => $modelRun, 'version' => 'recovered']) }}" target="_blank" rel="noopener noreferrer" title="İlk teslimde çıktı yok; kurtarılmış çıktı puanlanmaz">Kurtarılmış ↗</a>
+                                    @elseif ($isAlgorithmRun)
+                                        @php
+                                            $testLog = $artifactsByKey->get('model:'.$modelRun->slug.':log:tests');
+                                        @endphp
+                                        @if ($testLog?->kind === 'file')
+                                            <a class="btn-ghost btn-xs" href="{{ route('runs.artifacts.show', [$run, $testLog]) }}">Test logu</a>
+                                        @else
+                                            <span class="px-1 text-xs font-semibold text-[var(--muted)]">Önizleme yok</span>
+                                        @endif
                                     @else
                                         <span class="px-1 text-xs font-semibold text-[var(--muted)]">Çıktı yok</span>
                                     @endif
@@ -343,7 +367,14 @@
                             @if ($hasUsage)
                                 <td class="result-numbers font-mono" role="cell">{{ '$'.number_format($totalCost, 4, ',', '.') }}</td>
                             @endif
-                            <td class="result-score tabular-nums" role="cell">{{ $scoredCount }}/{{ $previewableModelIds->count() }}<span class="sr-only"> puanlandı</span></td>
+                            @if ($isAlgorithmRun)
+                                @php
+                                    $allCounts = $run->modelRuns->map($testCounts)->filter();
+                                @endphp
+                                <td class="result-score tabular-nums" role="cell">{{ $allCounts->sum('passed') }}/{{ $allCounts->sum('total') }}<span class="sr-only"> test geçti</span></td>
+                            @else
+                                <td class="result-score tabular-nums" role="cell">{{ $scoredCount }}/{{ $previewableModelIds->count() }}<span class="sr-only"> puanlandı</span></td>
+                            @endif
                             <td class="result-actions" role="cell"></td>
                         </tr>
                     </tfoot>
@@ -587,10 +618,10 @@
             <details class="detail-fold">
                 <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 marker:content-none">
                     <span class="min-w-0">
-                        <span id="meta-title" class="text-sm font-black">Ortam ve rotalar</span>
-                        <span class="hidden text-xs text-[var(--muted)] md:inline">· Araç sürümleri, prompt özeti ve doğrulanan rotalar</span>
+                        <span id="meta-title" class="text-sm font-black">{{ $isAlgorithmRun ? 'Ortam ve görev' : 'Ortam ve rotalar' }}</span>
+                        <span class="hidden text-xs text-[var(--muted)] md:inline">· {{ $isAlgorithmRun ? 'Araç sürümleri, prompt özeti ve çözülen görev' : 'Araç sürümleri, prompt özeti ve doğrulanan rotalar' }}</span>
                     </span>
-                    <span class="rounded-full bg-[var(--surface-subtle)] px-2.5 py-0.5 text-xs font-bold text-[var(--muted)]">{{ count($run->routes ?? []) }} rota</span>
+                    <span class="rounded-full bg-[var(--surface-subtle)] px-2.5 py-0.5 text-xs font-bold text-[var(--muted)]">{{ $isAlgorithmRun ? ($run->metadata['algorithm_task'] ?? 'Algoritma görevi') : count($run->routes ?? []).' rota' }}</span>
                 </summary>
                 <div class="grid gap-6 border-t border-[var(--line)] p-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                     <dl class="divide-y divide-[var(--line)]">
@@ -607,6 +638,11 @@
                         @endforeach
                     </dl>
                     <div>
+                        @if ($isAlgorithmRun)
+                            <h3 class="text-sm font-black text-[var(--ink)]">Görev</h3>
+                            <p class="mt-2 text-sm text-[var(--muted)]"><code class="rounded-md bg-[var(--surface-subtle)] px-2 py-1 text-xs text-[var(--ink)]">{{ $run->metadata['algorithm_task'] ?? 'bilinmiyor' }}</code></p>
+                            <p class="mt-2 text-xs leading-5 text-[var(--muted)]">Model yalnız çözüm dosyasını düzenler; puan, görevin birim testlerinden geçenlerin oranıdır. Bu görev türünde önizleme, insan puanı ve kurtarma denemesi yoktur.</p>
+                        @else
                         <h3 class="text-sm font-black text-[var(--ink)]">Zorunlu rotalar</h3>
                         @if (($run->routes ?? []) === [])
                             <p class="mt-2 text-sm text-[var(--muted)]">Rota listesi kaydedilmemiş.</p>
@@ -616,6 +652,7 @@
                                     <code class="rounded-md bg-[var(--surface-subtle)] px-2 py-1 text-xs text-[var(--ink)]">{{ $route }}</code>
                                 @endforeach
                             </div>
+                        @endif
                         @endif
                     </div>
                 </div>

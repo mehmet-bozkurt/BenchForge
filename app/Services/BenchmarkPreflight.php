@@ -12,6 +12,7 @@ class BenchmarkPreflight
     public function __construct(
         private ProviderConnectionStatus $providerConnectionStatus,
         private BenchmarkProcessEnvironment $processEnvironment,
+        private PendingMigrations $pendingMigrations,
     ) {}
 
     /**
@@ -77,6 +78,10 @@ class BenchmarkPreflight
         try {
             DB::connection()->select('SELECT 1');
             $driver = DB::connection()->getDriverName();
+
+            if ($warning = $this->pendingMigrations->warning()) {
+                return $this->fail('database', 'Veritabanı', $warning);
+            }
 
             return $this->pass('database', 'Veritabanı', strtoupper($driver).' bağlantısı hazır.');
         } catch (Throwable) {
