@@ -39,12 +39,16 @@ BenchForge teslim sözleşmesi:
 - Kalıcı bir geliştirme sunucusu başlatmayın; teslimi proje dosyalarında bırakın.
 PROMPT;
 
+    /** @var array<string, string> Run id => first error of a failed result sync in this request. */
+    private array $syncFailures = [];
+
     public function __construct(
         private SyncBenchmarkArchive $syncBenchmarkArchive,
         private BenchmarkPreflight $benchmarkPreflight,
         private ModelSelection $modelSelection,
         private ModelRunContinuationRunner $modelRunContinuationRunner,
         private BenchmarkProcessEnvironment $processEnvironment,
+        private PendingMigrations $pendingMigrations,
     ) {}
 
     /**
@@ -493,6 +497,16 @@ PROMPT;
 
         $benchmarkRun = BenchmarkRun::query()->where('slug', $execution->run_id)->first();
 
+        if (array_key_exists($execution->run_id, $this->syncFailures)) {
+            return $this->emptyOutcome(
+                'unavailable',
+                'Sonuç kaydedilemedi',
+                'Koşu tamamlandı ama sonuçlar veritabanına kaydedilemedi. '
+                    .($this->pendingMigrations->warning() ?? 'Ayrıntı: '.Str::limit($this->syncFailures[$execution->run_id], 200))
+                    .' Sorun giderilince sonuçlar kendiliğinden alınır; koşu dosyaları yerinde duruyor.',
+            );
+        }
+
         if ($benchmarkRun === null) {
             return $this->emptyOutcome(
                 'unknown',
@@ -533,6 +547,10 @@ PROMPT;
     {
         if ($execution->status !== 'completed') {
             return $execution->message;
+        }
+
+        if ($outcome['status'] === 'unavailable') {
+            return $outcome['summary'];
         }
 
         return match ($outcome['status']) {
@@ -628,6 +646,9 @@ PROMPT;
 
             if (! $syncResult['locked'] && $syncResult['failed'] === 0) {
                 $execution->update(['synced_at' => now()]);
+            } elseif ($syncResult['failed'] > 0) {
+                // Kept for this request only: the sync is tried again on every status read until it succeeds.
+                $this->syncFailures[$execution->run_id] = (string) ($syncResult['errors'][0] ?? '');
             }
         }
 

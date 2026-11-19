@@ -86,7 +86,7 @@ node engine/tools/import-exercism.mjs [--only two-fer,leap] [--limit 20] [--ref 
 
 Komut depoyu bir kez sığ klonlar (ağ yalnız bu adımda kullanılır). Her alıştırma Jest yerine Node'un `node:test` çalıştırıcısına (`engine/tools/algorithm-jest-shim.mjs`) uyarlanır ve kendi kendini sınar: başlangıç dosyası testleri geçmemeli, Exercism'in örnek çözümü hepsini geçmeli. Desteklenmeyen eşleştirici veya yardımcı kullanan alıştırmalar atlanır ve nedeniyle listelenir. Alıştırmaların kaynağı ve lisansı her görevin `task.json` dosyasında yazılıdır; Exercism içeriğini dağıtmadan önce lisansını ayrıca denetleyin.
 
-Algoritma görevinde model yalnız `node --test <test dosyası>` komutunu çalıştırabilir. Test dosyası, Jest kabuğu ve `package.json` dosyaları doğrulamadan önce görevden geri yazılır; değiştirildiyse `tests` aşaması bunu notla bildirir. Çözüm dosyası değişmediyse sonuç "teslim yok" (86) sayılır.
+Algoritma görevinde model yalnız `node --test <test dosyası>` komutunu çalıştırabilir. Test dosyası, Jest kabuğu ve `package.json` dosyaları doğrulamadan önce görevden geri yazılır; değiştirildiyse `tests` aşaması bunu notla bildirir. Çözüm dosyası değişmediyse sonuç "teslim yok" (86) sayılır. Başarısız bir algoritma modeli için kurtarma denemesi (devam ya da yalnız doğrulama) başlatılamaz; aynı görev yeni bir koşuyla yeniden çalıştırılır. Koşu sayfasında puan sütunu geçen/toplam test sayısını gösterir.
 
 **Model adımının sonuç kodları:**
 
@@ -223,6 +223,14 @@ Var olan bir arşivi veritabanına aktarmak için:
 ```bash
 php artisan benchforge:sync
 ```
+
+**Güncellemeden sonra:** Depoyu `git pull` ile güncellediyseniz veritabanı güncellemelerini uygulayın:
+
+```bash
+php artisan migrate
+```
+
+Uygulanmamış bir güncelleme varken koşu sonuçları kaydedilemez. Bu yüzden Sistem ve Kurulum sayfası ve koşu öncesi ön kontrol bunu hata olarak gösterir ve yeni koşu başlatılmaz. Bir koşu yine de sonuçları kaydedilemeden biterse Yeni Benchmark ekranı "Sonuç kaydedilemedi" der; koşu dosyaları yerinde durur ve sorun giderilince sonuçlar kendiliğinden alınır.
 
 ## Testler
 

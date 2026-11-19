@@ -9,7 +9,10 @@ use Throwable;
 
 class BenchForgeSystemStatus
 {
-    public function __construct(private BenchmarkProcessEnvironment $processEnvironment) {}
+    public function __construct(
+        private BenchmarkProcessEnvironment $processEnvironment,
+        private PendingMigrations $pendingMigrations,
+    ) {}
 
     /** @return array{ready: bool, checkedAt: string, summary: string, checks: list<array<string, string>>} */
     public function inspect(): array
@@ -81,6 +84,10 @@ class BenchForgeSystemStatus
                 if (! Schema::hasTable($table)) {
                     return $this->check('database', 'Veritabanı', 'fail', 'Bağlantı hazır; uygulama tabloları eksik. Yerel veritabanı kurulumunu (migration) tamamlayın.');
                 }
+            }
+
+            if ($warning = $this->pendingMigrations->warning()) {
+                return $this->check('database', 'Veritabanı', 'fail', $warning, implode(', ', $this->pendingMigrations->names()));
             }
 
             return $this->check('database', 'Veritabanı', 'pass', strtoupper(DB::connection()->getDriverName()).' bağlantısı hazır.');
